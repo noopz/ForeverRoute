@@ -798,7 +798,7 @@ end
 local function distTo(s, px, py, pinst) local w = wpos(s); if not w or w[3] ~= pinst then return nil end return math.sqrt((w[1] - px) ^ 2 + (w[2] - py) ^ 2) end
 local WINDOW = 10
 Engine.READY_AHEAD = 150 -- how far down the route a finished quest's hand-in is looked for, while you're near its NPC
-Engine.READY_NEAR = 120  -- yards: near enough to hand it in now
+Engine.READY_NEAR = 300  -- yards: near enough that the card takes you there now (the town you are in), when clearly nearer than the plan
 local lastHave = {}   -- [step key] = objective count last seen
 local progressAt = {} -- [step key] = GetTime() when that count last went up
 Engine.PROGRESS_HOLD = 90 -- a focus your kills made holds this long after the last one, wherever you are
@@ -837,11 +837,15 @@ function Engine.UpdateFocus(px, py, pinst)
   local list = steps()
   -- hold the current focus while it's open and you're still near it - or, when your kills / loot made it, while they
   -- keep counting (however far from its marker you farm)
+  State = State or ns.State
   if Engine.focus then
     local s = list[Engine.focus]
     local d = s and distTo(s, px, py, pinst)
     if s and Engine.Status(Engine.focus) == "todo" then
       if not d or d <= (s.r or 40) + 80 then return end
+      -- a finished quest's hand-in the card is taking you to: held while you head there (it was picked from up to
+      -- READY_NEAR away), until it's handed in
+      if Engine.focusWhy == "ready" and d <= Engine.READY_NEAR + 40 and State.QuestReady(s.q) then return end
       local at = Engine.focusWhy == "progress" and progressAt[key(Engine.focus)]
       if at and GetTime() - at <= Engine.PROGRESS_HOLD then return end
     end
@@ -875,10 +879,10 @@ function Engine.UpdateFocus(px, py, pinst)
       local s = list[j]
       if s.k == "turnin" and s.q and s.q > 0 and State.QuestReady(s.q) then
         local d = distTo(s, px, py, pinst)
-        if d and d <= Engine.READY_NEAR and (not dP or d < dP) and (not bestD or d < bestD) and Engine.Status(j) == "todo" then best, bestD = j, d end
+        if d and d <= Engine.READY_NEAR and (not dP or d < dP * 0.8) and (not bestD or d < bestD) and Engine.Status(j) == "todo" then best, bestD = j, d end
       end
     end
-    if best then pick, why = best, "it is ready to hand in and you are right here" end
+    if best then setFocus(best, "it is ready to hand in and it is close by (the plan has it later)", "ready"); return end
   end
   if pick then setFocus(pick, why) end
 end

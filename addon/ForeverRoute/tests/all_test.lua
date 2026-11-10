@@ -1000,6 +1000,22 @@ test("live reordering: a finished quest whose hand-in is right here is handed in
     ns.Engine.UpdateFocus(x + 20, y, inst)       -- in town, 20 yd from James Halloran, the crate ~500 yd away
     assertEquals(17, ns.Engine.current)         -- the ready one, not the unfinished one standing next to it
     assertEquals(1, ns.Engine.planned)
+    -- across town: the card takes you there, and holds while you go
+    ns.Engine.focus = nil; ns.Engine.Refresh()
+    ns.Engine.UpdateFocus(x + 200, y, inst)
+    assertEquals(17, ns.Engine.current)
+    ns.Engine.UpdateFocus(x + 150, y, inst)
+    assertEquals(17, ns.Engine.current)
+    -- handed in: back to the plan
+    ns.State.IsCompleted = function(id) return id == 802 end
+    ns.State.OnQuest = function(id) return id == 801 or id == 803 end
+    ns.State.Quest = function(id)
+      if id == 801 then return { on = true, complete = true, objectives = {} } end
+      if id == 803 then return { on = true, objectives = { { text = "Thing: 0/1", finished = false, have = 0, need = 1 } } } end
+      return { on = false, objectives = {} }
+    end
+    ns.Engine.UpdateFocus(x + 20, y, inst); ns.Engine.Refresh()
+    assertEquals(1, ns.Engine.current)
   end)
   HBD.GetWorldCoordinatesFromZone = realConv
   ns.Engine.focus = nil
