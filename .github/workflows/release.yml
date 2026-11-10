@@ -1,0 +1,30 @@
+# A tag like v0.4.0 builds the zip (tools/package.sh), attaches it to a GitHub release, and uploads it to CurseForge
+# when the repo has the secret CF_API_KEY and the variables CF_PROJECT_ID and CF_GAME_VERSIONS (comma-separated
+# CurseForge game version ids for WoW Forever).
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package
+        run: bash tools/package.sh "${GITHUB_REF_NAME#v}"
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --title "Forever Route $GITHUB_REF_NAME" --generate-notes
+      - name: CurseForge
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          CF_PROJECT_ID: ${{ vars.CF_PROJECT_ID }}
+          CF_GAME_VERSIONS: ${{ vars.CF_GAME_VERSIONS }}
+        run: |
+          if [ -z "$CF_API_KEY" ] || [ -z "$CF_PROJECT_ID" ] || [ -z "$CF_GAME_VERSIONS" ]; then echo "CurseForge not set up yet: skipped"; exit 0; fi
+          f=$(ls dist/*.zip)
+          meta=$(printf '{"changelog":"Forever Route %s - see the GitHub release","changelogType":"text","displayName":"Forever Route %s","gameVersions":[%s],"releaseType":"release"}' "$GITHUB_REF_NAME" "$GITHUB_REF_NAME" "$CF_GAME_VERSIONS")
+          curl -sSf -H "X-Api-Token: $CF_API_KEY" -F "metadata=$meta" -F "file=@$f" "https://wow.curseforge.com/api/projects/$CF_PROJECT_ID/upload-file"

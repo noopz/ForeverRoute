@@ -1,0 +1,40 @@
+Forever Route
+Copyright (C) 2026 noopz
+https://github.com/noopz/ForeverRoute
+
+LICENSING
+
+1. Forever Route's own work - the addon, the planner, the simulator, the companion, the tools, the documentation and
+   the images - is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International license
+   (CC BY-NC-SA 4.0, see LICENSE): you may share and adapt it, with credit, not for commercial purposes, and under the
+   same license. No one may sell it or charge for it.
+
+   Attribution, as CC BY-NC-SA asks, means keeping
+
+       Forever Route by noopz - https://github.com/noopz/ForeverRoute
+
+   where users will see it: in the README or project description wherever a copy or adaptation is published, and in
+   any in-game about, help or options panel it shows.
+
+2. Quest data. The files below are generated from QuestieDB (https://github.com/Questie/QuestieDB) quest, NPC, object
+   and item data. The Questie team allows copying its content under the GNU General Public License version 3, so these
+   files are licensed under GPL-3.0 (see LICENSES/GPL-3.0.txt), not CC BY-NC-SA. Thanks to the Questie team and its
+   contributors. ("Questie" is the Questie team's name; Forever Route is not affiliated with or endorsed by them.)
+
+       addon/ForeverRoute_Starter_*/                  the built-in plans
+       addon/ForeverRoute/Breadcrumbs.lua             generated quest data
+       addon/ForeverRoute/FlightMasters.lua
+       addon/ForeverRoute/FunCandidates.lua
+       addon/ForeverRoute/Vendors.lua
+       addon/ForeverRoute/TravelData.lua
+       tools/travel-net.json
+       tools/hostile-towns.json
+       tools/readme-data/
+       tools/test-fixtures/
+
+   A route the planner writes for your own character (addon/ForeverRoute/Route.lua) is built from the same data.
+
+3. Bundled libraries keep their own licenses: LibStub, CallbackHandler-1.0 (Ace3 team, BSD-style) and
+   HereBeDragons (Nevcairiel), in addon/ForeverRoute/Libs.
+
+Contributions: see CONTRIBUTING.md.

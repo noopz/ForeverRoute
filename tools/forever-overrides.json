@@ -1,0 +1,172 @@
+{
+  "_about": "Quest facts Forever changed that the QuestieDB data still has the Classic way. Applied by build-db.js (and apply-overrides.js on an existing qdb/db.json). Sources: docs/research/world-facts.md (Blizzard's Forever notes).",
+  "quests": {
+    "276": {
+      "preSingle": [
+        463
+      ],
+      "_why": "Wowhead (https://www.wowhead.com/forever/quest=98283): needs 463 first - the quest data did not say"
+    },
+    "484": {
+      "_why": "warcraft.wiki.gg Young_Crocolisk_Skins: \"Previous: Daily Delivery (optional)\" - no hard prerequisite. (A Wowhead series read backwards had made it need Highland Hides.)",
+      "breadcrumbs": [
+        469
+      ],
+      "_whyBreadcrumbs": "Daily Delivery (Einar Stonegrip) only sends you to James Halloran: warcraft.wiki.gg Young_Crocolisk_Skins \"Previous: Daily Delivery (optional)\". Seen in game 2026-11-10: Einar has nothing once Young Crocolisk Skins is done"
+    },
+    "490": {
+      "reqLevel": 15,
+      "_why": "Bounty: Gnarlpine Furbolg needs 15 on Forever"
+    },
+    "1367": {
+      "reqLevel": 35,
+      "_why": "Magram Alliance: the Desolace Gelkis/Magram chain needs 35 on Forever (was 30)"
+    },
+    "1368": {
+      "reqLevel": 35,
+      "_why": "Gelkis Alliance: the Desolace Gelkis/Magram chain needs 35 on Forever (was 30)"
+    },
+    "3631": {
+      "notInForever": true,
+      "_whyRemoved": "Summon Felsteed is not in Forever (Wowhead, Classic Era 1.15.8 vs Forever 1.60.1: https://www.wowhead.com/forever/changes/spellbook/warlock/summon-felsteed); warlocks learn riding at a riding trainer at 40 like every class"
+    },
+    "4487": {
+      "notInForever": true,
+      "_whyRemoved": "Summon Felsteed is not in Forever (Wowhead, Classic Era 1.15.8 vs Forever 1.60.1: https://www.wowhead.com/forever/changes/spellbook/warlock/summon-felsteed); warlocks learn riding at a riding trainer at 40 like every class"
+    },
+    "4488": {
+      "notInForever": true,
+      "_whyRemoved": "Summon Felsteed is not in Forever (Wowhead, Classic Era 1.15.8 vs Forever 1.60.1: https://www.wowhead.com/forever/changes/spellbook/warlock/summon-felsteed); warlocks learn riding at a riding trainer at 40 like every class"
+    },
+    "4489": {
+      "notInForever": true,
+      "_whyRemoved": "Summon Felsteed is not in Forever (Wowhead, Classic Era 1.15.8 vs Forever 1.60.1: https://www.wowhead.com/forever/changes/spellbook/warlock/summon-felsteed); warlocks learn riding at a riding trainer at 40 like every class"
+    },
+    "4490": {
+      "notInForever": true,
+      "_whyRemoved": "Summon Felsteed is not in Forever (Wowhead, Classic Era 1.15.8 vs Forever 1.60.1: https://www.wowhead.com/forever/changes/spellbook/warlock/summon-felsteed); warlocks learn riding at a riding trainer at 40 like every class"
+    },
+    "7562": {
+      "notInForever": true,
+      "_whyRemoved": "Summon Dreadsteed is not in Forever (Wowhead spellbook changes, warlock: https://www.wowhead.com/forever/changes/spellbook/warlock)"
+    },
+    "7563": {
+      "notInForever": true,
+      "_whyRemoved": "Summon Dreadsteed is not in Forever (Wowhead spellbook changes, warlock: https://www.wowhead.com/forever/changes/spellbook/warlock)"
+    },
+    "7564": {
+      "notInForever": true,
+      "_whyRemoved": "Summon Dreadsteed is not in Forever (Wowhead spellbook changes, warlock: https://www.wowhead.com/forever/changes/spellbook/warlock)"
+    },
+    "78132": {
+      "needsItems": [
+        209872
+      ],
+      "_whyItems": "Wowhead (https://www.wowhead.com/forever/quest=78132): needs item 209872 brought in"
+    },
+    "78133": {
+      "needsItems": [
+        209873
+      ],
+      "_whyItems": "Wowhead (https://www.wowhead.com/forever/quest=78133): needs item 209873 brought in"
+    },
+    "78134": {
+      "needsItems": [
+        209874
+      ],
+      "_whyItems": "Wowhead (https://www.wowhead.com/forever/quest=78134): needs item 209874 brought in"
+    },
+    "78270": {
+      "needsItems": [
+        210187
+      ],
+      "_whyItems": "Wowhead (https://www.wowhead.com/forever/quest=78270): needs item 210187 brought in"
+    },
+    "79008": {
+      "preSingle": [
+        79007
+      ],
+      "_why": "Wowhead (https://www.wowhead.com/forever/quest=79192): needs 79007 first - the quest data did not say"
+    },
+    "79192": {
+      "preSingle": [
+        79008
+      ],
+      "_why": "Wowhead (https://www.wowhead.com/forever/quest=79192): needs 79008 first - the quest data did not say"
+    },
+    "92458": {
+      "preSingle": [
+        92432
+      ],
+      "_why": "Wowhead (https://www.wowhead.com/forever/quest=92458): needs 92432 first - the quest data did not say"
+    },
+    "92459": {
+      "preSingle": [
+        92458
+      ],
+      "_why": "Wowhead (https://www.wowhead.com/forever/quest=92458): needs 92458 first - the quest data did not say"
+    },
+    "98072": {
+      "reqLevel": 19,
+      "races": 4294967372,
+      "preSingle": [
+        471
+      ],
+      "_why": "Wowhead Forever quest=98072 (via the Mac agent, 2026-11-10): requires level 19; Dwarf, Gnome, Night Elf, High Order Skyborne only. Seen in game 2026-11-10 (level 26 gnome): after Young Crocolisk Skins, Halloran offers only Apprentice's Duties, not this - so it needs Apprentice's Duties (471)"
+    },
+    "98189": {
+      "preSingle": [
+        286
+      ],
+      "_why": "Wowhead (https://www.wowhead.com/forever/quest=98191): needs 286 first - the quest data did not say"
+    },
+    "98190": {
+      "preSingle": [
+        98189
+      ],
+      "_why": "Wowhead (https://www.wowhead.com/forever/quest=98191): needs 98189 first - the quest data did not say"
+    },
+    "98191": {
+      "preSingle": [
+        98190
+      ],
+      "_why": "Wowhead (https://www.wowhead.com/forever/quest=98191): needs 98190 first - the quest data did not say"
+    },
+    "98240": {
+      "preSingle": [
+        98072
+      ],
+      "_why": "Wowhead (https://www.wowhead.com/forever/quest=98072): needs 98072 first - the quest data did not say"
+    },
+    "98283": {
+      "needsItems": [
+        280331
+      ],
+      "_whyItems": "Wowhead (https://www.wowhead.com/forever/quest=98283): needs item 280331 brought in",
+      "preSingle": [
+        275
+      ],
+      "_why": "Wowhead (https://www.wowhead.com/forever/quest=98283): needs 275 first - the quest data did not say"
+    },
+    "98418": {
+      "preSingle": [
+        98417
+      ],
+      "_why": "Wowhead (https://www.wowhead.com/forever/quest=98418): needs 98417 first - the quest data did not say"
+    },
+    "98815": {
+      "preSingle": [
+        484
+      ],
+      "_why": "warcraft.wiki.gg Highland_Hides: \"Players must previously complete [22] Young Crocolisk Skins from the same questgiver before he offers this quest.\" (The Wowhead series had it after Daily Delivery instead.)",
+      "races": 4294967372,
+      "_whyRaces": "Wowhead Forever (James Halloran starts tab, via the Mac agent 2026-11-10): Dwarf, Gnome, Night Elf, High Order Skyborne only; a dungeon quest (Excavation Site: Wetlands, warcraft.wiki.gg). Seen in game: offered after Young Crocolisk Skins"
+    },
+    "98824": {
+      "preSingle": [
+        95810
+      ],
+      "_why": "Wowhead (https://www.wowhead.com/forever/quest=98824): needs 95810 first - the quest data did not say"
+    }
+  }
+}

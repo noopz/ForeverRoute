@@ -1,0 +1,7 @@
+<Bindings>
+  <Binding name="FOREVERROUTE_SKIP" header="FOREVERROUTE" category="ADDONS">ForeverRoute.Engine.Skip()</Binding>
+  <Binding name="FOREVERROUTE_BACK" category="ADDONS">ForeverRoute.Engine.Back()</Binding>
+  <Binding name="FOREVERROUTE_UNDO" category="ADDONS">ForeverRoute.Engine.Undo()</Binding>
+  <Binding name="FOREVERROUTE_TOGGLE" category="ADDONS">ForeverRoute.Fire("FR_TOGGLE")</Binding>
+  <Binding name="FOREVERROUTE_LIST" category="ADDONS">ForeverRoute.Fire("FR_TOGGLE_LIST")</Binding>
+</Bindings>

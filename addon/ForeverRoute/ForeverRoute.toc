@@ -1,0 +1,44 @@
+## Interface: 16001
+## Title: Forever Route
+## Notes: Your own leveling route, on rails: step card, waypoint arrow, map pins, live quest tracking.
+## Author: noopz
+## Version: 0.3.0
+## SavedVariables: ForeverRouteDB
+## SavedVariablesPerCharacter: ForeverRouteChar
+## OptionalDeps: Questie
+
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\HereBeDragons\HereBeDragons-2.0.lua
+Libs\HereBeDragons\HereBeDragons-Pins-2.0.lua
+
+Core.lua
+Why.lua
+State.lua
+Route.lua
+FlightMasters.lua
+Vendors.lua
+Engine.lua
+Quests.lua
+Trails.lua
+Boats.lua
+TravelData.lua
+Breadcrumbs.lua
+Travel.lua
+Drops.lua
+FunCandidates.lua
+Learn.lua
+Availability.lua
+UI\Style.lua
+UI\Card.lua
+UI\Arrow.lua
+UI\Pins.lua
+UI\List.lua
+UI\Paths.lua
+UI\Dungeons.lua
+UI\LogCheck.lua
+UI\Offers.lua
+UI\Errands.lua
+UI\Extras.lua
+UI\Options.lua
+Demo.lua

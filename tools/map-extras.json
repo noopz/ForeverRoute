@@ -1,0 +1,14 @@
+{
+  "_about": "Maps Forever added that the map conversion (qdb/conversion.json) has no world bounds for. tools/map-extras.js merges these into the conversion. 'estimated' bounds are a guess until the addon records the real ones at login (Core.lua RecordMapBounds -> ForeverRouteDB.mapBounds) and map-extras.js imports them; estimated maps get their own instance id so no distance is ever measured across to a real continent.",
+  "maps": [
+    {
+      "ui_map_id": 2521,
+      "area_id": 16593,
+      "target_name": "Zephras Isle",
+      "map_id": 2521000,
+      "estimated": true,
+      "target_bounds": { "left": 1750, "right": -1750, "top": 1166.5, "bottom": -1166.5 },
+      "exit": "The skyship from Valanaar's south-east dock (64.9, 80.9) to Dalaran, then the Skyborne portal in the Violet Citadel to the Stormwind Mage Tower."
+    }
+  ]
+}

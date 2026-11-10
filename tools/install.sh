@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Run the addon's sim tests on the repo copy (addon/ForeverRoute); install it into the game only if they all pass AND
+# the live check passes: the new code against your real plan file and latest save (tools/live-check.js), logging in
+# the way the real game does. The live Route.lua is never touched (the companion's planner owns it).
+# usage: tools/install.sh
+set -u
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SRC="$ROOT/addon/ForeverRoute"
+DEST="$ROOT/../Interface/AddOns/ForeverRoute"
+# yes/no questions to the game go through ns.Is (Core.lua): Forever hides some answers in dungeons and combat, and
+# testing a hidden one is an error. A raw call here is refused before anything runs.
+RAW=$(cd "$SRC" && grep -rnE '(UnitOnTaxi|UnitIsAFK|UnitIsDeadOrGhost|UnitIsGhost|IsFlying|IsIndoors|IsInInstance|IsMounted|IsSwimming|IsResting|UnitInVehicle)[(]' --include=*.lua . | grep -v '^./tests/' | grep -v '^./Libs/')
+if [ -n "$RAW" ]; then echo "$RAW"; echo "NOT installed (ask the game through ns.Is: a hidden answer is an error otherwise)"; exit 1; fi
+SIM="$ROOT/sim/pkg/wow-ui-sim-v0.1.40-forever-windows-x86_64"
+R=$(cd "$SIM" && export WOW_INSTALL_PATH="$(cd "$ROOT/../.." && pwd)"; timeout 900 ./wow-sim.exe --allow-ui-version-mismatch \
+  --addons-path "$(cygpath -w "$ROOT/addon")" --session-wtf-path "$(cygpath -w "$ROOT/sim/wtf")" \
+  --class Warlock --race Gnome run-tests ForeverRoute 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -E 'tests,|✗|_test.lua:[0-9]+: [^i]|_harness.lua:[0-9]+:')
+echo "$R"
+if ! echo "$R" | grep -qE ' 0 failed'; then echo "NOT installed (tests failed)"; exit 1; fi
+# the live check, for each character the companion plans for (its settings name the save folder)
+for cfg in "$ROOT"/routes/campaign-*.json; do
+  CHAR=$(node -e "try{console.log(require(process.argv[1]).charDir||'')}catch(e){}" "$cfg")
+  [ -n "$CHAR" ] || continue
+  node "$ROOT/tools/live-check.js" "$CHAR" "" "$(cygpath -w "$SRC")"
+  case $? in
+    0) ;;
+    3) echo "  (only the check at the spot you saved failed: installing; see above)" ;;
+    *) echo "NOT installed (the live check failed: this code would not load your plan right)"; exit 1 ;;
+  esac
+done
+cd "$SRC" && find . -type f ! -name 'Route.lua' | while read f; do mkdir -p "$DEST/$(dirname "$f")"; cp "$f" "$DEST/$f"; done
+# the built-in plans, one load-on-demand addon per race and class
+for P in "$ROOT"/addon/ForeverRoute_Starter_*; do [ -d "$P" ] || continue; N=$(basename "$P"); mkdir -p "$ROOT/../Interface/AddOns/$N"; cp "$P"/* "$ROOT/../Interface/AddOns/$N/"; done
+# (a Starter.lua left from before the plans moved out would still load: gone)
+rm -f "$DEST/Starter.lua"
+echo "installed"

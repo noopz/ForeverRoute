@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#0b1020}canvas{display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script>
+// One plan, 1 to 60, drawn on both continents (our own zone images): the route grows stop by stop, every zone hop
+// arcs across (flight, hearth, boat), and the level climbs on the right. Data: tools/readme-hero.js journey.
+const C = document.getElementById('c'), g = C.getContext('2d');
+let D, bg, F, S, OX, OY, order;
+const GOLD = '#f6c453', SKY = '#62cdfc', HEARTH = '#c49bff', BOAT = '#7aa2ff', INK = '#e9edf5', DIM = '#8a93a8', SUBT = '#aab3c6', PALA = '#f58cba', ITEM = '#6fe39a';
+const FONT = '"Segoe UI", system-ui, sans-serif';
+const HOP = 5; // timeline units per zone hop (a stop is 1)
+const load = (src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; });
+
+window.init = async (data) => {
+  D = data; C.width = D.W; C.height = D.H;
+  S = (D.H - 16) / D.map.H; OX = 8; OY = 8;
+  // the map, drawn once: zone images, desaturated and dimmed so the route reads on top
+  bg = document.createElement('canvas'); bg.width = D.W; bg.height = D.H;
+  const b = bg.getContext('2d');
+  // the sea: the zone images' own water colour (their corners), so the gaps between them read as one ocean
+  const ims = await Promise.all(D.zones.map((z) => load(z.png)));
+  const probe = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+  const sea = [0, 0, 0]; let ns = 0;
+  for (const im of ims) if (im) { probe.canvas.width = im.width; probe.canvas.height = im.height; probe.drawImage(im, 0, 0); const d = probe.getImageData(1, 1, 1, 1).data; if (d[2] > d[0] + 20) { sea[0] += d[0]; sea[1] += d[1]; sea[2] += d[2]; ns++; } }
+  const seaRGB = ns ? sea.map((v) => Math.round(v / ns)) : [26, 37, 80];
+  const raw = document.createElement('canvas'); raw.width = D.W; raw.height = D.H;
+  const r = raw.getContext('2d', { willReadFrequently: true });
+  r.fillStyle = `rgb(${seaRGB.join(',')})`; r.fillRect(0, 0, D.W, D.H);
+  D.zones.forEach((z, k) => { if (ims[k]) r.drawImage(ims[k], OX + z.x * S, OY + z.y * S, z.w * S, z.h * S); });
+  // the parts of a zone image with no map (black) are sea too
+  const px = r.getImageData(0, 0, D.W, D.H), a = px.data;
+  for (let i = 0; i < a.length; i += 4) if (a[i] + a[i + 1] + a[i + 2] < 100 && a[i + 2] < a[i] + 25) { a[i] = seaRGB[0]; a[i + 1] = seaRGB[1]; a[i + 2] = seaRGB[2]; }
+  r.putImageData(px, 0, 0);
+  b.filter = 'saturate(0.55) brightness(0.62)'; b.drawImage(raw, 0, 0); b.filter = 'none';
+  b.font = '600 13px ' + FONT; b.fillStyle = 'rgba(233,237,245,0.55)';
+  for (const p of D.panels) b.fillText(p.name, OX + p.x * S + 6, D.H - 14);
+  // the right-hand panel
+  const hx = OX + D.map.W * S + 14;
+  const grd = b.createLinearGradient(hx - 30, 0, hx + 10, 0); grd.addColorStop(0, 'rgba(11,16,32,0)'); grd.addColorStop(1, 'rgba(11,16,32,0.97)');
+  b.fillStyle = grd; b.fillRect(hx - 30, 0, 40, D.H); b.fillStyle = 'rgba(11,16,32,0.97)'; b.fillRect(hx + 10, 0, D.W, D.H);
+  // the timeline: each stop takes 1, each hop HOP
+  order = []; let t = 0; for (const p of D.pts) { t += p.hop ? HOP : 1; order.push(t); }
+  D.total = t;
+  // the stops for the list on the right: a zone and the levels you spend there (pass-throughs left out)
+  D.legs = []; let seg = null;
+  D.pts.forEach((p, i) => { if (!seg || seg.zone !== p.zone) { seg = { zone: p.zone, lo: p.lvl, hi: p.lvl, from: i, n: 0 }; D.legs.push(seg); } seg.hi = p.lvl; seg.n++; });
+  D.legs = D.legs.filter((l) => l.n >= 6).reduce((a, l) => { const p = a[a.length - 1]; if (p && p.zone === l.zone) p.hi = l.hi; else a.push(l); return a; }, []);
+  F = 420;
+  return F;
+};
+const P = (p) => [OX + p.x * S, OY + p.y * S];
+function arc(a, b, lift) { const [x1, y1] = P(a), [x2, y2] = P(b); const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, d = Math.hypot(x2 - x1, y2 - y1); g.beginPath(); g.moveTo(x1, y1); g.quadraticCurveTo(mx, my - Math.min(90, d * lift), x2, y2); }
+const hopColor = (h) => (h === 'hearth' ? HEARTH : h === 'boat' ? BOAT : SKY);
+
+window.draw = (f) => {
+  const end = f >= F - 1;
+  const tNow = (f / (F - 1)) * D.total;
+  let n = 0; while (n < D.pts.length && order[n] <= tNow) n++;
+  n = Math.max(1, n);
+  g.drawImage(bg, 0, 0);
+  // the zone you're in now: from the last hop to here
+  let cur = n - 1; while (cur > 0 && !D.pts[cur].hop) cur--;
+  // done: earlier stretches, thin and faint (all 28 zones' worth stays readable)
+  g.lineJoin = g.lineCap = 'round';
+  g.strokeStyle = 'rgba(246,196,83,0.30)'; g.lineWidth = 1; g.beginPath();
+  for (let i = 1; i < cur; i++) { if (D.pts[i].hop) continue; const [x0, y0] = P(D.pts[i - 1]), [x1, y1] = P(D.pts[i]); g.moveTo(x0, y0); g.lineTo(x1, y1); }
+  g.stroke();
+  // hops already made: faint arcs
+  for (let i = 1; i < n; i++) if (D.pts[i].hop) { const fresh = (tNow - order[i]) / (HOP * 6); if (fresh < 1 && !end) continue; arc(D.pts[i - 1], D.pts[i], 0.22); g.strokeStyle = hopColor(D.pts[i].hop); g.globalAlpha = 0.12; g.lineWidth = 1; g.stroke(); g.globalAlpha = 1; }
+  // the newest hops: bright, fading out
+  for (let i = 1; i < n; i++) if (D.pts[i].hop) { const fresh = (tNow - order[i]) / (HOP * 6); if (fresh >= 1 || end) continue; arc(D.pts[i - 1], D.pts[i], 0.22); g.strokeStyle = hopColor(D.pts[i].hop); g.globalAlpha = 1 - fresh * 0.85; g.lineWidth = 2; g.setLineDash(D.pts[i].hop === 'boat' ? [5, 4] : []); g.shadowColor = hopColor(D.pts[i].hop); g.shadowBlur = 8; g.stroke(); g.setLineDash([]); g.shadowBlur = 0; g.globalAlpha = 1; }
+  // this zone: bright, glowing
+  if (!end) {
+    g.strokeStyle = GOLD; g.lineWidth = 2.2; g.shadowColor = GOLD; g.shadowBlur = 10; g.beginPath();
+    for (let i = cur + 1; i < n; i++) { const [x0, y0] = P(D.pts[i - 1]), [x1, y1] = P(D.pts[i]); if (i === cur + 1) g.moveTo(x0, y0); g.lineTo(x1, y1); }
+    g.stroke(); g.shadowBlur = 0;
+  }
+  // you
+  const me = D.pts[n - 1], [mx, my] = P(me);
+  if (!end) {
+    const pulse = 0.5 + 0.5 * Math.sin(f * 0.6);
+    g.fillStyle = `rgba(246,196,83,${0.18 + 0.12 * pulse})`; g.beginPath(); g.arc(mx, my, 9 + 3 * pulse, 0, 7); g.fill();
+    g.fillStyle = '#fff'; g.strokeStyle = GOLD; g.lineWidth = 2; g.beginPath(); g.arc(mx, my, 4.5, 0, 7); g.fill(); g.stroke();
+  }
+  // class quests and new weapons: a star where they happened, and a label while it's fresh
+  let latest = -1; for (let i = 0; i < n; i++) if (D.pts[i].call) latest = i;
+  for (let i = 0; i < n; i++) {
+    const c = D.pts[i].call; if (!c) continue;
+    const [cx, cy] = P(D.pts[i]), col = c.kind === 'class' ? PALA : ITEM;
+    star(cx, cy, c.kind === 'class' ? 6 : 4, col);
+    const age = (tNow - order[i]) / 110;
+    if (age < 1 && !end && i === latest) {
+      g.globalAlpha = age < 0.8 ? 1 : (1 - age) * 5;
+      g.font = '700 14px ' + FONT; const tw = g.measureText(c.text).width;
+      const bx = Math.min(Math.max(cx - tw / 2 - 12, 8), OX + D.map.W * S - tw - 32), by = cy - 46 < 8 ? cy + 18 : cy - 46;
+      g.fillStyle = 'rgba(8,10,18,0.88)'; rr(bx, by, tw + 24, 28, 8); g.fill(); g.strokeStyle = col; g.lineWidth = 1.5; rr(bx, by, tw + 24, 28, 8); g.stroke();
+      g.fillStyle = col; g.fillText(c.text, bx + 12, by + 19);
+      g.globalAlpha = 1;
+    }
+  }
+  hud(n, me, end, f, tNow);
+  return f === 0 ? 120 : 0;
+};
+
+function hud(n, me, end, f) {
+  const x = OX + D.map.W * S + 30, w = D.W - x - 22;
+  g.textBaseline = 'alphabetic';
+  // badge + title
+  g.fillStyle = '#2a2350'; rr(x, 22, 112, 24, 12); g.fill();
+  g.fillStyle = '#c9b8ff'; g.font = '700 12px ' + FONT; g.fillText('FOREVERROUTE', x + 13, 38.5);
+  g.fillStyle = INK; g.font = '600 21px ' + FONT; g.fillText('One plan, 1 to 60', x, 78);
+  g.fillStyle = DIM; g.font = '14px ' + FONT; g.fillText(cap(D.title) + ', planned stop by stop', x, 99);
+  // the level
+  g.fillStyle = DIM; g.font = '700 12px ' + FONT; g.fillText('LEVEL', x, 146);
+  g.fillStyle = GOLD; g.font = '700 74px ' + FONT; g.shadowColor = 'rgba(246,196,83,0.45)'; g.shadowBlur = 18; g.fillText(String(end ? 60 : me.lvl), x - 3, 218); g.shadowBlur = 0;
+  g.fillStyle = INK; g.font = '600 18px ' + FONT; g.fillText(end ? 'Ding!' : me.zone, x, 250);
+  // the level curve so far
+  const cy = 264, ch = 64;
+  g.strokeStyle = 'rgba(138,147,168,0.25)'; g.lineWidth = 1;
+  for (const L of [20, 40, 60]) { const y = cy + ch - (L / 60) * ch; g.beginPath(); g.moveTo(x, y); g.lineTo(x + w, y); g.stroke(); g.fillStyle = 'rgba(138,147,168,0.7)'; g.font = '11px ' + FONT; g.fillText(String(L), x + w - 14, y - 3); }
+  g.strokeStyle = GOLD; g.lineWidth = 2; g.beginPath();
+  for (let i = 0; i < n; i++) { const px = x + (i / (D.pts.length - 1)) * (w - 22), py = cy + ch - (D.pts[i].lvl / 60) * ch; i ? g.lineTo(px, py) : g.moveTo(px, py); }
+  g.stroke();
+  // the stops so far, newest last
+  const hops = D.pts.slice(0, n).filter((p) => p.hop).length;
+  g.fillStyle = DIM; g.font = '700 12px ' + FONT; g.fillText('THE ROUTE', x, 356);
+  const seen = D.legs.filter((l) => l.from < n).slice(-5);
+  seen.forEach((l, i) => {
+    const y = 378 + i * 21, now = i === seen.length - 1 && !end, hi = now ? me.lvl : l.hi;
+    g.globalAlpha = now ? 1 : 0.45 + i * 0.1;
+    g.fillStyle = now ? GOLD : SUBT; g.font = '600 13px ' + FONT; g.fillText(l.lo === hi ? String(l.lo) : l.lo + '–' + hi, x, y);
+    g.fillStyle = now ? INK : SUBT; g.font = (now ? '600 ' : '') + '14px ' + FONT; g.fillText(l.zone, x + 54, y);
+    g.globalAlpha = 1;
+  });
+  if (end) {
+    g.fillStyle = 'rgba(246,196,83,0.12)'; rr(x - 10, 476, w + 20, 66, 10); g.fill();
+    g.fillStyle = GOLD; g.font = '700 22px ' + FONT; g.fillText('~' + D.hours + ' hours to 60', x + 4, 504);
+    g.fillStyle = INK; g.font = '13px ' + FONT; g.fillText(me.q + ' quests  ·  ' + hops + ' flights, boats & hearths', x + 4, 528);
+  } else {
+    g.fillStyle = INK; g.font = '700 20px ' + FONT; g.fillText(String(me.q), x, 512); let vw = g.measureText(String(me.q)).width;
+    g.fillStyle = DIM; g.font = '12px ' + FONT; g.fillText('quests', x + vw + 6, 512);
+    g.fillStyle = INK; g.font = '700 20px ' + FONT; g.fillText(String(hops), x + 120, 512); vw = g.measureText(String(hops)).width;
+    g.fillStyle = DIM; g.font = '12px ' + FONT; g.fillText('flights & boats', x + 126 + vw, 512);
+  }
+}
+function star(cx, cy, r, col) { g.fillStyle = col; g.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr2 = k % 2 ? r * 0.45 : r; g.lineTo(cx + Math.cos(a) * rr2, cy + Math.sin(a) * rr2); } g.closePath(); g.fill(); }
+function stat(x, y, v, label) { g.fillStyle = INK; g.font = '700 26px ' + FONT; g.fillText(v, x, y); g.fillStyle = DIM; g.font = '12px ' + FONT; g.fillText(label, x, y + 18); }
+function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+</script></body></html>

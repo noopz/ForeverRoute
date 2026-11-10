@@ -1,0 +1,7 @@
+## Interface: 16001
+## Title: Forever Route - built-in plan: human priest
+## Notes: Loaded by Forever Route only for a human priest with no plan of its own.
+## Dependencies: ForeverRoute
+## LoadOnDemand: 1
+
+Plan.lua

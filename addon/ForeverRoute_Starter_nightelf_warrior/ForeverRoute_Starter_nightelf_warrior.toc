@@ -1,0 +1,7 @@
+## Interface: 16001
+## Title: Forever Route - built-in plan: nightelf warrior
+## Notes: Loaded by Forever Route only for a nightelf warrior with no plan of its own.
+## Dependencies: ForeverRoute
+## LoadOnDemand: 1
+
+Plan.lua

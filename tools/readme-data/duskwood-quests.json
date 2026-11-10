@@ -1,0 +1,102 @@
+{
+ "zone": "Duskwood",
+ "level": 21,
+ "rows": [
+  {
+   "name": "The Totem of Infliction",
+   "level": 25,
+   "xp": 2550,
+   "status": "cut",
+   "reason": "50 kills"
+  },
+  {
+   "name": "Crime and Punishment",
+   "level": 26,
+   "xp": 2100,
+   "status": "later",
+   "reason": "level 26: later"
+  },
+  {
+   "name": "Look To The Stars",
+   "level": 25,
+   "xp": 2000,
+   "status": "cut",
+   "reason": "objective elsewhere"
+  },
+  {
+   "name": "The Night Watch",
+   "level": 24,
+   "xp": 1450,
+   "status": "done"
+  },
+  {
+   "name": "Deliver the Thread",
+   "level": 24,
+   "xp": 1450,
+   "status": "done"
+  },
+  {
+   "name": "The Valor Family",
+   "level": 23,
+   "xp": 1400,
+   "status": "done"
+  },
+  {
+   "name": "Wolves at Our Heels",
+   "level": 21,
+   "xp": 1250,
+   "status": "done"
+  },
+  {
+   "name": "Eight-Legged Menaces",
+   "level": 21,
+   "xp": 1250,
+   "status": "done"
+  },
+  {
+   "name": "Sven's Revenge",
+   "level": 25,
+   "xp": 1000,
+   "status": "later",
+   "reason": "level 25: later"
+  },
+  {
+   "name": "The Hermit",
+   "level": 25,
+   "xp": 1000,
+   "status": "later",
+   "reason": "level 25: later"
+  },
+  {
+   "name": "Gather Rot Blossoms",
+   "level": 24,
+   "xp": 970,
+   "status": "done"
+  },
+  {
+   "name": "Juice Delivery",
+   "level": 24,
+   "xp": 970,
+   "status": "done"
+  },
+  {
+   "name": "Deliveries to Sven",
+   "level": 23,
+   "xp": 920,
+   "status": "done"
+  },
+  {
+   "name": "Messenger to Darkshire",
+   "level": 18,
+   "xp": 340,
+   "status": "cut",
+   "reason": "chain not started"
+  }
+ ],
+ "totals": {
+  "done": 14,
+  "cut": 3,
+  "later": 10,
+  "xpDone": 12090
+ }
+}

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#0b1020}canvas{display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script>
+// The card, step by step: the first steps of a built-in plan as the addon's card shows them (its own icons, colours
+// and wording - addon/ForeverRoute/UI), next to the zone map with a simulated player walking the planner's waypoints.
+// Data: tools/readme-hero.js card.
+const C = document.getElementById('c'), g = C.getContext('2d');
+const FONT = '"Segoe UI", system-ui, sans-serif';
+const GOLD = [255, 209, 92], TEXT = [242, 242, 247], SUB = [158, 168, 189], DIM = [107, 115, 133], GOOD = [92, 219, 122];
+const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+let D, map, M, frames, icons = {}, tinted = {};
+const MAPW = 560, CX = 590, CW = 390;
+
+window.init = async (data) => {
+  D = data; C.width = D.W; C.height = D.H;
+  for (const [k, ic] of Object.entries(D.icons)) {
+    const cv = document.createElement('canvas'); cv.width = ic.w; cv.height = ic.h;
+    const bin = atob(ic.rgba), arr = new Uint8ClampedArray(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    cv.getContext('2d').putImageData(new ImageData(arr, ic.w, ic.h), 0, 0); icons[k] = cv;
+  }
+  map = await new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.src = D.png; });
+  // the part of the zone the steps cover, square, with a margin
+  let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+  for (const s of D.steps) for (const p of [[s.x, s.y], ...s.wp]) if (p[0] != null) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+  const span = Math.max(x1 - x0, (y1 - y0) * D.yards[1] / D.yards[0]) * 1.5, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  M = { x: cx - span / 2, y: cy - (span * D.yards[0] / D.yards[1]) / 2, w: span, h: span * D.yards[0] / D.yards[1] };
+  // the timeline: walk to each step along its waypoints, then do it
+  frames = []; let pos = [D.steps[0].x, D.steps[0].y], lvl = D.steps[0].lvl || 1;
+  D.steps.forEach((s, i) => {
+    const path = [pos, ...s.wp, [s.x, s.y]];
+    let yd = 0; for (let k = 1; k < path.length; k++) yd += dist(path[k - 1], path[k]);
+    const walk = s.x == null ? 0 : Math.max(3, Math.min(11, Math.round(yd / 40)));
+    const nl = s.lvl || lvl, up = nl > lvl; lvl = nl;
+    for (let f = 0; f < walk; f++) frames.push({ i, phase: 'walk', at: along(path, (f + 1) / walk), path, done: 0, up: up && f < 2 ? 1 : 0 });
+    const n = s.k === 'obj' ? (+((s.text || '').match(/(\d+)/) || [0, 1])[1] || 1) : 0;
+    const act = s.k === 'obj' ? Math.min(9, Math.max(4, n)) : s.k === 'train' ? 4 : 3;
+    for (let f = 0; f < act; f++) frames.push({ i, phase: 'act', at: [s.x ?? pos[0], s.y ?? pos[1]], done: s.k === 'obj' ? Math.round(n * (f + 1) / act) : 0, n, last: f === act - 1, path });
+    if (s.x != null) pos = [s.x, s.y];
+  });
+  // a level-up shows for a few frames
+  let lv = D.steps[0].lvl || 1; frames.forEach((fr) => { const l = D.steps[fr.i].lvl || lv; fr.lvl = l; if (l > lv) { fr.ding = l; } lv = l; });
+  for (let k = 0; k < frames.length; k++) if (frames[k].ding) for (let j = 1; j < 9 && k + j < frames.length; j++) frames[k + j].dingShow = frames[k].ding, frames[k + j].dingAge = j;
+  frames.forEach((fr) => { if (fr.ding) { fr.dingShow = fr.ding; fr.dingAge = 0; } });
+  return frames.length + 1;
+};
+const dist = (a, b) => Math.hypot((a[0] - b[0]) * D.yards[0], (a[1] - b[1]) * D.yards[1]);
+function along(path, t) { let total = 0; const seg = []; for (let k = 1; k < path.length; k++) { const d = dist(path[k - 1], path[k]); seg.push(d); total += d; } let want = t * total; for (let k = 1; k < path.length; k++) { if (want <= seg[k - 1] || k === path.length - 1) { const u = seg[k - 1] ? Math.min(1, want / seg[k - 1]) : 1; return [path[k - 1][0] + (path[k][0] - path[k - 1][0]) * u, path[k - 1][1] + (path[k][1] - path[k - 1][1]) * u]; } want -= seg[k - 1]; } return path[path.length - 1]; }
+const MX = (x) => ((x - M.x) / M.w) * MAPW, MY = (y) => ((y - M.y) / M.h) * D.H;
+const kindOf = (s) => (s.k === 'obj' ? (s.loot || /^(Collect|Loot)/.test(s.text || '') ? 'loot' : 'obj') : s.k === 'fly' ? 'fly' : D.KIND[s.k] ? s.k : 'note');
+
+window.draw = (fi) => {
+  const end = fi >= frames.length; const fr = frames[Math.min(fi, frames.length - 1)];
+  const s = D.steps[fr.i];
+  // the map
+  g.fillStyle = '#0b1020'; g.fillRect(0, 0, D.W, D.H);
+  g.save(); g.beginPath(); g.rect(0, 0, MAPW, D.H); g.clip();
+  g.imageSmoothingQuality = 'high'; g.filter = 'blur(1.4px) saturate(0.3) brightness(0.55) contrast(1.1)';
+  g.drawImage(map, M.x * map.width, M.y * map.height, M.w * map.width, M.h * map.height, 0, 0, MAPW, D.H);
+  g.filter = 'none';
+  // every step's spot: done ones gold, the rest faint
+  D.steps.forEach((t, k) => { if (t.x == null) return; g.fillStyle = k < fr.i ? rgb(GOLD, 0.9) : rgb(TEXT, 0.35); g.beginPath(); g.arc(MX(t.x), MY(t.y), k < fr.i ? 3 : 2.5, 0, 7); g.fill(); });
+  // the way walked so far
+  g.strokeStyle = rgb(GOLD, 0.85); g.lineWidth = 2; g.lineJoin = g.lineCap = 'round'; g.setLineDash([2, 5]); g.beginPath();
+  if (fr.path) { g.moveTo(MX(fr.path[0][0]), MY(fr.path[0][1])); for (const p of fr.path.slice(1)) g.lineTo(MX(p[0]), MY(p[1])); }
+  g.stroke(); g.setLineDash([]);
+  // where the card points
+  if (s.x != null) { const kc = D.KIND[kindOf(s)].color, pulse = (fi % 8) / 8; g.strokeStyle = rgb(kc, 1 - pulse); g.lineWidth = 2; g.beginPath(); g.arc(MX(s.x), MY(s.y), 8 + pulse * 12, 0, 7); g.stroke(); g.fillStyle = rgb(kc); g.beginPath(); g.arc(MX(s.x), MY(s.y), 5, 0, 7); g.fill(); }
+  // you
+  const [px, py] = [MX(fr.at[0]), MY(fr.at[1])];
+  g.fillStyle = 'rgba(255,255,255,0.18)'; g.beginPath(); g.arc(px, py, 11, 0, 7); g.fill();
+  g.fillStyle = '#fff'; g.strokeStyle = '#111'; g.lineWidth = 2; g.beginPath(); g.arc(px, py, 5.5, 0, 7); g.fill(); g.stroke();
+  // map label + level
+  g.fillStyle = 'rgba(6,7,9,0.75)'; rr(14, 14, 190, 30, 8); g.fill();
+  g.fillStyle = rgb(TEXT); g.font = '600 14px ' + FONT; g.fillText(D.zone, 26, 34);
+  g.fillStyle = rgb(GOLD); g.font = '700 14px ' + FONT; g.fillText('Lv ' + fr.lvl, 150, 34);
+  if (fr.dingShow) { const a = Math.max(0, 1 - (fr.dingAge || 0) / 9); g.globalAlpha = a; g.fillStyle = 'rgba(6,7,9,0.7)'; rr(MAPW / 2 - 120, D.H / 2 - 44, 240, 76, 14); g.fill(); g.fillStyle = rgb(GOLD); g.shadowColor = rgb(GOLD, 0.8); g.shadowBlur = 18; g.font = '800 34px ' + FONT; g.textAlign = 'center'; g.fillText('LEVEL ' + fr.dingShow, MAPW / 2, D.H / 2 + 4); g.shadowBlur = 0; g.font = '13px ' + FONT; g.fillStyle = rgb(TEXT, 0.8); g.fillText('train when the card says so', MAPW / 2, D.H / 2 + 24); g.textAlign = 'left'; g.globalAlpha = 1; }
+  g.restore();
+  // the panel on the right
+  const grd = g.createLinearGradient(MAPW - 24, 0, MAPW + 4, 0); grd.addColorStop(0, 'rgba(11,16,32,0)'); grd.addColorStop(1, 'rgba(11,16,32,1)'); g.fillStyle = grd; g.fillRect(MAPW - 24, 0, 28, D.H);
+  g.fillStyle = '#0b1020'; g.fillRect(MAPW + 4, 0, D.W, D.H);
+  g.fillStyle = '#2a2350'; rr(CX, 26, 98, 24, 12); g.fill(); g.fillStyle = '#c9b8ff'; g.font = '700 12px ' + FONT; g.fillText('SIMULATED', CX + 13, 42.5);
+  g.fillStyle = rgb(TEXT); g.font = '600 21px ' + FONT; g.fillText('The card, step by step', CX, 84);
+  g.fillStyle = rgb(SUB); g.font = '14px ' + FONT; g.fillText('The real plan, played by a bot: one step at a time', CX, 106);
+  card(fr, s, end);
+  return fi === 0 ? 80 : 0;
+};
+
+function card(fr, s, end) {
+  const x = CX, y = 140, w = CW, h = 300;
+  g.shadowColor = 'rgba(0,0,0,0.6)'; g.shadowBlur = 20; g.fillStyle = 'rgba(6,7,9,0.95)'; rr(x, y, w, h, 10); g.fill(); g.shadowBlur = 0;
+  g.strokeStyle = 'rgba(255,255,255,0.08)'; g.lineWidth = 1; rr(x + 0.5, y + 0.5, w - 1, h - 1, 10); g.stroke();
+  // header: the section, how far along
+  const i = fr.i + (fr.last ? 1 : 0), n = D.steps.length;
+  g.font = '700 11px ' + FONT; g.fillStyle = rgb(GOLD); g.fillText(D.zone.toUpperCase(), x + 16, y + 24);
+  g.fillStyle = rgb(SUB); g.font = '12px ' + FONT; g.textAlign = 'right'; g.fillText(`${Math.round((i / n) * 100)}%  ·  ${Math.min(i + 1, n)}/${n}`, x + w - 16, y + 24); g.textAlign = 'left';
+  g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(x + 16, y + 34, w - 32, 3); g.fillStyle = rgb(GOLD); g.fillRect(x + 16, y + 34, (w - 32) * (i / n), 3);
+  if (end) { icon('icon-check', x + 38, y + 82, GOOD); g.fillStyle = rgb(TEXT); g.font = '600 19px ' + FONT; g.fillText('Elwynn done: level ' + fr.lvl, x + 70, y + 89); g.fillStyle = rgb(SUB); g.font = '13px ' + FONT; g.fillText('2,259 steps to level 60 in this plan', x + 70, y + 110); return; }
+  const kind = D.KIND[kindOf(s)], kc = kind.color;
+  // the current step
+  g.fillStyle = rgb(kc); g.fillRect(x, y + 56, 3, 62);
+  const doneNow = fr.last && s.k !== 'obj';
+  icon(doneNow ? 'icon-check' : kind.icon, x + 38, y + 82, doneNow ? GOOD : kc);
+  const qc = [255, 217, 51];
+  let tx = x + 70; g.font = '600 18px ' + FONT;
+  const verb = s.k === 'obj' ? '' : s.k === 'train' ? 'Train' : kind.verb;
+  const main = s.k === 'obj' ? s.text.replace(/ \(.*\)$/, '') : s.k === 'train' ? (s.text || '').replace(/^Train /, '') : (s.name || s.text || '');
+  if (verb) { g.fillStyle = rgb(kc); g.fillText(verb, tx, y + 80); tx += g.measureText(verb + ' ').width; }
+  g.fillStyle = s.k === 'obj' ? rgb(kc) : s.k === 'train' ? rgb(TEXT) : rgb(qc);
+  fit(main, tx, y + 80, x + w - 92 - tx);
+  const detail = s.k === 'accept' ? 'from ' + s.npc : s.k === 'turnin' ? 'to ' + s.npc : s.k === 'obj' ? s.name : s.k === 'train' ? 'at your class trainer' : (s.npc || '');
+  g.fillStyle = rgb(SUB); g.font = '13px ' + FONT;
+  fit([detail, D.zone, s.x != null ? Math.round(s.x * 100) + ', ' + Math.round(s.y * 100) : null].filter(Boolean).join('  ·  '), x + 70, y + 102, w - 100);
+  // distance, or the count
+  g.textAlign = 'right'; g.font = '600 14px ' + FONT;
+  if (fr.phase === 'walk') { const yd = Math.round(dist(fr.at, [s.x, s.y])); g.fillStyle = rgb(GOLD); g.fillText(yd < 25 ? '' : yd + ' yd', x + w - 16, y + 80); if (yd < 25) { g.fillStyle = rgb(GOOD); g.fillText('in the area', x + w - 16, y + 80); } }
+  else if (s.k === 'obj') { g.fillStyle = fr.done >= fr.n ? rgb(GOOD) : rgb(TEXT); g.font = '700 18px ' + FONT; g.fillText(fr.done + '/' + fr.n, x + w - 16, y + 80); }
+  else { g.fillStyle = rgb(GOOD); g.fillText(doneNow ? 'done' : 'in the area', x + w - 16, y + 80); }
+  g.textAlign = 'left';
+  // the target button, and the reward or a note
+  let yy = y + 128;
+  const who = s.k === 'obj' ? s.target : s.npc;
+  if (who) { g.fillStyle = 'rgba(120,40,40,0.55)'; const tw = g.measureText(who).width; g.font = '13px ' + FONT; const bw = g.measureText(who).width + 40; rr(x + 70, yy - 4, bw, 26, 6); g.fill(); g.strokeStyle = rgb([255, 140, 120]); g.lineWidth = 1.5; g.beginPath(); g.arc(x + 84, yy + 9, 5, 0, 7); g.moveTo(x + 77, yy + 9); g.lineTo(x + 91, yy + 9); g.moveTo(x + 84, yy + 2); g.lineTo(x + 84, yy + 16); g.stroke(); g.fillStyle = rgb(TEXT); g.fillText(who, x + 96, yy + 14); yy += 36; }
+  const note = s.reward ? 'Reward: ' + s.reward.replace(/  ·  .*/, '') : s.note;
+  if (note) { g.fillStyle = s.reward ? rgb(GOOD, 0.9) : rgb(SUB); g.font = '13px ' + FONT; fit(note, x + 70, yy + 10, w - 90); yy += 26; }
+  // what comes next
+  const nx = D.steps.slice(fr.i + 1, fr.i + 4);
+  let ly = Math.max(yy + 12, y + 210);
+  g.strokeStyle = 'rgba(255,255,255,0.12)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x + 38, y + 106); g.lineTo(x + 38, ly + (nx.length - 1) * 26); g.stroke();
+  nx.forEach((t, k) => {
+    const kd = D.KIND[kindOf(t)], a = 1 - k * 0.22;
+    g.fillStyle = rgb(kd.color, a); g.beginPath(); g.arc(x + 38, ly - 4, 3.5, 0, 7); g.fill();
+    const v = t.k === 'obj' ? '' : t.k === 'train' ? 'Train ' : kd.verb + ' ';
+    g.font = '14px ' + FONT; g.fillStyle = rgb(kd.color, a); g.fillText(v, x + 70, ly); const vw = g.measureText(v).width;
+    g.fillStyle = t.k === 'obj' ? rgb(kd.color, a) : rgb(qc, a); fit(t.k === 'obj' ? t.text.replace(/ \(.*\)$/, '') : t.name || t.text, x + 70 + vw, ly, w - 90 - vw);
+    ly += 26;
+  });
+}
+function icon(k, cx, cy, color) { g.fillStyle = rgb(color); g.beginPath(); g.arc(cx, cy, 20, 0, 7); g.fill(); const ic = icons[k]; if (!ic) return; const key = k + color; if (!tinted[key]) { const t = document.createElement('canvas'); t.width = ic.width; t.height = ic.height; const c = t.getContext('2d'); c.drawImage(ic, 0, 0); c.globalCompositeOperation = 'source-in'; c.fillStyle = '#0a0b0e'; c.fillRect(0, 0, t.width, t.height); tinted[key] = t; } g.drawImage(tinted[key], cx - 14, cy - 14, 28, 28); }
+function fit(t, x, y, w) { t = String(t || ''); if (g.measureText(t).width <= w) { g.fillText(t, x, y); return; } while (t.length > 3 && g.measureText(t + '…').width > w) t = t.slice(0, -1); g.fillText(t + '…', x, y); }
+function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+</script></body></html>

@@ -1,0 +1,843 @@
+{
+  "_about": "Reviewed side trips and must-do quests for Alliance characters (special[].class limits a trip to one class). Must-do quests are the chains expert guides call worth doing.",
+  "special": [
+    {
+      "class": "warlock",
+      "name": "Voidwalker (warlock 10)",
+      "minLevel": 10,
+      "quests": [
+        1715,
+        1688,
+        1689
+      ],
+      "minutes": 35,
+      "why": "Your level-10 class quest: the Voidwalker. A gnome or dwarf warlock is sent from Ironforge to Gakin the Darkbinder (Slaughtered Lamb basement, Mage Quarter, Stormwind); Surena's Choker is at the Brackwell Pumpkin Patch in Elwynn; then use the Bloodstone Choker and defeat the summoned Voidwalker.",
+      "travel": {
+        "Stormwind City": "Gakin is in the Slaughtered Lamb basement, Mage Quarter.",
+        "Elwynn Forest": "Surena's Choker: Brackwell Pumpkin Patch, east Elwynn."
+      },
+      "tag": "your tank pet",
+      "id": "Voidwalkerwarlock",
+      "inPath": true
+    },
+    {
+      "class": "warlock",
+      "name": "Succubus + Incubus (warlock 20)",
+      "minLevel": 20,
+      "quests": [
+        1716,
+        1738,
+        65602,
+        1739,
+        65603
+      ],
+      "minutes": 90,
+      "why": "Your level-20 class quests: two new pets in one trip - the Succubus (and a Small Soul Pouch) and the Incubus. Gakin the Darkbinder (Slaughtered Lamb basement, Stormwind) sends you to Takar the Seer in the Barrens, who gives you both: the Heartswood in north-west Ashenvale (Ruins of Ordil'Aran) and, a short ride north-west of it, the Wooden Figurine you get by burning the Archaeologist's Cart (about 26.6, 22.0). Back to Gakin to bind both.",
+      "travel": {
+        "The Barrens": "From the Eastern Kingdoms: boat to Auberdine (Stormwind Harbor or Menethil), then ride south through Ashenvale into the Barrens - do not ride out of Theramore below level 35 (Dustwallow Marsh is far too high). Fly to Ratchet once you have that flight path.",
+        "Ashenvale": "Fly to Astranaar if you have it; the Heartswood is at the Ruins of Ordil'Aran in the north-west (about 31, 31), guarded by Dark Strand cultists; the Wooden Figurine (Archaeologist's Cart) is just north-west of it at about 26.6, 22.0.",
+        "Stormwind City": "Fly or hearth to Stormwind; Gakin is in the Slaughtered Lamb basement, Mage Quarter."
+      },
+      "tag": "two new pets + shard bag",
+      "id": "Succubuswarlock",
+      "inPath": true
+    },
+    {
+      "class": "warlock",
+      "name": "Felhunter (warlock 30)",
+      "minLevel": 30,
+      "quests": [
+        1798,
+        1758,
+        1802,
+        1804,
+        1795
+      ],
+      "minutes": 120,
+      "why": "Your level-30 class quest: the Felhunter pet. Strahad Farsan (Ratchet) and Krom Stoutarm (Ironforge), with pages from the Hillsbrad murloc beach, Splithoof Hold in Thousand Needles and Dragonmaw casters in the Wetlands - best done while your path passes those zones.",
+      "travel": {
+        "The Barrens": "From the Eastern Kingdoms: boat to Auberdine (Stormwind Harbor or Menethil), then ride south through Ashenvale into the Barrens - do not ride out of Theramore below level 35 (Dustwallow Marsh is far too high). Fly to Ratchet once you have that flight path."
+      },
+      "tag": "new pet",
+      "id": "Felhunterwarlock"
+    },
+    {
+      "name": "Cozy Sleeping Bag",
+      "quests": [
+        79008,
+        79192,
+        79980,
+        79974,
+        79975,
+        79976
+      ],
+      "why": "Rewards the Cozy Sleeping Bag - a lasting XP bonus, worth far more than the quests themselves. Every stop is a single click, but it goes round the world: do it in one trip, or pick it up again whenever your path passes these zones.",
+      "travel": {
+        "Westfall": "Fly to Sentinel Hill; the Burned-Out Remains are a short ride west.",
+        "The Barrens": "From the Eastern Kingdoms: boat to Auberdine (Stormwind Harbor or Menethil), then ride south through Ashenvale into the Barrens - do not ride out of Theramore below level 35 (Dustwallow Marsh is far too high). Fly to Ratchet once you have that flight path.",
+        "Stonetalon Mountains": "Fly to Stonetalon Peak if you have it, or ride in from the Barrens. The hidden camp is up a trail that starts around 50.9, 52.3; the Pocket Litter is beside the tent.",
+        "Loch Modan": "Fly to Thelsamar, then ride north.",
+        "Arathi Highlands": "Reach it from Hillsbrad, not the Wetlands: fly to Southshore, ride to the cart at Hillsbrad 87.4, 49.7 and climb up onto Thoradin's Wall. The Messenger Bag is up there."
+      },
+      "minutes": 90,
+      "tag": "lasting XP bonus",
+      "id": "CozySleepingBag"
+    },
+    {
+      "class": "warlock",
+      "name": "Infernal (warlock 55)",
+      "minLevel": 55,
+      "quests": [
+        7601,
+        7602,
+        7603
+      ],
+      "minutes": 120,
+      "why": "Your level-55 class quest: Inferno (summon an Infernal, needs an Infernal Stone; 1h cooldown, outdoors) and the Shard of the Green Flame off-hand. Impsy in Felwood starts it; three Flawless Fel Essences (Azshara, Jaedenar in Felwood, and the Dark Portal in the Blasted Lands), then kill Kroshius at Shatter Scar Vale, Felwood; Niby the Almighty hands it in.",
+      "travel": {
+        "Felwood": "Impsy and Niby the Almighty are in Felwood; Jaedenar and Shatter Scar Vale are there too.",
+        "Azshara": "One Fel Essence is in Azshara.",
+        "Blasted Lands": "One Fel Essence is at the Dark Portal."
+      },
+      "tag": "Inferno + off-hand",
+      "id": "Infernalwarlock"
+    },
+    {
+      "class": "hunter",
+      "races": [
+        "dwarf"
+      ],
+      "name": "Taming the Beast (hunter 10)",
+      "minLevel": 10,
+      "quests": [
+        6074,
+        6075,
+        6076,
+        6064,
+        6084,
+        6085,
+        6086
+      ],
+      "minutes": 45,
+      "inPath": true,
+      "tag": "your pet",
+      "why": "Your level-10 class quests: Tame Beast and Beast Training - a hunter without a pet levels far slower. Grif Wildheart in Kharanos sends you to tame a Large Crag Boar, a Snow Leopard and an Ice Claw Bear in Dun Morogh; Belia Thundergranite (Hall of Arms, Ironforge) teaches Beast Training.",
+      "travel": {
+        "Dun Morogh": "Grif Wildheart is in Kharanos; the boar, leopard and bear are around Dun Morogh.",
+        "Ironforge": "Belia Thundergranite: Hall of Arms."
+      },
+      "id": "Tamehunterdwarf",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)"
+    },
+    {
+      "class": "hunter",
+      "races": [
+        "nightelf"
+      ],
+      "name": "Taming the Beast (hunter 10)",
+      "minLevel": 10,
+      "quests": [
+        6071,
+        6072,
+        6073,
+        6063,
+        6101,
+        6102,
+        6103
+      ],
+      "minutes": 45,
+      "inPath": true,
+      "tag": "your pet",
+      "why": "Your level-10 class quests: Tame Beast and Beast Training. Dazalar in Dolanaar sends you to tame a Webwood Lurker, a Nightsaber Stalker and a Strigid Screecher in Teldrassil; Jocaste (Cenarion Enclave, Darnassus) teaches Beast Training.",
+      "travel": {
+        "Teldrassil": "Dazalar is in Dolanaar; the three beasts are around Teldrassil.",
+        "Darnassus": "Jocaste: Cenarion Enclave."
+      },
+      "id": "Tamehunternightelf",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)"
+    },
+    {
+      "class": "druid",
+      "name": "Bear Form (druid 10)",
+      "minLevel": 10,
+      "quests": [
+        5923,
+        5921,
+        5929,
+        5931,
+        6001
+      ],
+      "minutes": 50,
+      "inPath": true,
+      "tag": "Bear Form + Moonglade",
+      "why": "Your level-10 class quests: Bear Form (and Teleport: Moonglade on the way). Mathrengyl Bearwalker (Cenarion Enclave, Darnassus); Moonglade; then use the Cenarion Moondust at the Moonkin Stone near Auberdine and defeat Lunaclaw.",
+      "travel": {
+        "Darnassus": "Mathrengyl Bearwalker: Cenarion Enclave.",
+        "Darkshore": "The Moonkin Stone is near Auberdine."
+      },
+      "id": "Beardruid",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)",
+      "races": [
+        "nightelf"
+      ]
+    },
+    {
+      "class": "druid",
+      "races": [
+        "nightelf"
+      ],
+      "name": "Aquatic Form (druid 16)",
+      "minLevel": 16,
+      "quests": [
+        26,
+        29,
+        272,
+        5061
+      ],
+      "minutes": 60,
+      "tag": "Aquatic Form + belt",
+      "why": "Aquatic Form and the Aquarius Belt: Dendrite Starblaze in Moonglade; the Shrine Bauble from Lake Elune'ara; the two pendant halves to the Shrine of Remulos.",
+      "travel": {
+        "Moonglade": "Dendrite Starblaze, Nighthaven."
+      },
+      "inPath": true,
+      "id": "Aquaticdruid",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)"
+    },
+    {
+      "class": "rogue",
+      "name": "Poisons (rogue 20)",
+      "minLevel": 20,
+      "quests": [
+        2360,
+        2359
+      ],
+      "minutes": 50,
+      "inPath": true,
+      "tag": "poisons",
+      "why": "Your level-20 class quests: Poisons (and a Thistle Tea recipe). Mathias Shaw (Stormwind) sends you to Agent Kearnen in Westfall; Klaven Mortwake's Journal and the Defias Tower Key at Klaven's Tower.",
+      "travel": {
+        "Stormwind City": "Mathias Shaw: Old Town.",
+        "Westfall": "Agent Kearnen and Klaven's Tower."
+      },
+      "id": "Poisonsrogue",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)"
+    },
+    {
+      "class": "warrior",
+      "name": "Berserker Stance and the Whirlwind weapon (warrior 30-40)",
+      "minLevel": 30,
+      "quests": [
+        1718,
+        1719,
+        1791,
+        1714,
+        1712,
+        1713,
+        1792
+      ],
+      "minutes": 240,
+      "tag": "stance + 2H weapon",
+      "why": "Berserker Stance (Klannoc Macleod, Fray Island off the Barrens), then Bath'rah the Windwatcher (east of Tarren Mill) for the Whirlwind Axe, Warhammer or Sword - long (Liferoot, 30 Bloodscalp Tusks, the charms) but the best two-hander for the 40s in Classic; Forever stats not checked. Not built into the path: the Whirlwind Heart comes from the Cyclonian (an elite in Alterac Mountains) and the quest data has no source for the Essence of the Exile.",
+      "travel": {
+        "The Barrens": "Klannoc Macleod: Fray Island, south of Ratchet.",
+        "Alterac Mountains": "Bath'rah the Windwatcher: ruins east of Tarren Mill."
+      },
+      "id": "Whirlwindwarrior",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)"
+    },
+    {
+      "class": "shaman",
+      "races": [
+        "dwarf"
+      ],
+      "name": "Call of Earth (shaman 4)",
+      "minLevel": 4,
+      "quests": [
+        94373,
+        94374,
+        94375
+      ],
+      "minutes": 25,
+      "inPath": true,
+      "tag": "Earth totem",
+      "why": "Your first totem: Teo Hammerstorm (Anvilmar, Coldridge Valley); 2 Iceclaw Bear Pendants from the Frostmane trolls; the Earth Sapta at the Spirit Stone.",
+      "travel": {
+        "Dun Morogh": "Teo Hammerstorm: Anvilmar."
+      },
+      "id": "Earthshaman",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)"
+    },
+    {
+      "class": "shaman",
+      "races": [
+        "dwarf"
+      ],
+      "name": "Call of Fire (shaman 10)",
+      "minLevel": 10,
+      "quests": [
+        94449
+      ],
+      "minutes": 40,
+      "inPath": true,
+      "tag": "Fire totem",
+      "why": "Your Fire totem: Bruegs Kindleborn (Dun Morogh, by the Loch Modan tunnel), Braldir Ashmantle (Loch Modan 32,66): Fire Tar and a Reagent Pouch, the Fire Sapta. Only the first quest id is known yet.",
+      "travel": {
+        "Loch Modan": "Braldir Ashmantle, 32,66."
+      },
+      "id": "Fireshaman",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)"
+    },
+    {
+      "class": "shaman",
+      "races": [
+        "dwarf"
+      ],
+      "name": "Call of Air (shaman 30)",
+      "minLevel": 30,
+      "quests": [
+        94789,
+        96264,
+        79358,
+        96135,
+        96016
+      ],
+      "minutes": 90,
+      "tag": "Air totem",
+      "why": "Your Air totem: Veyric Thundervein, northern Arathi Highlands (59.8,27.6).",
+      "travel": {
+        "Arathi Highlands": "Veyric Thundervein, 59.8,27.6."
+      },
+      "inPath": true,
+      "id": "Airshaman",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)"
+    },
+    {
+      "class": "paladin",
+      "races": [
+        "human"
+      ],
+      "name": "Redemption (paladin 12)",
+      "minLevel": 12,
+      "quests": [
+        2998,
+        1642,
+        1643,
+        1644,
+        1780,
+        1781,
+        1786,
+        1787,
+        1788
+      ],
+      "minutes": 60,
+      "tag": "Redemption",
+      "why": "Redemption: Brother Wilhelm (Goldshire), Duthorian Rall (Stormwind Cathedral), 10 Linen Cloth for Stephanie Turner, resurrect Henze Faulk (Elwynn), a Defias Script from the Defias Rogue Wizards.",
+      "travel": {
+        "Stormwind City": "Duthorian Rall: Cathedral.",
+        "Elwynn Forest": "Henze Faulk and the Defias Rogue Wizards."
+      },
+      "id": "Redemptionpaladin",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)",
+      "inPath": true
+    },
+    {
+      "class": "paladin",
+      "races": [
+        "dwarf"
+      ],
+      "name": "Redemption (paladin 12)",
+      "minLevel": 12,
+      "quests": [
+        2999,
+        1646,
+        1647,
+        1648,
+        1778,
+        1779,
+        1783,
+        1784,
+        1785
+      ],
+      "minutes": 60,
+      "tag": "Redemption",
+      "why": "Redemption: Brandur Ironhammer (paladin trainer, Ironforge) sends you to Tiza Battleforge; 10 Linen Cloth for John Turner (outer ring of Ironforge); Muiredon Battleforge gives the Symbol of Life to resurrect Narm Faulk near Helm's Bed Lake (Dun Morogh); a Dark Iron Script from the Dark Iron Spies there; back to Muiredon, then Tiza.",
+      "travel": {
+        "Ironforge": "Tiza Battleforge and Muiredon Battleforge: Hall of Mysteries; John Turner walks the outer ring.",
+        "Dun Morogh": "Narm Faulk and the Dark Iron Spies: by Helm's Bed Lake, east Dun Morogh (about 78, 60)."
+      },
+      "id": "RedemptionpaladinDwarf",
+      "source": "QuestieDB 1.0.13 quest texts and NPC spawns (2999, 1646-1648, 1778-1779, 1783-1785); the dwarf counterpart of the reviewed human chain",
+      "inPath": true
+    },
+    {
+      "class": "paladin",
+      "name": "Verigan's Fist (paladin 20-25)",
+      "minLevel": 22,
+      "quests": [
+        1649,
+        1650,
+        1651,
+        1652,
+        1653,
+        1654,
+        1806
+      ],
+      "minutes": 150,
+      "tag": "2H mace",
+      "why": "The Tome of Valor (Daphne Stilwell's defence in Westfall) and the Test of Righteousness (Jordan Stilwell, Ironforge) for Verigan's Fist, a strong two-hander for the 20s. Not built into the path: the Test of Righteousness needs Whitestone Oak Lumber from The Deadmines and Jordan's Smithing Hammer from Shadowfang Keep, and Daphne's defence is a level-25 fight.",
+      "travel": {
+        "Westfall": "Daphne Stilwell, south Westfall.",
+        "Ironforge": "Jordan Stilwell."
+      },
+      "id": "Veriganpaladin",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)"
+    },
+    {
+      "class": "paladin",
+      "name": "Summon Warhorse (paladin 40)",
+      "minLevel": 40,
+      "quests": [
+        1661
+      ],
+      "minutes": 20,
+      "inPath": true,
+      "tag": "free mount",
+      "why": "Your level-40 mount, free: The Tome of Nobility from Duthorian Rall (Stormwind Cathedral). Still in Forever.",
+      "travel": {
+        "Stormwind City": "Duthorian Rall: Cathedral."
+      },
+      "id": "Warhorsepaladin",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)"
+    },
+    {
+      "class": "mage",
+      "name": "Mirror Lake (mage 10)",
+      "minLevel": 10,
+      "quests": [
+        1860,
+        1861
+      ],
+      "minutes": 25,
+      "tag": "orb or staff",
+      "why": "Jennea Cannon (Wizard's Sanctum, Stormwind): a Mirror Lake water sample for the Ley Orb or Ley Staff.",
+      "travel": {
+        "Stormwind City": "Jennea Cannon: Wizard's Sanctum."
+      },
+      "id": "Mirrormage",
+      "source": "Wowhead /forever pages via the Mac agent, 2026-11-09 (docs/research)"
+    },
+    {
+      "class": "hunter",
+      "races": [
+        "human"
+      ],
+      "name": "Taming the Beast (hunter 10)",
+      "minLevel": 10,
+      "quests": [
+        94792,
+        94863,
+        94864,
+        94793
+      ],
+      "minutes": 40,
+      "inPath": true,
+      "tag": "your pet",
+      "why": "Your level-10 class quests (new in Forever for human hunters): Josephine Carson in Goldshire sends you to tame three beasts around Elwynn, then teaches Beast Training - a hunter without a pet levels far slower.",
+      "travel": {
+        "Elwynn Forest": "Josephine Carson: Goldshire (41, 66)."
+      },
+      "id": "Tamehunterhuman",
+      "source": "our quest data (QuestieDB Forever: 94792 > 94863 > 94864 > 94793); the dwarf chain is dwarf-only (the route audit caught it)"
+    },
+    {
+      "class": "druid",
+      "races": [
+        "skyborne"
+      ],
+      "name": "Bear Form (Skyborne druid 10)",
+      "minLevel": 10,
+      "quests": [
+        94006,
+        94638
+      ],
+      "minutes": 20,
+      "inPath": true,
+      "tag": "Bear Form",
+      "why": "Your level-10 class quests on Zephras Isle: Lotheluum Starbreeze (Valanaar) sends you to Urs'endris, the Great Windborne Bear Spirit by the falls north-east of Valanaar - Bear Form.",
+      "travel": {
+        "Zephras Isle": "Lotheluum Starbreeze: Valanaar (64,75); Urs'endris: the falls north-east (70,62)."
+      },
+      "id": "Bearskyborne",
+      "source": "QuestieDB Forever quest data (race mask 2^32, zone 16593 Zephras Isle) and the Mac agent Wowhead notes, 2026-11-09"
+    },
+    {
+      "class": "druid",
+      "races": [
+        "skyborne"
+      ],
+      "name": "Teleport: Moonglade (Skyborne druid 10)",
+      "minLevel": 10,
+      "quests": [
+        94912,
+        94914
+      ],
+      "minutes": 25,
+      "inPath": true,
+      "tag": "Teleport: Moonglade",
+      "why": "Archmage Ansirem Runeweaver in Dalaran (on your way off Zephras Isle) sends you to Sheldras Moontree in Stormwind, then to Moonglade - Teleport: Moonglade, a free hearth to a flight path and a druid trainer.",
+      "travel": {
+        "Alterac Mountains": "Archmage Ansirem Runeweaver: Dalaran, where the skyship lands.",
+        "Stormwind City": "Sheldras Moontree: Cathedral Square side."
+      },
+      "id": "Moongladeskyborne",
+      "source": "QuestieDB Forever quest data (race mask 2^32, zone 16593 Zephras Isle) and the Mac agent Wowhead notes, 2026-11-09"
+    },
+    {
+      "class": "hunter",
+      "races": [
+        "skyborne"
+      ],
+      "name": "Taming the Beast (Skyborne hunter 10)",
+      "minLevel": 10,
+      "quests": [
+        94007,
+        94978,
+        94979,
+        94013,
+        94050
+      ],
+      "minutes": 40,
+      "inPath": true,
+      "tag": "your pet",
+      "why": "Your level-10 class quests on Zephras Isle: Elayaa Easewind sends you to Quel'ana Quickgale (Valanaar), who has you tame three of the island's beasts; Quel'dora Quickgale teaches Beast Training. A hunter without a pet levels far slower.",
+      "travel": {
+        "Zephras Isle": "Quel'ana and Quel'dora Quickgale: Valanaar (60,73)."
+      },
+      "id": "Tameskyborne",
+      "source": "QuestieDB Forever quest data (race mask 2^32, zone 16593 Zephras Isle) and the Mac agent Wowhead notes, 2026-11-09"
+    },
+    {
+      "class": "warrior",
+      "races": [
+        "skyborne"
+      ],
+      "name": "The Skybreaker Bulwark (Skyborne warrior 10)",
+      "minLevel": 10,
+      "quests": [
+        94003
+      ],
+      "minutes": 15,
+      "inPath": true,
+      "tag": "class quest",
+      "why": "Your level-10 class quest from Seena Skybreaker in Valanaar.",
+      "travel": {
+        "Zephras Isle": "Seena Skybreaker: Valanaar (60,73)."
+      },
+      "id": "Bulwarkskyborne",
+      "source": "QuestieDB Forever quest data (race mask 2^32, zone 16593 Zephras Isle) and the Mac agent Wowhead notes, 2026-11-09"
+    },
+    {
+      "class": "warrior",
+      "races": [
+        "human"
+      ],
+      "name": "Defensive Stance (warrior 10)",
+      "minLevel": 10,
+      "quests": [
+        1638,
+        1639,
+        1640,
+        1665
+      ],
+      "minutes": 20,
+      "inPath": true,
+      "tag": "Defensive Stance, Taunt, Sunder Armor",
+      "why": "Your level-10 class quest teaches Defensive Stance, Taunt and Sunder Armor (Classic has no other way to learn them). Lyria Du Lac (Goldshire) or Ilsa Corbin (Stormwind) sends you to Harry Burlguard in Old Town; beat Bartleby the drunk next to him, then take Bartleby's Mug back to Burlguard.",
+      "travel": {
+        "Elwynn Forest": "Lyria Du Lac: Lion's Pride Inn, Goldshire.",
+        "Stormwind City": "Harry Burlguard and Bartleby: Old Town (about 77, 53)."
+      },
+      "id": "Stancewarriorhuman",
+      "source": "QuestieDB 1.0.13 (quest givers, hand-ins, objectives); what each quest teaches: warcraft.wiki.gg (Classic), 2026-11-10"
+    },
+    {
+      "class": "warrior",
+      "races": [
+        "dwarf",
+        "gnome"
+      ],
+      "name": "Defensive Stance (warrior 10)",
+      "minLevel": 10,
+      "quests": [
+        1679,
+        1678
+      ],
+      "minutes": 30,
+      "inPath": true,
+      "tag": "Defensive Stance, Taunt, Sunder Armor",
+      "why": "Your level-10 class quest teaches Defensive Stance, Taunt and Sunder Armor (Classic has no other way to learn them). Granis Swiftaxe (Kharanos) sends you to Muren Stormpike (Hall of Arms, Ironforge), who wants Vejrek's Head - Vejrek is at the Frostmane trolls' camp in west Dun Morogh (about 28, 58).",
+      "travel": {
+        "Dun Morogh": "Granis Swiftaxe: Kharanos. Vejrek: west Dun Morogh (about 28, 58).",
+        "Ironforge": "Muren Stormpike: Hall of Arms."
+      },
+      "id": "Stancewarriordwarf",
+      "source": "QuestieDB 1.0.13 (quest givers, hand-ins, objectives); what each quest teaches: warcraft.wiki.gg (Classic), 2026-11-10"
+    },
+    {
+      "class": "warrior",
+      "races": [
+        "nightelf"
+      ],
+      "name": "Defensive Stance (warrior 10)",
+      "minLevel": 10,
+      "quests": [
+        1684,
+        1683
+      ],
+      "minutes": 30,
+      "inPath": true,
+      "tag": "Defensive Stance, Taunt, Sunder Armor",
+      "why": "Your level-10 class quest teaches Defensive Stance, Taunt and Sunder Armor (Classic has no other way to learn them). Kyra Windblade (Dolanaar) sends you to Elanaria (Warrior's Terrace, Darnassus), who wants the Horn of Vorlus - Vorlus Vilehoof is in Teldrassil (about 47, 64).",
+      "travel": {
+        "Teldrassil": "Kyra Windblade: Dolanaar. Vorlus Vilehoof: about 47, 64.",
+        "Darnassus": "Elanaria: Warrior's Terrace."
+      },
+      "id": "Stancewarriornightelf",
+      "source": "QuestieDB 1.0.13 (quest givers, hand-ins, objectives); what each quest teaches: warcraft.wiki.gg (Classic), 2026-11-10"
+    },
+    {
+      "class": "priest",
+      "races": [
+        "human"
+      ],
+      "name": "Divine Grace and Feedback (priest 10, 20)",
+      "minLevel": 10,
+      "quests": [
+        94773,
+        5676
+      ],
+      "minutes": 10,
+      "inPath": true,
+      "tag": "racial priest spells",
+      "why": "Your racial priest spells come from quests at High Priestess Laurena (Cathedral of Light, Stormwind): Divine Grace at 10 and Feedback at 20 - talk to her, done.",
+      "travel": {
+        "Stormwind City": "High Priestess Laurena: Cathedral of Light."
+      },
+      "id": "Racialpriesthuman",
+      "source": "QuestieDB 1.0.13 (quest givers, hand-ins, objectives); what each quest teaches: warcraft.wiki.gg (Classic), 2026-11-10"
+    },
+    {
+      "class": "priest",
+      "races": [
+        "dwarf"
+      ],
+      "name": "Desperate Prayer and Fear Ward (priest 10, 20)",
+      "minLevel": 10,
+      "quests": [
+        5639,
+        5641
+      ],
+      "minutes": 15,
+      "inPath": true,
+      "tag": "racial priest spells",
+      "why": "Your racial priest spells come from quests: Desperate Prayer at 10 (High Priest Rohan in Ironforge sends you to High Priestess Laurena, Cathedral of Light, Stormwind) and Fear Ward at 20 (High Priest Rohan, Mystic Ward, Ironforge).",
+      "travel": {
+        "Ironforge": "High Priest Rohan: Mystic Ward.",
+        "Stormwind City": "High Priestess Laurena: Cathedral of Light."
+      },
+      "id": "Racialpriestdwarf",
+      "source": "QuestieDB 1.0.13 (quest givers, hand-ins, objectives); what each quest teaches: warcraft.wiki.gg (Classic), 2026-11-10"
+    },
+    {
+      "class": "priest",
+      "races": [
+        "nightelf"
+      ],
+      "name": "Starshards and Elune's Grace (priest 10, 20)",
+      "minLevel": 10,
+      "quests": [
+        5629,
+        5627,
+        5672
+      ],
+      "minutes": 15,
+      "inPath": true,
+      "tag": "racial priest spells",
+      "why": "Your racial priest spells come from Priestess Alathea (Temple of the Moon, Darnassus): Laurna Morninglight in Dolanaar sends you to her at 10 for Stars of Elune (Starshards), and she gives Elune's Grace at 20.",
+      "travel": {
+        "Teldrassil": "Laurna Morninglight: Dolanaar.",
+        "Darnassus": "Priestess Alathea: Temple of the Moon."
+      },
+      "id": "Racialpriestnightelf",
+      "source": "QuestieDB 1.0.13 (quest givers, hand-ins, objectives); what each quest teaches: warcraft.wiki.gg (Classic), 2026-11-10"
+    },
+    {
+      "class": "priest",
+      "races": [
+        "gnome"
+      ],
+      "name": "Confounding Flash and Contingency Plan (priest 10, 20)",
+      "minLevel": 10,
+      "quests": [
+        94817,
+        94819
+      ],
+      "minutes": 15,
+      "inPath": true,
+      "tag": "racial priest spells",
+      "why": "Your racial priest spells (Forever) come from High Priestess Mims at the gates of Ironforge: Confounding Flash at 10; at 20 High Priestess Laurena (Cathedral of Light, Stormwind) sends you back to her for Contingency Plan.",
+      "travel": {
+        "Dun Morogh": "High Priestess Mims: outside the gates of Ironforge (about 55, 22).",
+        "Stormwind City": "High Priestess Laurena: Cathedral of Light."
+      },
+      "id": "Racialpriestgnome",
+      "source": "QuestieDB 1.0.13 (quest givers, hand-ins, objectives); what each quest teaches: warcraft.wiki.gg (Classic), 2026-11-10"
+    },
+    {
+      "class": "druid",
+      "races": [
+        "nightelf"
+      ],
+      "name": "Cure Poison (druid 14)",
+      "minLevel": 14,
+      "quests": [
+        6121,
+        6122,
+        6123,
+        6124,
+        6125
+      ],
+      "minutes": 75,
+      "tag": "Cure Poison",
+      "why": "Your level-14 class quests end with Power over Poison, which teaches Cure Poison: Mathrengyl Bearwalker (Cenarion Enclave, Darnassus) sends you to Dendrite Starblaze in Moonglade; fill the sampler at Cliffspring Falls and see Alanndarian Nightsong in Auberdine (Darkshore); Earthroot and Lunar Fungus in Teldrassil; cure the Sickly Deer in Darkshore; back to Dendrite, then Mathrengyl.",
+      "travel": {
+        "Darnassus": "Mathrengyl Bearwalker: Cenarion Enclave.",
+        "Moonglade": "Teleport: Moonglade; Dendrite Starblaze at Nighthaven.",
+        "Darkshore": "Alanndarian Nightsong: Auberdine. Cliffspring Falls north of Auberdine; the Sickly Deer north-east.",
+        "Teldrassil": "Earthroot from the Lashers; Lunar Fungus in the caves."
+      },
+      "id": "Curepoisondruid",
+      "source": "QuestieDB 1.0.13 (quest givers, hand-ins, objectives); what each quest teaches: warcraft.wiki.gg (Classic), 2026-11-10",
+      "inPath": true
+    },
+    {
+      "class": "shaman",
+      "races": [
+        "dwarf"
+      ],
+      "name": "Call of Water (shaman 20)",
+      "minLevel": 20,
+      "quests": [
+        94494,
+        94495,
+        94497,
+        94499,
+        94500,
+        94501,
+        94502,
+        94503,
+        94505
+      ],
+      "minutes": 150,
+      "tag": "Water and Healing Stream totems",
+      "why": "Water totems (Healing Stream, Mana Spring). Not built into the path: the bracers drop only from the Corrupt Minor Manifestation of Water (level 22) beside the Sepulcher in Silverpine Forest, a Horde zone with no Alliance flight path or safe road the arrow can guide; take it when you are ready to ride through Hillsbrad into Silverpine.",
+      "travel": {
+        "Ironforge": "Eldrun Stormbreaker.",
+        "Loch Modan": "Norric Lochthane (about 42, 19).",
+        "Wetlands": "Hervdana Saegrund (about 66, 77)."
+      },
+      "id": "Callofwatershaman",
+      "source": "QuestieDB 1.0.13 (quest givers, hand-ins, objectives); what each quest teaches: warcraft.wiki.gg (Classic), 2026-11-10"
+    }
+  ],
+  "mustDo": [
+    66,
+    67,
+    68,
+    69,
+    70,
+    72,
+    74,
+    75,
+    78,
+    79,
+    80,
+    97,
+    250,
+    199,
+    161,
+    274,
+    278,
+    280,
+    283,
+    729,
+    731,
+    741,
+    942,
+    943,
+    965,
+    966,
+    967,
+    970,
+    973,
+    1140,
+    1167,
+    1143,
+    981,
+    983,
+    991,
+    1023,
+    1024,
+    1026,
+    1027,
+    1028,
+    1055,
+    1029,
+    1030,
+    1045,
+    1046,
+    1274,
+    1241,
+    1242,
+    1243,
+    1244,
+    1245,
+    1246,
+    1447,
+    1247,
+    1248,
+    1249,
+    1250,
+    1264,
+    1265,
+    1266,
+    1324,
+    1267,
+    1176,
+    1178,
+    1180,
+    1181,
+    1182,
+    1183,
+    95161,
+    3370,
+    1740,
+    1200,
+    95646,
+    396,
+    98310,
+    1599
+  ],
+  "bonusQuests": [
+    79008,
+    79192,
+    79980,
+    79974,
+    79975,
+    79976
+  ],
+  "bonusNotes": {
+    "79008": "Starts the Cozy Sleeping Bag chain (bonus XP item). It continues in The Barrens, Stonetalon, Loch Modan and Hillsbrad."
+  }
+}

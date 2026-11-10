@@ -1,0 +1,136 @@
+// Safety net for quests that were already in the log (or half done) when a route was planned: the planner leaves out
+// their accept step and finished objectives, so if the quest is later abandoned the route has nowhere to send you.
+// This puts back, for every quest in a route: an accept step (at its giver, before the quest's first step) and an
+// objective step for every objective (before its turn-in). In game they show as done straight away from the live
+// quest log; abandon the quest and they come back, pointing at the giver and the objective spots.
+// ensureSteps(steps, db, conv) -> new steps array (ids renumbered, sections kept)
+// an item that drops all over (Linen Cloth: ~250 humanoids in its drop rates, only chests as listed sources) is no place
+// to go: its first spawn in the data sent a level-12 paladin to Alterac Mountains. You have it from questing (or buy it)
+const COMMON_DROP = 25;
+const commonDrop = (o) => o.kind !== 'kill' && Math.max((o.npcDrops || []).length + (o.objectDrops || []).length, Object.keys(o.rates || {}).length) > COMMON_DROP;
+function flyLater(steps) {
+  steps = steps.slice();
+  for (let i = 0; i < steps.length; i++) {
+    const f = steps[i]; if (f.k !== 'fly' || !f.to || f.moved) continue;
+    let j = i + 1;
+    while (j < steps.length && steps[j].m && steps[j].m !== f.to && steps[j].k !== 'fly' && steps[j].k !== 'goto') j++;
+    if (j > i + 1) { steps.splice(i, 1); steps.splice(j - 1, 0, { ...f, moved: true, sec: steps[j - 1] ? steps[j - 1].sec : f.sec }); i--; }
+  }
+  return steps.map(({ moved, ...x }) => x);
+}
+function makeEnsure(db, conv) {
+  const Q = db.quests, N = db.npcs, O = db.objects;
+  const T = Object.fromEntries(conv.map((t) => [t.area_id, t]));
+  const at = (p) => (p && T[p.zone] ? { m: T[p.zone].ui_map_id, x: +(p.x / 100).toFixed(4), y: +(p.y / 100).toFixed(4), zone: T[p.zone].target_name } : {});
+  const firstSpawn = (list) => { for (const s of list || []) for (const p of s.spawns || []) if (p.x >= 0 && T[p.zone]) return { who: s.name, p, type: s.type }; return null; };
+  function objSpawns(o) {
+    const out = [];
+    if (o.kind === 'kill') { if (N[o.npc]) out.push(...N[o.npc].spawns); }
+    else if (o.kind === 'killcredit') { for (const id of o.npcs || []) if (N[id]) out.push(...N[id].spawns); }
+    else if (o.kind === 'item') { for (const id of o.npcDrops || []) if (N[id]) out.push(...N[id].spawns); for (const id of o.objectDrops || []) if (O[id]) out.push(...O[id].spawns); if (!out.length) for (const id of o.vendors || []) if (N[id]) out.push(...N[id].spawns); }
+    else if (o.kind === 'object') { if (O[o.object]) out.push(...O[o.object].spawns); }
+    else if (o.kind === 'explore') out.push(...(o.spawns || []));
+    return out.filter((p) => p.x >= 0 && T[p.zone]);
+  }
+  function spot(spawns) {
+    if (!spawns.length) return null;
+    let best = spawns[0], bn = -1;
+    for (const p of spawns) { const n = spawns.filter((q) => q.zone === p.zone && Math.abs(q.x - p.x) < 4 && Math.abs(q.y - p.y) < 4).length; if (n > bn) { bn = n; best = p; } }
+    const near = spawns.filter((q) => q.zone === best.zone && Math.abs(q.x - best.x) < 4 && Math.abs(q.y - best.y) < 4);
+    return { zone: best.zone, x: near.reduce((s, q) => s + q.x, 0) / near.length, y: near.reduce((s, q) => s + q.y, 0) / near.length };
+  }
+  const label = (o) => (o.kind === 'kill' ? 'Kill ' + ((N[o.npc] || {}).name || 'target') : o.kind === 'item' ? 'Collect ' + o.name : o.text || (o.kind === 'object' ? 'Use ' + ((O[o.object] || {}).name || 'object') : 'Explore'));
+  const match = (o) => (o.kind === 'item' ? o.name : o.kind === 'kill' ? (N[o.npc] || {}).name : undefined);
+  const norm = (s) => (s || '').toLowerCase();
+
+  return function ensureSteps(steps) {
+    // a flight that's followed by errands somewhere else (Stormwind books before 'Fly to Redridge'): do the errands
+    // first, then fly - otherwise the card sends you away from the city you're standing in
+    steps = flyLater(steps);
+    // a quest picked up on this route but never handed in on it (its turn-in is in a zone this route doesn't go to):
+    // not worth carrying - leave it out entirely. Bonus items and books have no turn-in and are kept.
+    const turned = new Set(steps.filter((s) => s.k === 'turnin' && s.q > 0).map((s) => s.q));
+    const orphan = new Set(steps.filter((s) => s.k === 'accept' && s.q > 0 && !turned.has(s.q)).map((s) => s.q));
+    // a "where next?" choice point (_choice, set by campaign.js on the first step of a zone) is a step, not a number:
+    // when the step it is on goes, it moves to the step that takes its place, so the prompt stays at the zone boundary
+    const moveChoice = (from, to) => { if (from && from._choice && to && !to._choice) to._choice = from._choice; };
+    if (orphan.size) {
+      const gone = (s) => s.q > 0 && orphan.has(s.q) && (s.k === 'accept' || s.k === 'obj');
+      for (let i = steps.length - 1; i >= 0; i--) if (gone(steps[i]) && steps[i]._choice) { const j = steps.findIndex((s, k) => k > i && !gone(s)); if (j >= 0) moveChoice(steps[i], steps[j]); }
+      steps = steps.filter((s) => !gone(s));
+    }
+    const byQ = new Map();
+    steps.forEach((s, i) => { if (s.q && s.q > 0) { const r = byQ.get(s.q) || { first: i, accept: false, objs: [], turnin: -1 }; if (s.k === 'accept') r.accept = true; if (s.k === 'obj') r.objs.push(s); if (s.k === 'turnin' && r.turnin < 0) r.turnin = i; byQ.set(s.q, r); } });
+    const before = new Map(); // index -> steps to insert before it
+    // an added step carries the level you are at there (the step it goes before), like every other step - the audit
+    // and the card read it
+    const add = (i, s) => { if (s.lvl === undefined && steps[i] && steps[i].lvl) s.lvl = steps[i].lvl; if (!before.has(i)) before.set(i, []); before.get(i).push(s); };
+    let added = 0;
+    for (const [qid, r] of byQ) {
+      const q = Q[qid]; if (!q) continue;
+      const sec = steps[r.first].sec;
+      if (!r.accept) {
+        const g = firstSpawn(q.starters.filter((s) => s.type === 'npc')) || firstSpawn(q.starters);
+        // a starter with no place in the data (the Tome of Valor: an item with no drops listed) - take it where the quest's
+        // first step is, not nowhere (a step with no map gets no travel step before it: Ashenvale straight to Stormwind)
+        const f = steps[r.first], item = q.starters.find((s) => s.type === 'item');
+        const place = g ? at(g.p) : f && f.m ? { m: f.m, x: f.x, y: f.y, zone: f.zone } : {};
+        add(r.first, { k: 'accept', q: qid, name: q.name, npc: g && g.type === 'npc' ? g.who : !g && f && f.npc ? f.npc : undefined, r: 6, level: q.level, note: g && g.type !== 'npc' ? 'Starts from an item: ' + g.who : !g && item ? 'Starts from an item: ' + item.name + (f && f.npc ? ' (' + f.npc + ' has it for you)' : '') : undefined, ...place, sec, ensured: true });
+        added++;
+      }
+      if (r.turnin >= 0) {
+        q.objectives.forEach((o) => {
+          const m = norm(match(o)), lab = norm(label(o));
+          // the planner labels a step by the objective's own text when it has one ("Speak with Ichman's Location Discovered"
+          // for kill credit on a friendly trigger): that's the same objective, not a missing one (it was walked twice)
+          const ot = norm(o.text);
+          const have = r.objs.some((s) => (m && (norm(s.match) === m || norm(s.text).includes(m))) || norm(s.text).startsWith(lab) || (ot && norm(s.text).includes(ot)));
+          if (have) return;
+          // a spell to cast (done wherever you are) or an objective with no place: no step of its own - the hand-in shows
+          // what's left from your quest log (two placeless "Explore" steps for The Goddess Provides could never tick)
+          if (o.kind === 'spell') return;
+          if (o.kind === 'item' && commonDrop(o)) return; // nor a common drop: the hand-in says to bring it
+          const p = spot(objSpawns(o));
+          if (!p) return;
+          add(r.turnin, { k: 'obj', q: qid, name: q.name, text: label(o), match: match(o), loot: o.kind === 'item' || undefined, r: 40, level: q.level, ...(p ? at(p) : {}), sec: steps[r.turnin].sec, ensured: true });
+          added++;
+        });
+      }
+    }
+    const out = [];
+    steps.forEach((s, i) => { for (const x of before.get(i) || []) out.push(x); out.push(s); });
+    // escorts: the NPC walks off with whoever takes the quest, so it often isn't there to give it
+    for (const s of out) {
+      const q = s.q && Q[s.q];
+      const escort = q && ((q.special & 2) || q.objectives.some((o) => /escort|protect|accompany/i.test(o.text || "")));
+      if (!escort) continue;
+      if (s.k === "accept") {
+        const who = s.npc || (q.starters[0] && q.starters[0].name) || "the NPC";
+        const tip = "Escort: " + who + " leaves with whoever takes this. If they aren't here, wait for the respawn (a few minutes) - or join a group that's already on it and ask for a share.";
+        s.note = s.note && !/Escort:/.test(s.note) ? s.note + "  ·  " + tip : tip;
+        s.warn = true;
+      } else if (s.k === "obj") {
+        const tip = "Stay close and keep them alive - if they die, abandon and take it again.";
+        if (!s.note) s.note = tip;
+      }
+    }
+    // any two steps in a row in different zones get a travel step between them (whatever put them there)
+    const travelK = (x) => x.k === "fly" || x.k === "hearth" || x.k === "train";
+    // (a choice point on the first step in the new zone moves to that travel step: you choose before you go)
+    for (let i = 1; i < out.length; i++) { const p = out[i - 1], q = out[i]; if (p.m && q.m && p.m !== q.m && !travelK(p) && !travelK(q)) { const f = { k: "fly", to: q.m, dest: q.zone, text: q.zone, sec: q.sec, note: "Fly, or ride if it is close." }; if (q._choice) { f._choice = q._choice; delete q._choice; } out.splice(i, 0, f); i++; } }
+    // never two travel steps to the same place in a row (fly X then fly X, or fly X then hearth X)
+    // and no hearth straight into a flight elsewhere: the stop the hearth was for was left out above, so it leads nowhere
+    // (you keep the stone for later instead)
+    // (a choice point on the travel step that goes moves to the one that stays)
+    for (let i = out.length - 1; i > 0; i--) { const p = out[i - 1], q = out[i]; if ((p.k === "fly" || p.k === "hearth") && q.k === "fly" && !q.boat && !p.boat && (p.to === q.to || p.dest === q.dest)) { moveChoice(q, p); out.splice(i, 1); } else if (p.k === "fly" && !p.boat && q.k === "hearth" && (p.to === q.to || String(q.dest || "").startsWith(String(p.dest || "~")))) { moveChoice(p, q); out.splice(i - 1, 1); } else if (p.k === "hearth" && p.bindMap && q.k === "fly" && !q.boat && q.to && q.to !== p.bindMap) { moveChoice(p, q); out.splice(i - 1, 1); }
+      // a flight straight into a flight somewhere else: the first leads nowhere (the stops it was for were left out above -
+      // "fly to the Badlands" then "fly to Ironforge")
+      else if (p.k === "fly" && q.k === "fly" && !p.boat && !q.boat) { moveChoice(p, q); out.splice(i - 1, 1); } }
+    out.forEach((s, i) => { s.id = i + 1; });
+    out.added = added; out.dropped = orphan.size;
+    // where a leg's choice point ended up (step id), 0 if no step carries it
+    out.choiceAt = (leg) => out.findIndex((s) => s._choice === leg) + 1;
+    return out;
+  };
+}
+module.exports = { makeEnsure, flyLater, commonDrop };

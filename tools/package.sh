@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# The release zip: the addon (without its tests) and the built-in plans, nothing else (no planner, no companion).
+# usage: tools/package.sh [version]   -> dist/ForeverRoute-<version>.zip   (version default: the TOC's)
+set -eu
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+VER="${1:-$(sed -n 's/^## Version: *//p' addon/ForeverRoute/ForeverRoute.toc | tr -d '\r')}"
+rm -rf dist && mkdir -p dist/pkg
+cp -r addon/ForeverRoute dist/pkg/
+rm -rf dist/pkg/ForeverRoute/tests
+# your own plan (the companion writes it) is never shipped
+rm -f dist/pkg/ForeverRoute/Route.lua
+sed -i "s/^## Version: .*/## Version: $VER/" dist/pkg/ForeverRoute/ForeverRoute.toc
+for d in addon/ForeverRoute_Starter_*/; do cp -r "$d" dist/pkg/; done
+# the licenses (NOTICE says which is which): the addon is CC BY-NC-SA with a few GPL quest-data files; each built-in
+# plan is all quest data, so GPL
+cp LICENSE dist/pkg/ForeverRoute/LICENSE
+cp LICENSES/GPL-3.0.txt dist/pkg/ForeverRoute/LICENSE-GPL-3.0.txt
+cp NOTICE dist/pkg/ForeverRoute/NOTICE
+for d in dist/pkg/ForeverRoute_Starter_*/; do cp LICENSES/GPL-3.0.txt "$d/LICENSE-GPL-3.0.txt"; cp NOTICE "$d/NOTICE"; done
+if command -v zip >/dev/null; then (cd dist/pkg && zip -qr "../ForeverRoute-$VER.zip" .)
+else powershell -NoProfile -Command "Compress-Archive -Path 'dist/pkg/*' -DestinationPath 'dist/ForeverRoute-$VER.zip'"; fi
+echo "dist/ForeverRoute-$VER.zip: $(ls dist/pkg | wc -l) addon folders"
