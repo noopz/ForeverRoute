@@ -11,7 +11,8 @@ local LogCheck = {}
 ns.LogCheck = LogCheck
 
 local f, recount
-local W, PAD, ROW = 470, 14, 34
+-- BTNS: the column the buttons take on the right (Bring back / Keep + Abandon); the text keeps clear of it and wraps
+local W, PAD, ROW, BTNS = 560, 14, 34, 176
 local rows = {}
 
 local function call(fn, ...) if type(fn) == "function" then local ok, a = pcall(fn, ...); if ok then return a end end end
@@ -149,10 +150,11 @@ StaticPopupDialogs["FOREVERROUTE_DROPALL"] = {
 local COLORS = { drop = { 1, 0.55, 0.30 }, turnin = { 0.45, 0.78, 1.0 }, keep = { 0.36, 0.86, 0.48 } }
 local function row(k)
   if rows[k] then return rows[k] end
-  local r = CreateFrame("Frame", nil, f); r:SetSize(W - 2 * PAD, ROW)
+  local r = CreateFrame("Frame", nil, f.content); r:SetSize(W - 2 * PAD - 10, ROW)
   r.edge = r:CreateTexture(nil, "ARTWORK"); r.edge:SetTexture(Style.WHITE); r.edge:SetWidth(3); r.edge:SetPoint("TOPLEFT", 0, -4); r.edge:SetPoint("BOTTOMLEFT", 0, 4)
-  r.title = Style.Text(r, 11, C.text); r.title:SetPoint("TOPLEFT", 10, -3); r.title:SetWordWrap(false); r.title:SetWidth(W - 2 * PAD - 110)
-  r.why = Style.Text(r, 10, C.sub); r.why:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -2); r.why:SetWordWrap(false); r.why:SetWidth(W - 2 * PAD - 110)
+  r.title = Style.Text(r, 11, C.text); r.title:SetPoint("TOPLEFT", 10, -3); r.title:SetWordWrap(false); r.title:SetWidth(W - 2 * PAD - BTNS - 14)
+  r.why = Style.Text(r, 10, C.sub); r.why:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -2); r.why:SetWordWrap(true); r.why:SetJustifyH("LEFT"); r.why:SetWidth(W - 2 * PAD - BTNS - 14)
+  if r.why.SetMaxLines then r.why:SetMaxLines(2) end
   r.btn = Style.Button(r, "Abandon", 80, 18, function(self)
     local d = self:GetParent().data; if not d then return end
     local dlg = StaticPopup_Show("FOREVERROUTE_ABANDON", d.title); if dlg then dlg.data = { id = d.id, title = d.title, why = self:GetParent().reason } end
@@ -164,6 +166,11 @@ local function row(k)
     LogCheck.Draw(); recount()
   end, "Never suggest dropping this one")
   r.keep:SetPoint("RIGHT", r.btn, "LEFT", -4, 0)
+  -- a quest you said you won't do: changed your mind
+  r.back = Style.Button(r, "Bring back", 74, 18, function(self)
+    local d = self:GetParent().data; if not d then return end
+    ns.Engine.Unnope(d.id); LogCheck.Draw(); recount()
+  end, "Put this quest back on your route - you had said you won't do it")
   rows[k] = r
   return r
 end
@@ -177,7 +184,7 @@ local function build()
   table.insert(UISpecialFrames, "ForeverRouteLogCheck")
   f.title = Style.Text(f, 15, C.gold, "OUTLINE"); f.title:SetPoint("TOPLEFT", PAD, -12); f.title:SetText("Quest log check")
   local close = Style.Button(f, "x", 18, 18, function() f:Hide() end, "Close"); close:SetPoint("TOPRIGHT", -8, -8)
-  f.sum = Style.Text(f, 11, C.sub); f.sum:SetPoint("TOPLEFT", PAD, -34); f.sum:SetWidth(W - 2 * PAD - 110)
+  f.sum = Style.Text(f, 11, C.sub); f.sum:SetPoint("TOPLEFT", PAD, -34); f.sum:SetWidth(W - 2 * PAD - 120)
   f.all = Style.Button(f, "Drop all", 90, 20, function()
     local drop = {}; for _, x in ipairs(LogCheck.Classify()) do if x.verdict == "drop" then drop[#drop + 1] = { id = x.e.id, title = x.e.title, why = x.why } end end
     if #drop == 0 then return end
@@ -185,6 +192,20 @@ local function build()
     local dlg = StaticPopup_Show("FOREVERROUTE_DROPALL", #drop, names); if dlg then dlg.data = drop end
   end, "Drop every quest marked here (asks first, listing them)")
   f.all:SetPoint("TOPRIGHT", -PAD, -34)
+  -- the list scrolls (a full log plus the won't-do list ran off the screen): at most MAXH tall, mouse wheel, a thumb
+  f.scroll = CreateFrame("ScrollFrame", nil, f); f.scroll:EnableMouseWheel(true)
+  f.content = CreateFrame("Frame", nil, f.scroll); f.content:SetSize(W, 10); f.scroll:SetScrollChild(f.content)
+  f.track = f:CreateTexture(nil, "ARTWORK"); f.track:SetTexture(Style.WHITE); f.track:SetVertexColor(1, 1, 1, 0.05); f.track:SetWidth(4)
+  f.thumb = f:CreateTexture(nil, "OVERLAY"); f.thumb:SetTexture(Style.WHITE); f.thumb:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 0.6); f.thumb:SetWidth(4)
+  local function setScroll(v)
+    local max = math.max(0, f.content:GetHeight() - f.scroll:GetHeight())
+    v = math.max(0, math.min(max, v)); f.scroll:SetVerticalScroll(v)
+    local th = f.track:GetHeight() or 0
+    f.thumb:SetShown(max > 0); f.track:SetShown(max > 0)
+    if max > 0 and th > 0 then local h = math.max(20, th * f.scroll:GetHeight() / f.content:GetHeight()); f.thumb:SetHeight(h); f.thumb:ClearAllPoints(); f.thumb:SetPoint("TOPRIGHT", f.track, "TOPRIGHT", 0, -(th - h) * v / max) end
+  end
+  f.setScroll = setScroll
+  f.scroll:SetScript("OnMouseWheel", function(self, d) setScroll(self:GetVerticalScroll() - d * 60) end)
   f:Hide()
 end
 
@@ -195,9 +216,8 @@ function LogCheck.Draw()
   f.sum:SetText(string.format("%d quests in your log (max %d).  %s", #list, ns.State.MaxLog() or 40,
     drops > 0 and string.format("|cffff8c4d%d worth dropping|r - they're not on your route, or will be gray before you get to them.", drops) or "|cff5cdc7aEverything here is on your route.|r"))
   f.all:SetShown(drops > 0); f.all.label:SetText(string.format("Drop all %d", drops))
-  local y = 34 + math.max(f.sum:GetStringHeight(), 22) + 10
-  for k, r in ipairs(rows) do if k > #list then r:Hide() end end
-  local lastZone
+  local top = 34 + math.max(f.sum:GetStringHeight(), 22) + 10
+  local y = 0 -- inside the scrolling list
   for k, x in ipairs(list) do
     local r = row(k)
     r.data, r.reason = x.e, x.why
@@ -206,11 +226,43 @@ function LogCheck.Draw()
     local qc = Style.QuestColor(x.e.level)
     r.title:SetText(string.format("%s[%s] %s|r  |cff6c7486%s|r", Style.Hex(qc), x.e.level or "?", x.e.title, x.e.zone or ""))
     r.why:SetText(Style.Hex(c) .. x.why .. "|r")
-    r.btn:SetShown(x.verdict == "drop"); r.keep:SetShown(x.verdict == "drop")
-    r:ClearAllPoints(); r:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -y); r:Show()
-    y = y + ROW + 2
+    local noped = ns.char.nope and ns.char.nope[x.e.id]
+    r.btn:SetShown(x.verdict == "drop"); r.keep:SetShown(x.verdict == "drop" and not noped)
+    r.back:SetShown(noped and true or false); r.back:ClearAllPoints(); r.back:SetPoint("RIGHT", r.btn, "LEFT", -4, 0)
+    local h = math.max(ROW, r.title:GetStringHeight() + r.why:GetStringHeight() + 9); r:SetHeight(h)
+    r:ClearAllPoints(); r:SetPoint("TOPLEFT", f.content, "TOPLEFT", PAD, -y); r:Show()
+    y = y + h + 2
   end
-  f:SetHeight(y + 8)
+  -- the quests you said you won't do that aren't in your log (dropped before you took them): Bring back for each
+  local inLog = {}; for _, x in ipairs(list) do inLog[x.e.id] = true end
+  local extra = {}; for _, n in ipairs(ns.Engine.Noped()) do if not inLog[n.q] then extra[#extra + 1] = n end end
+  f.nopeHdr = f.nopeHdr or Style.Text(f.content, 12, C.gold, "OUTLINE")
+  f.nopeHdr:SetShown(#extra > 0)
+  if #extra > 0 then
+    f.nopeHdr:ClearAllPoints(); f.nopeHdr:SetPoint("TOPLEFT", f.content, "TOPLEFT", PAD, -y - 6); f.nopeHdr:SetText("You said you won't do these (" .. #extra .. ")")
+    y = y + 26
+  end
+  for i, n in ipairs(extra) do
+    local r = row(#list + i)
+    r.data, r.reason = { id = n.q, title = n.name }, nil
+    r.edge:SetVertexColor(0.55, 0.58, 0.66, 0.9)
+    r.title:SetText(n.name)
+    r.why:SetText("|cff8c94a8" .. (n.ready and "Finished when you dropped it: its hand-in is off your route" or "Off your route and future plans") .. "|r")
+    r.btn:Hide(); r.keep:Hide()
+    r.back:Show(); r.back:ClearAllPoints(); r.back:SetPoint("RIGHT", r, "RIGHT", -4, 0)
+    local h = math.max(ROW, r.title:GetStringHeight() + r.why:GetStringHeight() + 9); r:SetHeight(h)
+    r:ClearAllPoints(); r:SetPoint("TOPLEFT", f.content, "TOPLEFT", PAD, -y); r:Show()
+    y = y + h + 2
+  end
+  for k, r in ipairs(rows) do if k > #list + #extra then r:Hide() end end
+  -- the window: the header, then the list up to MAXH (scrolling beyond)
+  local MAXH = math.min(560, (UIParent:GetHeight() or 800) - top - 140)
+  local view = math.min(y, MAXH)
+  f.content:SetHeight(math.max(y, 1))
+  f.scroll:ClearAllPoints(); f.scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -top); f.scroll:SetPoint("TOPRIGHT", f, "TOPRIGHT", -8, -top); f.scroll:SetHeight(view)
+  f.track:ClearAllPoints(); f.track:SetPoint("TOPRIGHT", f, "TOPRIGHT", -6, -top); f.track:SetHeight(view)
+  f:SetHeight(top + view + 10)
+  f.setScroll(f.scroll:GetVerticalScroll())
 end
 
 function LogCheck.Toggle()

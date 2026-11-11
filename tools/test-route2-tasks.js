@@ -42,6 +42,10 @@ check('Jarl Needs Eyes: 40 eyes, as the text says', count(H, 1206, /Darkmist Eye
 check('Super Reaper 6000: one set of blueprints (the 6000 is part of the name)', count(W, 1093, /Blueprints/) === 1, W[1093]);
 check('Chapter I: one of each page', W[339] && W[339].objs.length && W[339].objs.every((o) => / 1 /.test(o.label)), W[339]);
 
+// Wetlands at 27: War Banners from the classic Dragonmaw camp (normal, 26-29), not the 300 elite Dragonmaw Forever added
+// further east (29-30), which drop them too: the player was sent among the elites
+const WB = tasksFor([11], 27);
+check('War Banners: the normal Dragonmaw camp, not the elites', obj(WB, 464, /War Banner/) && obj(WB, 464, /War Banner/).mobLevel <= 28, WB[464]);
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(fails ? fails + ' failed' : 'all passed');
 process.exit(fails ? 1 : 0);

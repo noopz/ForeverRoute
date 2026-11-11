@@ -10,6 +10,7 @@ local f
 local ROW, VISIBLE = 18, 24
 local rows = {}
 local entries = {} -- { header = text } or { index = i }
+local scrollToCurrentSoon = function() end -- set once scrollToCurrent exists (below)
 local builtFor, builtN   -- the step list (and its length) the entries were made from
 
 local function rebuild()
@@ -17,14 +18,35 @@ local function rebuild()
   local data = ForeverRouteData
   builtFor, builtN = data and data.steps, data and data.steps and #data.steps
   if not data then return end
+  -- the list follows you, not the plan's history: done steps hidden (unless "Show done" - ns.db.hideDone == false), and
+  -- the list starts where you are on the plan (steps before it are done or waiting on a level / a quest, and the card
+  -- brings each up when it can be done). When the card is on a step out of plan order (a hand-in at the NPC you're at,
+  -- loot counting for a later quest), that step comes first, as "Now", then "Next on your plan".
+  local hide = ns.db.hideDone ~= false
+  local cur, planned = ns.Engine.Shown(), ns.Engine.planned or ns.Engine.current
   local lastSec
-  for i, s in ipairs(data.steps) do
-    if s.sec ~= lastSec then
-      lastSec = s.sec
-      local sec = data.sections and data.sections[s.sec]
+  local function add(i)
+    local st = data.steps[i]
+    if st.sec ~= lastSec then
+      lastSec = st.sec
+      local sec = data.sections and data.sections[st.sec]
       entries[#entries + 1] = { header = sec and (sec.title .. (sec.zone and ("  |cff8a93a6" .. sec.zone .. "|r") or "")) or "" }
     end
     entries[#entries + 1] = { index = i }
+  end
+  local from = 1
+  if hide and cur and planned then
+    if cur ~= planned then
+      entries[#entries + 1] = { header = "|cff5cdc7aNow|r  |cff8a93a6out of plan order: " .. (ns.Engine.focusWhy == "progress" and "your kills / loot count for it" or ns.Engine.focusWhy == "ready" and "ready to hand in, right here" or "you're at it") .. "|r" }
+      entries[#entries + 1] = { index = cur }
+      entries[#entries + 1] = { header = "|cffb4bccaNext on your plan|r" }
+      lastSec = nil
+    end
+    from = planned
+  end
+  for i = from, #data.steps do
+    local pinned = hide and i == cur and cur ~= planned -- already shown as "Now"
+    if not pinned and not (hide and i ~= cur and ns.Engine.IsDone(i)) then add(i) end
   end
 end
 
@@ -52,6 +74,11 @@ local function build()
   f.dung:SetPoint("RIGHT", f.logc, "LEFT", -4, 0)
   f.change = Style.Button(f, "Change path", 88, 18, function() ns.Fire("FR_TOGGLE_PATHS") end, "See every planned path side by side")
   f.change:SetPoint("RIGHT", f.dung, "LEFT", -4, 0)
+  f.hide = Style.Button(f, ns.db.hideDone ~= false and "Show done" or "Hide done", 70, 18, function(self)
+    ns.db.hideDone = (ns.db.hideDone == false); self.label:SetText(ns.db.hideDone ~= false and "Show done" or "Hide done")
+    rebuild(); scrollToCurrentSoon(); List.Draw()
+  end, "Done steps hidden, the list starting where you are - or the whole plan with what you've done")
+  f.hide:SetPoint("RIGHT", f.change, "LEFT", -4, 0)
   f.pathChips = CreateFrame("Frame", nil, f.paths); f.pathChips:SetPoint("TOPLEFT", 10, -26); f.pathChips:SetSize(380, 18)
   f.pathMeta = Style.Text(f.paths, 10, C.sub); f.pathMeta:SetWordWrap(false)
   for k = 1, VISIBLE do
@@ -87,7 +114,8 @@ function List.Draw()
   local data = ForeverRouteData
   -- stops get added while the list is open (finished quests' hand-ins, side trips on the way, flight paths): those
   -- only redraw, so a stale list would put every header after the new stop one row off and lose the last step
-  if (data and data.steps) ~= builtFor or (data and data.steps and #data.steps) ~= builtN then
+  -- (with done steps hidden, the list changes as you play: rebuilt each time)
+  if ns.db.hideDone ~= false or (data and data.steps) ~= builtFor or (data and data.steps and #data.steps) ~= builtN then
     rebuild(); f.offset = math.max(0, math.min(#entries - VISIBLE, f.offset))
   end
   f.title:SetText("Route")
@@ -104,7 +132,7 @@ function List.Draw()
     f.pathFast:SetShown((data.best or m.best) and true or false)
     local legs = {}
     for z in (m.legs or data.title or ""):gmatch("[^>·]+") do z = z:gsub("^%s+", ""):gsub("%s+$", ""); if z ~= "" and legs[#legs] ~= z then legs[#legs + 1] = z end end
-    local hc = Style.Chips(f.pathChips, legs, 396)
+    local hc = Style.Chips(f.pathChips, legs, 396, 5)
     f.pathChips:SetHeight(hc)
     f.pathMeta:ClearAllPoints(); f.pathMeta:SetPoint("TOPLEFT", f.pathChips, "BOTTOMLEFT", 0, -6); f.pathMeta:SetPoint("RIGHT", f.paths, "RIGHT", -10, 0)
     -- how fresh the plan is (the companion app replans after every save)
@@ -115,6 +143,10 @@ function List.Draw()
       local agoText = ago < 120 and "just now" or ago < 7200 and (math.floor(ago / 60) .. " min ago") or (math.floor(ago / 3600) .. " h ago")
       fresh = "  ·  planned " .. agoText .. (plan.fromSave and plan.fromSave > 0 and date and (" from your " .. date("%H:%M", plan.fromSave) .. " save") or "")
     end
+    -- a built-in plan: which build of it (CLAUDE.md, Versioning) - "plans 2026-11-11 · QuestieDB 1.0.14 · planner b2aef9e"
+    local sk = ns.planKey and ns.planKey.starter
+    local stamp = sk and type(ForeverRouteStarterStamp) == "table" and ForeverRouteStarterStamp[sk]
+    if sk then fresh = "  ·  built-in plan" .. (stamp and (" (" .. stamp .. ")") or "") end
     f.pathMeta:SetText(string.format("Level %s to %s%s  ·  %d of %d done%s", m.startLevel or "?", m.endLevel or "?", m.hours and ("  ·  ~" .. m.hours .. " h") or "", done, total, fresh))
     f.pathMeta:SetWordWrap(true); f.pathMeta:SetWidth(396)
     f.paths:SetHeight(26 + hc + 10 + f.pathMeta:GetStringHeight() + 8)
@@ -167,11 +199,13 @@ function List.Entries() return entries end   -- for tests
 
 -- scroll so the current step sits in view
 local function scrollToCurrent()
+  if not f then return end
   local cur = ns.Engine.Shown()
   f.offset = 0
   for k, e in ipairs(entries) do if e.index == cur then f.offset = math.max(0, math.min(#entries - VISIBLE, k - 4)); break end end
 end
 
+scrollToCurrentSoon = function() scrollToCurrent() end
 function List.Toggle()
   if f:IsShown() then f:Hide(); return end
   rebuild(); f:Show()

@@ -96,7 +96,7 @@ function Paths.Draw()
     c.cur:ClearAllPoints(); c.cur:SetPoint("LEFT", isBest and c.fast or c.name, "RIGHT", isBest and 5 or 8, 0); c.cur:SetShown(isCur)
     -- hours to the same level for every path, so they compare fairly
     c.hours:SetText(m.hoursTo and string.format("~%s h to %s", m.hoursTo, m.target or 30) or (m.hours and ("~" .. m.hours .. " h")) or "")
-    local hChips = Style.Chips(c.chips, legsOf(r), W - 2 * PAD - 28)
+    local hChips = Style.Chips(c.chips, legsOf(r), W - 2 * PAD - 28, 5)
     c.chips:SetHeight(hChips)
     local picks = #(r.choices or {})
     local steps = #(r.steps or {})

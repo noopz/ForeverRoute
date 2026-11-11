@@ -945,9 +945,11 @@ test("back from a side trip: a path renamed by a replan is found by its zones, n
   if not ok then error(err, 0) end
 end)
 
-test("live reordering: follows the step you're at, holds it, then goes back to the plan", function()
+test("live reordering: a kill step takes over when your kills count for it (not for walking through it), holds, then back to the plan", function()
   local HBD = LibStub("HereBeDragons-2.0")
-  withState({ [602] = { on = true, objectives = { { text = "Murloc slain: 2/7", finished = false, have = 2, need = 7 } } } }, function()
+  local have = 2
+  withState({}, function()
+    ns.State.Quest = function(id) if id == 602 then return { on = true, objectives = { { text = "Murloc slain: " .. have .. "/7", finished = false, have = have, need = 7 } } } end return { on = false, objectives = {} } end
     ForeverRouteData = { id = "lr", title = "lr", sections = { { title = "x" } }, steps = {
       { id = 1, k = "accept", q = 601, name = "Far Away", m = 1436, x = 0.30, y = 0.20, r = 6, sec = 1 },
       { id = 2, k = "obj", q = 602, text = "Kill 7 Murloc", match = "Murloc", m = 1436, x = 0.30, y = 0.75, r = 90, sec = 1 },
@@ -960,7 +962,9 @@ test("live reordering: follows the step you're at, holds it, then goes back to t
     local realConv = HBD.GetWorldCoordinatesFromZone
     HBD.GetWorldCoordinatesFromZone = function(_, mx, my, m) return mx * 3500, my * 3500, 0 end
     local x, y, inst = HBD:GetWorldCoordinatesFromZone(0.30, 0.75, 1436)
-    ns.Engine.UpdateFocus(x + 5, y, inst)        -- standing among the murlocs
+    ns.Engine.UpdateFocus(x + 5, y, inst)        -- standing among the murlocs: walking through is not doing it
+    assertEquals(1, ns.Engine.current)
+    ns.Fire("FR_STATE"); have = 3; ns.Fire("FR_STATE") -- a murloc killed: now that's what you're doing
     assertEquals(2, ns.Engine.current); assertEquals(1, ns.Engine.planned)
     ns.Engine.UpdateFocus(x + 60, y, inst)       -- moving around the area: holds
     assertEquals(2, ns.Engine.current)
@@ -1022,6 +1026,52 @@ test("live reordering: a finished quest whose hand-in is right here is handed in
   if not ok then error(err, 0) end
 end)
 
+test("live reordering: farming the planned loot step, a later step whose circle you wander into does not take over", function()
+  -- the player's Wetlands report: on the Pristine Crimson Scales (crocs roam), the card jumped to the Dragonmaw War
+  -- Banners, whose circle is 100 yd off and overlaps
+  local HBD = LibStub("HereBeDragons-2.0")
+  local realConv, realTime = HBD.GetWorldCoordinatesFromZone, GetTime
+  local now, scales = 1000, 2
+  local ok, err = pcall(withState, {}, function()
+    ForeverRouteData = { id = "ov", title = "ov", sections = { { title = "x" } }, steps = {
+      { id = 1, k = "obj", q = 98072, text = "Collect 8 Pristine Crimson Scale", match = "Pristine Crimson Scale", loot = true, m = 1437, x = 0.649, y = 0.464, r = 220, sec = 1 },
+      { id = 2, k = "obj", q = 98245, text = "Collect 10 Razormaw Incisor", match = "Razormaw Incisor", loot = true, m = 1437, x = 0.686, y = 0.323, r = 163, sec = 1 },
+      { id = 3, k = "obj", q = 464, text = "Collect 8 Dragonmaw War Banner", match = "Dragonmaw War Banner", loot = true, m = 1437, x = 0.621, y = 0.453, r = 220, sec = 1 },
+      { id = 4, k = "obj", q = 465, text = "Collect 5 Far Thing", match = "Far Thing", loot = true, m = 1437, x = 0.20, y = 0.464, r = 220, sec = 1 },
+    } }
+    ns.State.OnQuest = function(id) return id == 98072 or id == 98245 or id == 464 or id == 465 end
+    ns.State.Quest = function(id)
+      if id == 98072 then return { on = true, objectives = { { text = "Pristine Crimson Scale: " .. scales .. "/8", finished = false, have = scales, need = 8 } } } end
+      if id == 98245 then return { on = true, objectives = { { text = "Razormaw Incisor: 0/10", finished = false, have = 0, need = 10 } } } end
+      if id == 464 then return { on = true, objectives = { { text = "Dragonmaw War Banner: 0/8", finished = false, have = 0, need = 8 } } } end
+      if id == 465 then return { on = true, objectives = { { text = "Far Thing: 0/5", finished = false, have = 0, need = 5 } } } end
+      return { on = false, objectives = {} }
+    end
+    GetTime = function() return now end
+    HBD.GetWorldCoordinatesFromZone = function(_, mx, my, m) return mx * 3500, my * 3500, 0 end -- 1% = 35 yd
+    ns.Engine.focus = nil; ns.Engine.Refresh()
+    assertEquals(1, ns.Engine.current)
+    local x, y, inst = HBD:GetWorldCoordinatesFromZone(0.649, 0.464, 1437)
+    -- 240 yd west of the scales' marker: inside the banners' circle, still among the crocs
+    ns.Engine.UpdateFocus(x - 240, y, inst); ns.Engine.Refresh()
+    assertEquals(1, ns.Engine.current)
+    -- far out (beyond twice the scales' circle) but still looting scales: no jump either
+    ns.Fire("FR_STATE"); scales = 3; ns.Fire("FR_STATE")
+    local fx, fy = HBD:GetWorldCoordinatesFromZone(0.20, 0.464, 1437)
+    now = now + 20
+    ns.Engine.UpdateFocus(fx, fy, inst); ns.Engine.Refresh()
+    assertEquals(1, ns.Engine.current)
+    -- no loot for a while and standing at the far step: still the plan - standing in a loot step's circle is not
+    -- doing it (only its loot counting would take the card there)
+    now = now + 200
+    ns.Engine.UpdateFocus(fx, fy, inst); ns.Engine.Refresh()
+    assertEquals(1, ns.Engine.current)
+  end)
+  GetTime, HBD.GetWorldCoordinatesFromZone = realTime, realConv
+  ns.Engine.focus = nil
+  if not ok then error(err, 0) end
+end)
+
 test("live reordering: a step your kills count for stays shown while you farm far from its marker, until the kills stop", function()
   local HBD = LibStub("HereBeDragons-2.0")
   local realConv, realTime = HBD.GetWorldCoordinatesFromZone, GetTime
@@ -1074,7 +1124,9 @@ test("the step-done cue plays only for a step that got done, not when live reord
     assertEquals(1, ns.Engine.current)
     HBD.GetWorldCoordinatesFromZone = function(_, mx, my, m) return mx * 3500, my * 3500, 0 end
     local x, y, inst = HBD:GetWorldCoordinatesFromZone(0.30, 0.75, 1436)
-    ns.Engine.UpdateFocus(x + 5, y, inst)        -- focus moves the card to the murlocs: step 1 is untouched
+    ns.Fire("FR_STATE")                          -- the count as it was
+    ns.State.Quest = function(id) if id == 602 then return { on = true, objectives = { { text = "Murloc slain: 3/7", finished = false, have = 3, need = 7 } } } end return { on = false, objectives = {} } end
+    ns.Fire("FR_STATE")                          -- a murloc killed: the card moves to the murlocs, step 1 is untouched
     assertEquals(2, ns.Engine.current); assertEquals(0, doneCues)
     ns.Engine.focus = nil; ns.Engine.Refresh()   -- focus released: the murlocs are still to do
     assertEquals(1, ns.Engine.current); assertEquals(0, doneCues)
@@ -2676,6 +2728,18 @@ test("no plan of your own: the built-in plan for your race and class is followed
   }
   local ok, err = pcall(function()
     assertEquals("nightelf-druid", ns.StarterKey())
+    -- the game calls undead "Scourge"; the plans are undead_<class>
+    UnitRace = function() return "Undead", "Scourge" end
+    assertEquals("undead-druid", ns.StarterKey())
+    -- both factions have Skyborne: the Horde's are skybornehorde, told apart by the faction
+    local svF = UnitFactionGroup
+    UnitRace = function() return "Skyborne", "Skyborne" end
+    UnitFactionGroup = function() return "Alliance", "Alliance" end
+    assertEquals("skyborne-druid", ns.StarterKey())
+    UnitFactionGroup = function() return "Horde", "Horde" end
+    assertEquals("skybornehorde-druid", ns.StarterKey())
+    UnitFactionGroup = svF
+    UnitRace = function() return "Night Elf", "NightElf" end
     ForeverRouteByChar = { ["Someone-Else"] = function() ran = "someone else" end }
     assertTrue(ns.LoadMyPlan()); assertEquals("starter", ran); assertEquals("nightelf-druid", ns.planKey.starter)
     ForeverRouteByChar = nil; ForeverRouteRoutes = nil; ForeverRouteData = nil -- an addon-only install: no plan file at all
@@ -3248,4 +3312,590 @@ test("dungeons: three XP runs in a row - inside, only the run you're on is done;
     assertTrue(ns.Engine.IsDone(2)); assertEquals(3, ns.Engine.Shown())
   end)
   IsInInstance, GetInstanceInfo = sv.inst, sv.info
+end)
+
+test("zone chips: only the next few zones, then how many more", function()
+  local Style = ns.Style
+  local holder = CreateFrame("Frame", nil, UIParent); holder:SetSize(400, 20)
+  local zones = { "Wetlands", "Duskwood", "Dun Morogh", "Ashenvale", "Stranglethorn", "Wetlands", "Desolace", "Duskwood", "Arathi", "Tanaris" }
+  Style.Chips(holder, zones, 400, 5)
+  local shown = 0; for _, c in ipairs(holder.chips) do if c:IsShown() then shown = shown + 1 end end
+  assertEquals(5, shown)
+  assertTrue(holder.more:IsShown()); assertEquals("> +5 more zones", holder.more:GetText())
+  Style.Chips(holder, { "Wetlands", "Duskwood" }, 400, 5) -- fewer than the limit: all of them, no "more"
+  shown = 0; for _, c in ipairs(holder.chips) do if c:IsShown() then shown = shown + 1 end end
+  assertEquals(2, shown); assertTrue(not holder.more:IsShown())
+end)
+
+test("a quest you said you won't do comes back when you finish it anyway; one already finished when you dropped it stays dropped", function()
+  local done = false
+  local ok, err = pcall(withState, {}, function()
+    ForeverRouteData = { id = "np", title = "np", sections = { { title = "x" } }, steps = {
+      { id = 1, k = "accept", q = 98221, name = "From the Ashes", m = 1437, x = 0.1, y = 0.57, r = 6, sec = 1 },
+      { id = 2, k = "turnin", q = 98221, name = "From the Ashes", m = 1437, x = 0.1, y = 0.57, r = 6, sec = 1 },
+      { id = 3, k = "turnin", q = 500, name = "Gray Old Thing", m = 1437, x = 0.1, y = 0.57, r = 6, sec = 1 },
+    } }
+    ns.State.OnQuest = function(id) return id == 98221 or id == 500 end
+    ns.State.IsCompleted = function() return false end
+    ns.State.Quest = function(id)
+      if id == 98221 then return { on = true, complete = done, objectives = { { text = "Attack Plan: 0/1", finished = done, have = done and 1 or 0, need = 1 } } } end
+      if id == 500 then return { on = true, complete = true, objectives = {} } end
+      return { on = false, objectives = {} }
+    end
+    ns.char.nope = {}
+    ns.Engine.NopeNow({ 98221 }); ns.Engine.NopeNow({ 500 })
+    assertEquals("done", ns.Engine.Status(2)); assertEquals("done", ns.Engine.Status(3))
+    done = true; ns.Fire("FR_STATE")          -- finished it after all
+    assertNil(ns.char.nope[98221]); assertEquals("todo", ns.Engine.Status(2))
+    assertEquals("ready", ns.char.nope[500]); assertEquals("done", ns.Engine.Status(3)) -- dropped when already done: stays
+  end)
+  ns.char.nope = {}
+  if not ok then error(err, 0) end
+end)
+
+test("won't-do quests are listed and can be brought back; the route list can hide what's done", function()
+  local ok, err = pcall(withState, {}, function()
+    ForeverRouteData = { id = "hd", title = "hd", sections = { { title = "A" }, { title = "B" } }, steps = {
+      { id = 1, k = "accept", q = 801, name = "Done One", m = 1437, x = 0.1, y = 0.5, r = 6, sec = 1 },
+      { id = 2, k = "accept", q = 802, name = "Done Two", m = 1437, x = 0.1, y = 0.5, r = 6, sec = 1 },
+      { id = 3, k = "accept", q = 803, name = "Open One", m = 1437, x = 0.1, y = 0.5, r = 6, sec = 2 },
+      { id = 4, k = "accept", q = 804, name = "Dropped", m = 1437, x = 0.1, y = 0.5, r = 6, sec = 2 },
+    } }
+    ns.State.OnQuest = function(id) return id == 801 or id == 802 end
+    ns.State.IsCompleted = function() return false end
+    ns.char.nope = { [804] = true }
+    ns.Engine.Refresh()
+    local n = ns.Engine.Noped(); assertEquals(1, #n); assertEquals(804, n[1].q); assertEquals("Dropped", n[1].name)
+    assertEquals("done", ns.Engine.Status(4))
+    ns.Engine.Unnope(804)
+    assertNil(ns.char.nope[804]); assertEquals("todo", ns.Engine.Status(4))
+    -- the list: with done steps hidden, section A (all done) is gone
+    ns.db.hideDone = true
+    ns.Fire("FR_TOGGLE_LIST")
+    local shownTexts = {}
+    for _, r in ipairs({ ForeverRouteList:GetChildren() }) do if r.text and r:IsShown() and r.text:GetText() then shownTexts[#shownTexts + 1] = r.text:GetText() end end
+    local all = table.concat(shownTexts, "|")
+    assertTrue(all:find("Open One", 1, true) ~= nil, all); assertTrue(all:find("Done One", 1, true) == nil, all)
+    ns.Fire("FR_TOGGLE_LIST")
+  end)
+  ns.db.hideDone = nil; ns.char.nope = {}
+  if not ok then error(err, 0) end
+end)
+
+test("live reordering: at an NPC with a finished quest to hand in, that hand-in shows - however far down the plan, over a held one", function()
+  local HBD = LibStub("HereBeDragons-2.0")
+  local realConv = HBD.GetWorldCoordinatesFromZone
+  local ok, err = pcall(withState, {}, function()
+    local list = { { id = 1, k = "accept", q = 901, name = "Far Planned", m = 1437, x = 0.60, y = 0.30, r = 6, sec = 1 } }
+    list[2] = { id = 2, k = "turnin", q = 98072, name = "Crocs of the Sky", npc = "James Halloran", m = 1437, x = 0.0855, y = 0.5574, r = 6, sec = 1 }
+    for k = 3, 260 do list[k] = { id = k, k = "accept", q = 1000 + k, name = "Filler " .. k, m = 1437, x = 0.5, y = 0.5, r = 6, sec = 1 } end
+    list[261] = { id = 261, k = "turnin", q = 98221, name = "From the Ashes", npc = "Captain Stoutfist", m = 1437, x = 0.0986, y = 0.5749, r = 6, sec = 1 }
+    ForeverRouteData = { id = "st", title = "st", sections = { { title = "x" } }, steps = list }
+    ns.State.OnQuest = function(id) return id == 98072 or id == 98221 end
+    ns.State.IsCompleted = function() return false end
+    ns.State.Quest = function(id) if id == 98072 or id == 98221 then return { on = true, complete = true, objectives = {} } end return { on = false, objectives = {} } end
+    HBD.GetWorldCoordinatesFromZone = function(_, mx, my, m) return mx * 3500, my * 3500, 0 end
+    ns.Engine.focus = nil; ns.Engine.Refresh()
+    assertEquals(1, ns.Engine.current)
+    local hx, hy, inst = HBD:GetWorldCoordinatesFromZone(0.0855, 0.5574, 1437)
+    ns.Engine.UpdateFocus(hx + 60, hy, inst); ns.Engine.Refresh()   -- in town, near James Halloran: Crocs (held)
+    assertEquals(2, ns.Engine.current)
+    local sx, sy = HBD:GetWorldCoordinatesFromZone(0.0986, 0.5749, 1437)
+    ns.Engine.UpdateFocus(sx + 3, sy, inst); ns.Engine.Refresh()    -- now right at Captain Stoutfist
+    assertEquals(261, ns.Engine.current)
+  end)
+  HBD.GetWorldCoordinatesFromZone = realConv
+  ns.Engine.focus = nil
+  if not ok then error(err, 0) end
+end)
+
+test("a flight to a stop with nothing left to do there is done: no 'Fly to Wetlands, Fly to Stormwind' ping-pong", function()
+  local ok, err = pcall(withState, {}, function()
+    ForeverRouteData = { id = "pp", title = "pp", sections = { { title = "x" } }, steps = {
+      { id = 1, k = "turnin", q = 1274, name = "The Missing Diplomat", m = 1453, x = 0.8, y = 0.44, r = 6, sec = 1 },
+      { id = 2, k = "fly", to = 1437, m = 1453, x = 0.66, y = 0.62, sec = 1 },
+      { id = 3, k = "accept", q = 98190, name = "A Friend of the Family", m = 1437, x = 0.1, y = 0.57, r = 6, sec = 1 },
+      { id = 4, k = "fly", to = 1453, m = 1437, x = 0.09, y = 0.59, sec = 1 },
+      { id = 5, k = "turnin", q = 98190, name = "A Friend of the Family", m = 1453, x = 0.5, y = 0.5, r = 6, sec = 1 },
+    } }
+    ns.State.OnQuest = function(id) return id == 1274 or id == 98190 end
+    ns.State.IsCompleted = function() return false end
+    ns.State.Quest = function(id) if id == 1274 or id == 98190 then return { on = true, complete = true, objectives = {} } end return { on = false, objectives = {} } end
+    ns.Engine.Refresh()
+    assertEquals("done", ns.Engine.Status(2)) -- to the Wetlands for a pick-up you already have: nothing there
+    assertEquals("todo", ns.Engine.Status(5))
+  end)
+  if not ok then error(err, 0) end
+end)
+
+-- Stormwind: The Missing Diplomat part 2 is in your log (hand in to Jorgen in Old Town), part 3 comes from him and is
+-- handed in to Elling Trias in the Trade District - where you happen to stand
+local function diplomatRoute()
+  return { id = "dip", title = "dip", sections = { { title = "Stormwind" } }, steps = {
+    { id = 1, k = "turnin", q = 1241, name = "The Missing Diplomat", npc = "Jorgen", m = 1453, x = 0.763, y = 0.851, r = 6, sec = 1 },
+    { id = 2, k = "accept", q = 1242, name = "The Missing Diplomat", npc = "Jorgen", m = 1453, x = 0.763, y = 0.851, r = 6, sec = 1 },
+    { id = 3, k = "turnin", q = 1242, name = "The Missing Diplomat", npc = "Elling Trias", m = 1453, x = 0.660, y = 0.741, r = 6, sec = 1 },
+    { id = 4, k = "accept", q = 1243, name = "The Missing Diplomat", npc = "Elling Trias", m = 1453, x = 0.660, y = 0.741, r = 6, sec = 1 },
+  } }
+end
+local function pinsOf(i, where) local out = {}; for _, p in ipairs(ns.Pins._used) do if p.index == i and p.where == where then out[#out + 1] = p end end; return out end
+local function tipText(i, n) local t = {}; for _, l in ipairs(ns.Pins.Tip(i, n)) do t[#t + 1] = ns.Card.Plain(l[1]) end; return table.concat(t, " | ") end
+
+test("pins: a stop that isn't open yet is grey on the world map, never on the minimap, and says what comes first", function()
+  local svU = ForeverRouteUnlocks
+  ForeverRouteUnlocks = { [1241] = { 1242 }, [1242] = { 1243 } }
+  local ok, err = pcall(withWorld, diplomatRoute(), function(w)
+    w.quests[1241] = { on = true, complete = true, objectives = {} }
+    w:go(1453, 0.655, 0.735) -- in the Trade District, a few steps from Elling Trias
+    ns.Pins.Update(true)
+    assertEquals(1, w:shown())
+    assertEquals(1, #pinsOf(1, "mini"), "Jorgen (the card's step, near) is not on the minimap")
+    -- the hand-in to Elling Trias: the quest comes from Jorgen first
+    local why, opener = ns.Engine.NotYet(3)
+    assertEquals("pickup", why); assertEquals(2, opener)
+    assertEquals(0, #pinsOf(3, "mini"), "a hand-in for a quest you don't have yet sits on the minimap beside you")
+    local world = pinsOf(3, "world")
+    assertEquals(1, #world, "the world map lost the later stop")
+    assertTrue(world[1].notYet, "the later stop isn't marked as not open")
+    assertTrue(world[1]:GetWidth() < pinsOf(1, "world")[1]:GetWidth(), "the later stop is as big as the card's step")
+    local tip = tipText(3, world[1].n)
+    assertTrue(tip:find("Later on your plan", 1, true) ~= nil, tip)
+    assertTrue(tip:find("Not yet - first: Accept The Missing Diplomat from Jorgen", 1, true) ~= nil, tip)
+    assertTrue(tip:find("Shift-click", 1, true) == nil, "jumping to a stop that isn't open is offered: " .. tip)
+    -- the next part from Jorgen is the same stop as the hand-in to him: one pin there, not two
+    assertEquals("handin", (ns.Engine.NotYet(2)))
+    assertEquals(0, #pinsOf(2, "world"), "a second pin on Jorgen")
+    assertEquals("1", world[1].num:GetText(), "numbers count the pins drawn")
+    -- the card's own pin reads as before
+    local now = tipText(1, 1)
+    assertTrue(now:find("Turn in The Missing Diplomat", 1, true) ~= nil and now:find("Shift-click to jump here", 1, true) ~= nil and now:find("Not yet", 1, true) == nil, now)
+
+    -- handed in to Jorgen: his pick-up is the card's step, Elling Trias still waits for it
+    w:go(1453, 0.763, 0.851)
+    w:quest(1241, { on = false, done = true, objectives = {} })
+    assertEquals(2, w:shown())
+    ns.Pins.Update()
+    assertTrue(pinsOf(3, "world")[1].notYet, "still not open")
+    -- part 3 in your log: the hand-in is the card's step now, a full pin, on the minimap when near
+    w:quest(1242, { on = true, complete = true, objectives = {} })
+    assertEquals(3, w:shown())
+    w:go(1453, 0.700, 0.780)
+    ns.Pins.Update()
+    assertEquals(nil, (ns.Engine.NotYet(3)))
+    assertEquals(1, #pinsOf(3, "mini"), "the open hand-in is not on the minimap")
+    assertTrue(not pinsOf(3, "mini")[1].notYet)
+  end)
+  ForeverRouteUnlocks = svU
+  if not ok then error(err, 0) end
+end)
+
+test("pins: a pin opens when its quest is picked up; a hand-in with objectives left names them; an open stop keeps colour, number and jump", function()
+  local svU = ForeverRouteUnlocks
+  ForeverRouteUnlocks = nil -- the test quests' ids are real quests with prerequisites in the built-in plan
+  local ok, err = pcall(withWorld, worldRoute(), function(w)
+    w:go(1431, 0.70, 0.48) -- a short walk from Lars
+    ns.Pins.Update(true)
+    -- 1 pick up from Lars (the card), 2 the wolves (not in your log yet), 3 hand in to Lars (not yet)
+    assertEquals("pickup", (ns.Engine.NotYet(2)))
+    assertTrue(pinsOf(2, "world")[1].notYet)
+    w:quest(201, { on = true, objectives = { { text = "Wolf slain: 0/5", finished = false, have = 0, need = 5 } } })
+    assertEquals(2, w:shown())
+    ns.Pins.Update() -- no force: the pins must notice by themselves
+    assertTrue(not pinsOf(2, "world")[1].notYet, "the card's step is dimmed")
+    -- the hand-in at Lars, beside you: objectives left, so not on the minimap, and the tooltip names them
+    local why, first = ns.Engine.NotYet(3)
+    assertEquals("objectives", why); assertEquals(2, first)
+    assertEquals(0, #pinsOf(3, "mini"), "a later step sits on the minimap")
+    local tip = tipText(3, 2)
+    assertTrue(tip:find("Not yet - first: Kill 5 Wolf", 1, true) ~= nil, tip)
+    -- wolves done: the hand-in is the card's step
+    w:quest(201, { on = true, complete = true, objectives = { { text = "Wolf slain: 5/5", finished = true, have = 5, need = 5 } } })
+    assertEquals(3, w:shown())
+    assertEquals(nil, (ns.Engine.NotYet(3)))
+    -- the pick-up in Redridge is open (nothing before it): coloured, numbered, with the jump offered
+    ns.Pins.Update()
+    local p = pinsOf(5, "world")[1]
+    assertTrue(p and not p.notYet, "an open pick-up is dimmed")
+    assertEquals("1", p.num:GetText())
+    local t5 = tipText(5, p.n)
+    assertTrue(t5:find("Next on your plan (1)", 1, true) ~= nil and t5:find("Shift-click to jump here", 1, true) ~= nil, t5)
+  end)
+  ForeverRouteUnlocks = svU
+  if not ok then error(err, 0) end
+end)
+
+test("pins: a step waiting on a level says the level; the minimap has the card's step only, as a badge with its icon", function()
+  local route = { id = "lv", title = "lv", sections = { { title = "x" } }, steps = {
+    { id = 1, k = "goto", text = "Walk over", m = 1431, x = 0.70, y = 0.50, r = 6, sec = 1 },
+    { id = 2, k = "accept", q = 301, name = "Open", npc = "Ann", m = 1431, x = 0.72, y = 0.52, r = 6, sec = 1 },
+    { id = 3, k = "accept", q = 302, name = "Too High", npc = "Bob", minLevel = 30, m = 1431, x = 0.74, y = 0.50, r = 6, sec = 1 },
+  } }
+  local svU = ForeverRouteUnlocks
+  ForeverRouteUnlocks = nil
+  local ok, err = pcall(withWorld, route, function(w)
+    w:go(1431, 0.66, 0.50)
+    ns.Pins.Update(true)
+    local why, _, lvl = ns.Engine.NotYet(3)
+    assertEquals("level", why); assertEquals(30, lvl)
+    assertTrue(tipText(3, 3):find("Not yet - at level 30", 1, true) ~= nil, tipText(3, 3))
+    assertEquals(0, #pinsOf(3, "mini"))
+    -- the minimap: the card's step and nothing else, even an open next stop right beside you
+    local n = 0; for _, p in ipairs(ns.Pins._used) do if p.where == "mini" then n = n + 1 end end
+    assertEquals(1, n, "the minimap shows more than the card's step")
+    local cur = pinsOf(1, "mini")[1]
+    assertTrue(cur ~= nil, "the card's step (near) is not on the minimap")
+    assertTrue(cur.icon:IsShown() and (cur.num:GetText() or "") == "", "the minimap badge shows the step's icon")
+    assertTrue(cur:GetWidth() <= pinsOf(1, "world")[1]:GetWidth(), "the minimap pin grew")
+    assertTrue(tipText(1, cur.n):find("Walk over", 1, true) ~= nil, "the minimap pin lost its tooltip")
+    -- the world map: the open stop numbered and coloured, the one waiting on a level grey
+    local open, waits = pinsOf(2, "world")[1], pinsOf(3, "world")[1]
+    assertTrue(not open.notYet and open.num:GetText() == "1" and not open.icon:IsShown())
+    assertTrue(waits.notYet and waits.num:GetText() == "2")
+    w:ding(30)
+    ns.Pins.Update()
+    assertEquals(nil, (ns.Engine.NotYet(3)))
+    assertTrue(not pinsOf(3, "world")[1].notYet, "level reached: the pick-up is open")
+  end)
+  ForeverRouteUnlocks = svU
+  if not ok then error(err, 0) end
+end)
+
+test("ready nearby: a finished quest's hand-in close by gets a line on the card, and Do it now shows it", function()
+  local HBD = LibStub("HereBeDragons-2.0")
+  local realConv = HBD.GetWorldCoordinatesFromZone
+  local ok, err = pcall(withState, {}, function()
+    -- Duskwood: the card on Madame Eva (1.3k yd off), The Hermit ready with Abercrombie 20 yd away
+    local list = { { id = 1, k = "turnin", q = 148, name = "Supplies from Darkshire", npc = "Madame Eva", m = 1431, x = 0.76, y = 0.45, r = 6, sec = 1 } }
+    for k = 2, 9 do list[k] = { id = k, k = "accept", q = 3000 + k, name = "Filler " .. k, m = 1431, x = 0.7, y = 0.5, r = 6, sec = 1 } end
+    list[10] = { id = 10, k = "turnin", q = 165, name = "The Hermit", npc = "Abercrombie", m = 1431, x = 0.2811, y = 0.3146, r = 6, sec = 1 }
+    ForeverRouteData = { id = "rn", title = "rn", sections = { { title = "x" } }, steps = list }
+    ns.State.OnQuest = function(id) return id == 148 or id == 165 end
+    ns.State.IsCompleted = function() return false end
+    ns.State.Quest = function(id) if id == 148 or id == 165 then return { on = true, complete = true, objectives = {} } end return { on = false, objectives = {} } end
+    HBD.GetWorldCoordinatesFromZone = function(_, mx, my, m) return mx * 2700, my * 1800, 0 end
+    ns.Engine.focus = nil; ns.Engine.Refresh()
+    assertEquals(1, ns.Engine.current)
+    local x, y, inst = HBD:GetWorldCoordinatesFromZone(0.274, 0.312, 1431)
+    local r = ns.Engine.ReadyNearby(x, y, inst)
+    assertNotNil(r); assertEquals(10, r.i); assertTrue(r.d < 30, tostring(r.d))
+    ns.Card.readyNear = r; ns.Card.Layout()
+    assertTrue(ForeverRouteCard.ready:IsShown()); assertTrue(ForeverRouteCard.ready.text:GetText():find("The Hermit", 1, true) ~= nil, ForeverRouteCard.ready.text:GetText())
+    ns.Engine.FocusOn(r.i)
+    assertEquals(10, ns.Engine.current)
+    assertNil(ns.Engine.ReadyNearby(x + 2000, y, inst)) -- far from it: no line
+  end)
+  HBD.GetWorldCoordinatesFromZone = realConv
+  ns.Engine.focus = nil; ns.Card.readyNear = nil
+  if not ok then error(err, 0) end
+end)
+
+-- ---------------------------------------------------------------------------------------------------------------
+-- Minimap pins stay where they belong (docs/research/navigation-paths.md, "The pin that walked with you")
+-- A world of 1000 x 1000 yd per map; the world map closed on another zone (it only follows you when it is opened).
+local function withPinWorld(fn)
+  local HBD, HBDP = LibStub("HereBeDragons-2.0"), LibStub("HereBeDragons-Pins-2.0")
+  local sv = { p = HBD.GetPlayerWorldPosition, c = HBD.GetWorldCoordinatesFromZone, pins = ns.db.pins, pos = ns.State.Position, wm = WorldMapFrame.GetMapID }
+  local W = { x = 0, y = 500 }
+  HBD.GetPlayerWorldPosition = function() return W.x, W.y, 0 end
+  HBD.GetWorldCoordinatesFromZone = function(_, x, y) return x * 1000, y * 1000, 0 end
+  ns.State.Position = function() return 1453, W.x / 1000, W.y / 1000 end
+  WorldMapFrame.GetMapID = function() return nil end
+  ns.db.pins = true
+  -- one pass of HereBeDragons' own minimap placement, as a frame would run it (a full sweep)
+  function W.place() HBDP.updateFrame:GetScript("OnUpdate")(HBDP.updateFrame, 1.5) end
+  -- every frame of ours that is on the minimap and visible must be one HereBeDragons is placing
+  function W.strays()
+    local n = 0
+    for _, f in ipairs(ns.Pins.Frames()) do
+      if f:IsShown() and f:GetParent() == Minimap and not HBDP.minimapPins[f] then n = n + 1 end
+    end
+    return n
+  end
+  local ok, err = pcall(withState, {}, function()
+    ForeverRouteData = { id = "pw", title = "pw", sections = { { title = "x" } }, steps = {
+      { id = 1, k = "goto", text = "Over there", m = 1453, x = 0.3, y = 0.5, r = 8, sec = 1 },
+      { id = 2, k = "goto", text = "And on", m = 1453, x = 0.4, y = 0.5, r = 8, sec = 1 },
+      { id = 3, k = "goto", text = "Further", m = 1453, x = 0.45, y = 0.55, r = 8, sec = 1 },
+    } }
+    ns.Engine.view = nil; ns.Engine.current = 1
+    fn(W, HBDP)
+  end)
+  HBD.GetPlayerWorldPosition, HBD.GetWorldCoordinatesFromZone, ns.db.pins, ns.State.Position, WorldMapFrame.GetMapID = sv.p, sv.c, sv.pins, sv.pos, sv.wm
+  ns.Engine.Refresh(); ns.Pins.Update(true)
+  if not ok then error(err, 0) end
+end
+
+test("minimap pins: no pin is left behind on the minimap when the pins are rebuilt (it walked with you)", function()
+  withPinWorld(function(W)
+    ns.Pins.Update(true); W.place()
+    assertEquals(0, W.strays(), "after the first build")
+    -- walk up to the step: its minimap pin appears, then goes when you stand on it; walk off and it is back. Each
+    -- change rebuilds the pins from the pool - a frame that was on the minimap must not come back as a world-map
+    -- pin still sitting there
+    for _, x in ipairs({ 200, 280, 298, 300, 290, 250, 100, 250, 299, 320, 600, 300 }) do
+      W.x = x; ns.Pins.Update(); W.place()
+      assertEquals(0, W.strays(), "a pin HereBeDragons is not placing is showing on the minimap (you at " .. x .. ")")
+    end
+    ns.Engine.current = 2; ns.Pins.Update(); W.place()
+    assertEquals(0, W.strays(), "after the step changed")
+  end)
+end)
+
+test("minimap pins: the pin sits at the step, not at a fixed offset from you", function()
+  withPinWorld(function(W)
+    local function badge() for _, p in ipairs(ns.Pins._used) do if p.where == "mini" then return p end end end
+    local function offset(p) local _, rel, _, x, y = p:GetPoint(1); return rel, x, y end
+    W.x, W.y = 200, 500 -- the step is 100 yd to the east (HereBeDragons' x grows to the west)
+    ns.Pins.Update(true); W.place()
+    local p = badge()
+    assertTrue(p ~= nil and p:IsShown(), "no minimap pin for a step 100 yd away")
+    local radius, half = C_Minimap.GetViewRadius(), Minimap:GetWidth() / 2
+    local rel, x, y = offset(p)
+    assertTrue(rel == Minimap, "the pin is not anchored to the minimap")
+    assertTrue(math.abs(x - (-100 / radius * half)) < 0.5 and math.abs(y) < 0.5, "100 yd away: at " .. tostring(x) .. ", " .. tostring(y))
+    -- walk 50 yd toward it and 30 yd south: the pin moves by exactly that much on the minimap (now up a little)
+    W.x, W.y = 250, 470
+    W.place()
+    rel, x, y = offset(badge())
+    assertTrue(math.abs(x - (-50 / radius * half)) < 0.5, "after 50 yd the pin is at x " .. tostring(x))
+    assertTrue(math.abs(y - (30 / radius * half)) < 0.5, "after 30 yd south the pin is at y " .. tostring(y))
+    -- and it does not depend on which map the game says you are on (a keep's own map, a district)
+    local HBD = LibStub("HereBeDragons-2.0")
+    local zone = HBD.GetPlayerZone
+    HBD.GetPlayerZone = function() return 99999, 0 end
+    W.x = 260; W.place()
+    HBD.GetPlayerZone = zone
+    rel, x = offset(badge())
+    assertTrue(badge():IsShown() and math.abs(x - (-40 / radius * half)) < 0.5, "on another map id the pin stopped following the step")
+  end)
+end)
+
+-- ---------------------------------------------------------------------------------------------------------------
+-- Navigation: the line from where you stand (Nav.lua, docs/research/navigation-paths.md)
+-- map % -> world yards on a map that has a walk map, by the walk map's own bounds
+local function navWorld(m, x, y) local D = ns.Nav.Data(m); return D.left + x / 100 * (D.right - D.left), D.top + y / 100 * (D.bottom - D.top) end
+-- every yard of a line must lie on ground the grid knows (its square, or one beside it: a line between the middles
+-- of two squares may graze a corner)
+local function offGround(m, P)
+  local N = ns.Nav.Grid(m)
+  local bad, total = 0, 0
+  local function ground(x, y)
+    local sq = ns.Nav._squareAt(N, x, y); if not sq then return false end
+    return ns.Nav.Ground(N, sq)
+  end
+  for k = 1, #P.pts - 1 do
+    local a, b = P.pts[k], P.pts[k + 1]
+    local len = math.sqrt((b[1] - a[1]) ^ 2 + (b[2] - a[2]) ^ 2)
+    for t = 0, math.floor(len) do
+      local x, y = a[1] + (b[1] - a[1]) * t / math.max(len, 1), a[2] + (b[2] - a[2]) * t / math.max(len, 1)
+      total = total + 1
+      if not ground(x, y) then
+        local near = false
+        for dx = -1, 1 do for dy = -1, 1 do if ground(x + dx * N.cell, y + dy * N.cell) then near = true end end end
+        if not near then bad = bad + 1 end
+      end
+    end
+  end
+  return bad, total
+end
+
+test("nav: the walk maps unpack to the size they say, and a square's byte only points at squares with ground", function()
+  for _, m in ipairs({ 1453, 1429 }) do
+    local N = ns.Nav.Grid(m)
+    assertEquals(N.W * N.H, #N.base, "map " .. m)
+    assertEquals(N.W * N.H, #N.swim, "map " .. m .. " water")
+    local DR, DC = { -1, -1, -1, 0, 0, 1, 1, 1 }, { -1, 0, 1, -1, 1, -1, 0, 1 }
+    local bad = 0
+    for sq = 0, N.NC - 1, 7 do
+      local v = N.base:byte(sq + 1)
+      for d = 1, 8 do
+        if v % 2 == 1 then
+          local r, c = math.floor(sq / N.W) + DR[d], sq % N.W + DC[d]
+          if r < 0 or c < 0 or r >= N.H or c >= N.W or not ns.Nav.Ground(N, r * N.W + c) then bad = bad + 1 end
+        end
+        v = math.floor(v / 2)
+      end
+    end
+    assertEquals(0, bad, "map " .. m .. ": steps from squares without ground")
+  end
+end)
+
+test("nav: Stormwind, Trade District to Bolvar in the Keep - along the streets, not over the walls", function()
+  local sx, sy = navWorld(1453, 66.1, 70.8)
+  local tx, ty = navWorld(1453, 80.0, 38.0)
+  local P, S = ns.Nav.Find(1453, sx, sy, nil, tx, ty, nil)
+  assertTrue(P ~= nil, "no way found")
+  local straight = math.sqrt((sx - tx) ^ 2 + (sy - ty) ^ 2)
+  -- the walk map's own shortest way is 525 yd (450 as the crow flies): the line must go round like it does
+  assertTrue(P.len > straight * 1.1, "the line is " .. math.floor(P.len) .. " yd, the straight line " .. math.floor(straight) .. ": it cut through")
+  assertTrue(P.len < 525 * 1.15, "the line is " .. math.floor(P.len) .. " yd, the walk map's own way 525")
+  local bad, total = offGround(1453, P)
+  assertEquals(0, bad, "yards of the line off the ground (of " .. total .. ")")
+  -- it starts where you stand and ends at the target
+  assertTrue(math.abs(P.pts[1][1] - sx) < 0.01 and math.abs(P.pts[#P.pts][1] - tx) < 0.01)
+  -- the straight line from the Trade District to the Keep crosses ground the grid does not have (walls, roofs)
+  local direct = { pts = { { sx, sy }, { tx, ty } } }
+  assertTrue(offGround(1453, direct) > 20, "the straight line was expected to cross walls here")
+  assertTrue(S.expansions < 20000, "the search looked at " .. S.expansions .. " squares")
+end)
+
+test("nav: Elwynn, Goldshire to the Eastvale logging camp - on the ground all the way, close to the walk map's distance", function()
+  local sx, sy = navWorld(1429, 42, 65)
+  local tx, ty = navWorld(1429, 80, 60)
+  local P, S = ns.Nav.Find(1429, sx, sy, nil, tx, ty, nil)
+  assertTrue(P ~= nil, "no way found")
+  -- the walk map's own shortest way is 1363 yd
+  assertTrue(P.len > 1324 and P.len < 1363 * 1.12, "the line is " .. math.floor(P.len) .. " yd, the walk map's own way 1363")
+  assertEquals(0, (offGround(1429, P)), "yards of the line off the ground")
+  assertTrue(#P.pts < 60, "the line has " .. #P.pts .. " points: not straightened")
+  assertTrue(S.expansions < 20000, "the search looked at " .. S.expansions .. " squares")
+end)
+
+-- the live line in a small world: Stormwind, a walk to Bolvar in the Keep, then one back to the Trade District
+local function navRoute()
+  return { id = "nav", title = "nav", sections = { { title = "Stormwind" } }, steps = {
+    { id = 1, k = "goto", text = "To the Keep", m = 1453, x = 0.800, y = 0.380, r = 8, sec = 1 },
+    { id = 2, k = "goto", text = "Back to the Trade District", m = 1453, x = 0.661, y = 0.708, r = 8, sec = 1 },
+  } }
+end
+local function lineWorld(fn)
+  local HBDP = LibStub("HereBeDragons-Pins-2.0")
+  local sv = { path = ns.db.pathLine }
+  ns.db.pathLine = true
+  local ok, err = pcall(withWorld, navRoute(), function(w)
+    -- where the dots of the live line are in the world, by yards still to walk
+    function w:dots(where)
+      local out, reg = {}, where == "mini" and HBDP.minimapPins or HBDP.worldmapPins
+      for _, d in ipairs(ns.Pins.LineDots(where)) do local t = reg[d.frame]; out[#out + 1] = { rem = d.rem, x = t and t.x, y = t and t.y } end
+      return out
+    end
+    function w:walk(m, x, y) self:go(m, x, y); ns.Nav.Settle() end
+    ns.Nav.Want(nil); ns.Arrow.SetTarget(w:shown(), true) -- a fresh target (an earlier test may have left the same one)
+    fn(w)
+  end, { at = { m = 1453, x = 0.661, y = 0.708 } })
+  ns.db.pathLine = sv.path
+  ns.Nav.Want(nil)
+  if not ok then error(err, 0) end
+end
+local function yards(m, x, y) return navWorld(m, x * 100, y * 100) end
+
+test("nav line: drawn from where you stand, on the minimap too, and only the part behind you goes as you walk", function()
+  lineWorld(function(w)
+    ns.Nav.Settle()
+    local key = ns.Arrow.Current().key
+    local P = ns.Nav.PathFor(key)
+    assertTrue(P ~= nil, "no live line for the step")
+    local px, py = yards(1453, 0.661, 0.708)
+    assertTrue(math.abs(P.pts[1][1] - px) < 1 and math.abs(P.pts[1][2] - py) < 1, "the line does not start where you stand")
+    assertEquals(0, (offGround(1453, P)), "yards of the line off the ground")
+    assertTrue(ns.Pins.Line() ~= nil and ns.Pins.Line().P == P, "the pins are not drawing the live line")
+    local world, mini = w:dots("world"), w:dots("mini")
+    assertTrue(#world >= 20 and #world <= 200, #world .. " dots on the world map")
+    assertTrue(#mini >= 20, #mini .. " dots on the minimap")
+    for _, d in ipairs(mini) do
+      assertTrue(d.x ~= nil, "a minimap dot HereBeDragons does not know")
+      assertTrue(d.rem <= P.len - ns.Pins.MINI_GAP + 0.01 and d.rem >= P.len - ns.Pins.MINI_AHEAD - 0.01, "a minimap dot " .. (P.len - d.rem) .. " yd ahead")
+    end
+    -- every dot is on the ground
+    local N = ns.Nav.Grid(1453)
+    for _, d in ipairs(world) do
+      local sq = ns.Nav._squareAt(N, d.x, d.y)
+      local ok = sq and ns.Nav.Ground(N, sq)
+      for dx = -1, 1 do for dy = -1, 1 do local q = ns.Nav._squareAt(N, d.x + dx * N.cell, d.y + dy * N.cell); if q and ns.Nav.Ground(N, q) then ok = true end end end
+      assertTrue(ok, "a dot of the line is off the ground")
+    end
+    -- walk 80 yd along the line
+    local before = {}
+    for _, d in ipairs(world) do before[d.rem] = d end
+    local i, walked = 1, 0
+    while walked + (P.rem[i] - P.rem[i + 1]) < 80 do walked = walked + (P.rem[i] - P.rem[i + 1]); i = i + 1 end
+    local a, b = P.pts[i], P.pts[i + 1]
+    local t = (80 - walked) / (P.rem[i] - P.rem[i + 1])
+    local D = ns.Nav.Data(1453)
+    local nx, ny = a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t
+    w:walk(1453, (nx - D.left) / (D.right - D.left), (ny - D.top) / (D.bottom - D.top))
+    assertTrue(ns.Nav.PathFor(key) == P, "walking along the line made a new one")
+    assertTrue(math.abs(P.left - (P.len - 80)) < 3, "80 yd along, " .. P.left .. " yd left of " .. P.len)
+    local after = w:dots("world")
+    assertTrue(#after < #world and #after >= #world - 80 / ns.Pins.Line().step - 2, "world dots: " .. #world .. " before, " .. #after .. " after 80 yd")
+    for _, d in ipairs(after) do
+      assertTrue(d.rem < P.left, "a dot behind you is still drawn")
+      local was = before[d.rem]
+      assertTrue(was and math.abs(was.x - d.x) < 0.01 and math.abs(was.y - d.y) < 0.01, "a dot ahead of you moved")
+    end
+    for _, d in ipairs(w:dots("mini")) do assertTrue(d.rem <= P.left - ns.Pins.MINI_GAP + 0.01, "a minimap dot under or behind you") end
+    assertEquals(0, ns.Pins.Sweep(), "stray frames on the minimap")
+  end)
+end)
+
+test("nav line: stray from it and a new one runs from where you are; the next step gets its own", function()
+  lineWorld(function(w)
+    ns.Nav.Settle()
+    local key = ns.Arrow.Current().key
+    local P = ns.Nav.PathFor(key)
+    assertTrue(P ~= nil, "no live line")
+    -- off to the west, well away from the line
+    w:walk(1453, 0.60, 0.66)
+    local P2 = ns.Nav.PathFor(key)
+    assertTrue(P2 ~= nil and P2 ~= P, "no new line after straying")
+    local px, py = yards(1453, 0.60, 0.66)
+    assertTrue(math.abs(P2.pts[1][1] - px) < 1 and math.abs(P2.pts[1][2] - py) < 1, "the new line does not start where you are")
+    assertEquals(0, (offGround(1453, P2)), "yards of the new line off the ground")
+    assertTrue(ns.Pins.Line().P == P2, "the pins still draw the old line")
+    -- a small step aside (10 yd) is not straying
+    local D = ns.Nav.Data(1453)
+    w:walk(1453, 0.60 + 10 / (D.left - D.right), 0.66)
+    assertTrue(ns.Nav.PathFor(key) == P2, "10 yd aside made a new line")
+    -- the step changes: the line is for the new target
+    w:walk(1453, 0.800, 0.380)
+    ns.Engine.Jump(2) -- at Bolvar: on to the next step
+    assertEquals(2, w:shown())
+    ns.Nav.Settle()
+    local key2 = ns.Arrow.Current().key
+    assertTrue(key2 ~= key, "the target of the arrow did not change")
+    local P3 = ns.Nav.PathFor(key2)
+    assertTrue(P3 ~= nil and ns.Nav.PathFor(key) == nil, "no line for the new step")
+    local tx, ty = yards(1453, 0.661, 0.708)
+    assertTrue(math.abs(P3.pts[#P3.pts][1] - tx) < 1 and math.abs(P3.pts[#P3.pts][2] - ty) < 1, "the new line does not end at the new step")
+    assertTrue(ns.Pins.Line().P == P3)
+    assertEquals(0, ns.Pins.Sweep(), "stray frames on the minimap")
+  end)
+end)
+
+test("nav cost: a search is cut into slices, looks at a bounded number of squares, and knows the ground along its line", function()
+  local sx, sy = navWorld(1453, 28, 50)      -- the harbour
+  local tx, ty = navWorld(1453, 80.0, 38.0)  -- the Keep: the longest walk in town
+  local N = ns.Nav.Grid(1453)
+  local S = ns.Nav.Search(N, sx, sy, nil, tx, ty, nil)
+  local slices = 0
+  while not ns.Nav.Run(S, 0.5) do slices = slices + 1; assertTrue(slices < 100000, "the search never ends") end
+  assertTrue(slices >= 2, "a long search ran in one slice (" .. slices .. ")")
+  assertTrue(S.found ~= nil, "no way from the harbour to the Keep")
+  assertTrue(S.expansions < 40000, "the search looked at " .. S.expansions .. " squares")
+  local P = ns.Nav.Path(S)
+  assertEquals(0, (offGround(1453, P)), "yards of the line off the ground")
+  -- straying is read off the same search: it knows the ground along its own line
+  local a, b = P.pts[3], P.pts[4]
+  local known = false
+  for _, n in ipairs(ns.Nav._nodesNear(N, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2)) do if S.closed[n] then known = true end end
+  assertTrue(known, "the search does not know the ground along its own line")
+  -- memory: only Nav.KEEP zones stay unpacked
+  ns.Nav.Grid(1429); ns.Nav.Grid(1437)
+  local n = 0
+  for _ in pairs(ns.Nav._grids()) do n = n + 1 end
+  assertEquals(ns.Nav.KEEP, n, "unpacked zones kept")
+end)
+
+test("nav across a zone border: from Goldshire to the Trade District on the walk map of Elwynn, through the gate", function()
+  local sx, sy = navWorld(1429, 42, 65)
+  local tx, ty = navWorld(1453, 66.1, 70.8)
+  assertEquals(1429, ns.Nav.MapFor(sx, sy, tx, ty, 0, 1429, 1453), "the map you are on holds both ends")
+  local P = ns.Nav.Find(1429, sx, sy, nil, tx, ty, nil)
+  assertTrue(P ~= nil, "no way from Goldshire into Stormwind")
+  local straight = math.sqrt((sx - tx) ^ 2 + (sy - ty) ^ 2)
+  assertTrue(P.len >= straight and P.len < straight * 1.6, "the line is " .. math.floor(P.len) .. " yd, the straight line " .. math.floor(straight))
+  assertEquals(0, (offGround(1429, P)), "yards of the line off the ground")
+  -- a target in a zone with no walk map: no live line (the planned path is used)
+  assertEquals(nil, ns.Nav.MapFor(sx, sy, -10500, -1200, 0, 1429, 1431))
+  assertEquals(nil, ns.Nav.MapFor(sx, sy, tx, ty, 1, 1429, 1453), "another continent")
 end)

@@ -749,6 +749,25 @@
       },
       "id": "Callofwatershaman",
       "source": "QuestieDB 1.0.13 (quest givers, hand-ins, objectives); what each quest teaches: warcraft.wiki.gg (Classic), 2026-11-10"
+    },
+    {
+      "class": "warlock",
+      "name": "Felsteed (warlock 40)",
+      "minLevel": 40,
+      "quests": [
+        4488,
+        4490
+      ],
+      "minutes": 25,
+      "tag": "mount + riding",
+      "why": "Your level-40 class quest: Summon Felsteed, your mount, and with it the riding skill (Blizzard's Nov 10 hotfix: completing it grants riding) - instead of 100g at a riding trainer. Short: a talk in your capital, then a talk with Strahad Farsan in Ratchet. Demisette Cloyce (Mage Quarter, Stormwind) starts it (Briarthorn in Ironforge, 4487, is the same quest).",
+      "travel": {
+        "Stormwind City": "Demisette Cloyce, Mage Quarter (the Slaughtered Lamb).",
+        "The Barrens": "Strahad Farsan, Ratchet."
+      },
+      "id": "Felsteedwarlock",
+      "source": "Blizzard, WoW: Forever Hotfixes - November 10, 2026: \"Completing 'Summon Felsteed' will correctly grant the player the appropriate riding skill\" (https://us.forums.blizzard.com/en/wow/c/wow-forever/wow-forever-bug-report/352); Wowhead Forever (tooltip service, dataEnv 16): quests 3631, 4487-4490 and spell 5784 Summon Felsteed - verified 2026-11-10",
+      "inPath": true
     }
   ],
   "mustDo": [

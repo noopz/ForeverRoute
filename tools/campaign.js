@@ -30,6 +30,12 @@ let state = { hearthCd: cdNow, level: st.level || cfg.level, xp: st.xp || 0, com
 if (cfg.startStateFile) { const b = JSON.parse(fs.readFileSync(cfg.startStateFile, 'utf8')); state = b.state; st = { ...st, level: b.state.level, pos: b.state.pos, branchFrom: b.state.zone }; }
 if (cfg.forceLevel) { state.level = cfg.forceLevel; state.xp = 0; } // look-ahead ranking: score zones as if you were this level
 const race = st.race || cfg.race, klass = st.class || cfg.class;
+// your race's start zone: you finish it before going anywhere else - its first return (Razor Hill after the Valley of
+// Trials, Goldshire after Northshire) is not a revisit, and other races' start zones are not yours to level in (an orc was
+// sent from Durotar to Tirisfal at 6 and Zephras Isle at 12; a human from Elwynn to Dun Morogh)
+const { RACE_HOME, START_ZONES } = require('./world');
+const HOME = cfg.homeZone ?? RACE_HOME[race];
+const visitsAt = (z, n, level) => (z === HOME && level < 12 ? Math.max(0, n - 1) : n);
 console.log(`${st.name || 'character'}: ${race} ${klass}, level ${state.level}, ${state.completed.length} quests done  [${st.source || 'config'}]`);
 
 // zone level bands from quest data (for this race), to shortlist candidates
@@ -44,7 +50,7 @@ const median = (a) => { const b = [...a].sort((x, y) => x - y); return b[b.lengt
 // ended every built-in plan, timed as if it were a zone)
 const BATTLEGROUNDS = new Set([2597, 3277, 3358]); // Alterac Valley, Warsong Gulch, Arathi Basin
 function candidates(level) {
-  const zones = Object.entries(band).filter(([z, ls]) => !CITIES.has(+z) && !BATTLEGROUNDS.has(+z) && ls.filter((l) => l >= level - 2 && l <= level + 4).length >= 6).map(([z]) => +z);
+  const zones = Object.entries(band).filter(([z, ls]) => !CITIES.has(+z) && !BATTLEGROUNDS.has(+z) && !(START_ZONES.has(+z) && +z !== HOME && !cfg.allowOtherStartZones) && ls.filter((l) => l >= level - 2 && l <= level + 4).length >= 6).map(([z]) => +z);
   // dungeons at your level: their entrance zone is a leg too (its region brings the quests' givers)
   for (const d of (typeof dungeonLegsAt === 'function' ? dungeonLegsAt(level) : [])) if (!zones.includes(d.entrance) && !CITIES.has(d.entrance)) zones.push(d.entrance);
   return zones;
@@ -71,8 +77,8 @@ function hop(S, to) {
   const m2 = travel.uiOfArea(to), p = S.pos, m1 = travel.uiOfArea(p && p.zone ? p.zone : from);
   if (!m1 || !m2) return hopFlat(from, to);
   const knownFP = new Set(Object.keys(zoneName).map(Number).filter((z) => hasFP(z)).map((z) => travel.uiOfArea(z)).filter(Boolean));
-  const start = p && p.zone ? { m: m1, x: p.x / 100, y: p.y / 100 } : travel.arrival(m1);
-  const r = travel.plan(start, travel.arrival(m2), { level: S.level, knownFP, race, class: klass });
+  const start = p && p.zone ? { m: m1, x: p.x / 100, y: p.y / 100 } : travel.arrival(m1, cfg.faction);
+  const r = travel.plan(start, travel.arrival(m2, cfg.faction), { level: S.level, knownFP, race, class: klass, faction: cfg.faction });
   return r ? 2 + r.sec / 60 : NO_WAY;
 }
 // a level of grinding where there's nothing to quest: in the best-scored zone (else any candidate), at the densest
@@ -111,6 +117,8 @@ function grindLeg(S, evals, cands) {
 // A neighbour joins when at least REGION_MIN_LINKS quests you can do now reach into it (same continent, at most
 // REGION_MAX of them, the most-linked first). Cities count like any zone.
 const REGION_MIN_LINKS = cfg.regionMinLinks ?? 2, REGION_MAX = cfg.regionMax ?? 2;
+const BYNAME = {}; // quests by name: Forever's per-race copies of one quest
+for (const q of Object.values(db.quests)) if (q && q.name) (BYNAME[q.name] = BYNAME[q.name] || []).push(q);
 const followersOf = {};
 for (const q of Object.values(db.quests)) for (const p of [...(q.preSingle || []), ...(q.preGroup || [])]) (followersOf[p] = followersOf[p] || []).push(q.id);
 function mainZone(spawns) {
@@ -138,15 +146,20 @@ function questZones(q, done, level) {
     const sp = [];
     if (o.kind === 'kill' && db.npcs[o.npc]) sp.push(...db.npcs[o.npc].spawns);
     if (o.kind === 'killcredit') for (const id of o.npcs || []) if (db.npcs[id]) sp.push(...db.npcs[id].spawns);
-    if (o.kind === 'item') { for (const id of o.npcDrops || []) if (db.npcs[id]) sp.push(...db.npcs[id].spawns); for (const id of o.objectDrops || []) if (db.objects[id]) sp.push(...db.objects[id].spawns); }
+    if (o.kind === 'item') { for (const n of require('./world').droppers(o, db.npcs)) sp.push(...n.spawns); for (const id of o.objectDrops || []) if (db.objects[id]) sp.push(...db.objects[id].spawns); }
     if (o.kind === 'object' && db.objects[o.object]) sp.push(...db.objects[o.object].spawns);
     if (o.kind === 'explore') sp.push(...(o.spawns || []));
     add(mainZone(sp.filter((p) => !p.instance)));
   }
   // an earlier step of the chain counts only while it's still to do and worth doing (a chain you finished long ago
   // in Elwynn doesn't make Elwynn part of Redridge)
-  for (const p of [...(q.preSingle || []), ...(q.preGroup || [])]) { const P = db.quests[p]; if (P && !done.has(p) && P.level >= level - 6) add(starterZone(P)); }
-  for (const f of followersOf[q.id] || []) add(starterZone(db.quests[f]));
+  // (only quests you can take - Forever's Camping 101 has a copy per race, and the tauren one tied Durotar to Mulgore - and
+  // a "one of" prerequisite only when none of its alternatives is done or starts in this quest's own zone)
+  const tk = (P) => P && (!P.races || raceOk(P.races, race)) && (!P.classes || !CLASS_BIT[klass] || (P.classes & CLASS_BIT[klass]));
+  for (const p of q.preGroup || []) { const P = db.quests[p]; if (tk(P) && !done.has(p) && P.level >= level - 6) add(starterZone(P)); }
+  const alts = (q.preSingle || []).map((p) => db.quests[p]).filter(tk);
+  if (alts.length && !alts.some((P) => done.has(P.id))) { const zs = alts.filter((P) => P.level >= level - 6).map(starterZone); if (!zs.includes(starterZone(q))) zs.forEach(add); }
+  for (const f of followersOf[q.id] || []) { const F = db.quests[f]; if (!tk(F) || (BYNAME[F.name] || []).some((o) => o !== F && tk(o) && starterZone(o) === starterZone(q))) continue; add(starterZone(F)); }
   return out;
 }
 // ---------- dungeon legs ----------
@@ -156,7 +169,9 @@ function questZones(q, done, level) {
 // Level band: the middle of the levels of the mobs inside (wings included). Its quests: the same rule as the dungeon
 // routes (dungeon-prep.js isDungeonQuest). Raids and other-expansion instances are left out.
 const DUNGEON_LEGS = (() => {
-  if (cfg.dungeons === 'none' || !cfg.dungeonFile || !fs.existsSync(cfg.dungeonFile)) return [];
+  // a dungeon is never part of your path unless you asked (cfg.dungeonsInPath): it needs a group, and that can be hard to
+  // find - its quests are a side trip you choose (paths.js dungeon routes, the Side trips window)
+  if (cfg.dungeons === 'none' || cfg.dungeonsInPath !== true || !cfg.dungeonFile || !fs.existsSync(cfg.dungeonFile)) return [];
   let D; try { D = require('./dungeons').loadDungeons(cfg.dungeonFile); } catch (e) { return []; }
   const RAID = /Molten Core|Onyxia|Blackwing|Zul'Gurub|Ahn'Qiraj|Naxxramas|Utgarde|Black Morass|Old Hillsbrad|Deeprun|Hall of Legends|Champions' Hall/;
   const areaOf = (d) => new Set([d.id, ...(d.alt || [])]);
@@ -164,7 +179,7 @@ const DUNGEON_LEGS = (() => {
     const out = [];
     if (o.kind === 'kill' && db.npcs[o.npc]) out.push(...db.npcs[o.npc].spawns);
     if (o.kind === 'killcredit') for (const id of o.npcs || []) if (db.npcs[id]) out.push(...db.npcs[id].spawns);
-    if (o.kind === 'item') { for (const id of o.npcDrops || []) if (db.npcs[id]) out.push(...db.npcs[id].spawns); for (const id of o.objectDrops || []) if (db.objects[id]) out.push(...db.objects[id].spawns); }
+    if (o.kind === 'item') { for (const n of require('./world').droppers(o, db.npcs)) out.push(...n.spawns); for (const id of o.objectDrops || []) if (db.objects[id]) out.push(...db.objects[id].spawns); }
     if (o.kind === 'object' && db.objects[o.object]) out.push(...db.objects[o.object].spawns);
     return out;
   };
@@ -192,6 +207,9 @@ function otherContinent(S, z) {
   return here != null && continent[here] != null && continent[z] != null && continent[here] !== continent[z];
 }
 // a dungeon run for its XP alone (no quests inside): the dungeon at your level nearest by travel, its run as a leg
+// a run's length by dungeon (tools/campaign-defaults.json dungeonMinutes: Gnomeregan two hours, the Stockade half of one) -
+// a character made before the table was added still gets it
+const DUNGEON_MINUTES = (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'campaign-defaults.json'), 'utf8')).dungeonMinutes || {}; } catch (e) { return {}; } })();
 function xpRunLeg(S, legs = []) {
   const W = require('./world');
   const L = S.level;
@@ -201,7 +219,7 @@ function xpRunLeg(S, legs = []) {
   for (const dg of dungeonLegsAt(L)) {
     if (!uiMap[dg.entrance]) continue;
     if (recent.length >= (cfg.xpRunsInARow ?? 3) && recent.every((r) => r === dg.id)) continue;
-    const runMin = (cfg.dungeonMinutes && cfg.dungeonMinutes[dg.id]) || cfg.dungeonRunMin || 50;
+    const runMin = (cfg.dungeonMinutes && cfg.dungeonMinutes[dg.id]) || DUNGEON_MINUTES[dg.id] || cfg.dungeonRunMin || 50;
     // no safe way there (hop costs NO_WAY): not an option - a gnome mage at 33 was sent on a "655 min" Scarlet Monastery run
     const there = hop(S, dg.entrance);
     if (there >= NO_WAY) continue;
@@ -378,7 +396,7 @@ function runFresh(cfgObj, tag, timeoutSec) {
 }
 async function pool(items, n, fn) { const r = []; let i = 0; await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) { const k = i++; r[k] = await fn(items[k]); } })); return r; }
 
-const CITY_MAPS = CAPITAL_MAPS; // Stormwind, Ironforge, Darnassus
+const CITY_MAPS = CAPITAL_MAPS; // the six capitals
 const areaOfMap = Object.fromEntries(conv.map((t) => [t.ui_map_id, t.area_id]));
 function carryDeliveries(steps, legs) {
   if (cfg.carry === false || !legs.length) return;
@@ -445,7 +463,10 @@ const FUN_NOTES = (LEARNED && LEARNED.funQuests) || {};
 const MUST_DO = [...new Set([...(cfg.mustDo || []), ...Object.keys(FUN_NOTES).map(Number)])];
 function legConfig(zone, level, extra, S = state) {
   const zones = [zone, ...(cfg.regions === false ? [] : regionOf(zone, level, S.completed))];
-  if (continent[zone] === 0 && cfg.faction !== 'horde' && !zones.includes(1519)) zones.push(1519);
+  // your faction's hub rides along with every leg on its continent (hand-ins, books, training there): Stormwind for the
+  // Alliance in the Eastern Kingdoms; Undercity there and Orgrimmar in Kalimdor for the Horde
+  const hub = (cfg.faction === 'horde' ? { 0: 1497, 1: 1637 } : { 0: 1519 })[continent[zone]];
+  if (hub && !zones.includes(hub)) zones.push(hub);
   return {
     // rounded up to 10 min so the leg cache still hits
     hearthCdLeft: S.hearthCd > 0 ? Math.ceil(S.hearthCd / 600) * 600 : undefined,
@@ -460,7 +481,7 @@ function legConfig(zone, level, extra, S = state) {
     title: `${zoneName[zone]} ${level}+`, character: st.name, charDir: undefined, addonsDir: cfg.addonsDir, bonusQuests: cfg.bonusQuests, bonusNotes: cfg.bonusNotes, booksCharDir: cfg.charDir, itemsJson: cfg.itemsJson, maxFrustration: cfg.maxFrustration, awayHubShare: cfg.awayHubShare, lonelyYards: cfg.lonelyYards, lonelyXpShare: cfg.lonelyXpShare, keepRewardValue: cfg.keepRewardValue, frustrating: cfg.frustrating, // dungeons run earlier on this path: not run again for a quest or two (route2.js)
     dungeonsRun: S.dungeonsRun && S.dungeonsRun.length ? S.dungeonsRun : undefined,
     gearVerdicts: st.gearVerdicts && Object.keys(st.gearVerdicts).length ? st.gearVerdicts : undefined,
-    dungeonFile: cfg.dungeonFile, dungeons: cfg.dungeons, dungeonRunMin: cfg.dungeonRunMin, groupWaitMin: cfg.groupWaitMin, ...extra,
+    dungeonFile: cfg.dungeonFile, dungeons: cfg.dungeonsInPath === true ? cfg.dungeons : 'none', dungeonRunMin: cfg.dungeonRunMin, groupWaitMin: cfg.groupWaitMin, ...extra,
   };
 }
 
@@ -484,7 +505,7 @@ async function lookaheadPick(top, n) {
     const next = candidates(S1.level).filter((z) => z !== e.z);
     const ev2 = (await pool(next, PARL, (z) => evalZone(z, S1, n + 1, `look-${n}-${e.z}-${z}`))).filter((x) => x && x.minutes > 0 && x.turnins >= (cfg.minTurnins || 5));
     // the second zone: a return to the first one counts less (the same revisit rule as the main choice)
-    const v2 = (x) => x.value * (x.z in visits || x.z === e.z ? 1 / (1 + (cfg.revisitPenalty ?? 0.8) * ((visits[x.z] || 0) + (x.z === e.z ? 1 : 0))) : 1);
+    const v2 = (x) => x.value * (x.z in visits || x.z === e.z ? 1 / (1 + (cfg.revisitPenalty ?? 0.8) * visitsAt(x.z, (visits[x.z] || 0) + (x.z === e.z ? 1 : 0), S1.level)) : 1);
     ev2.sort((a, b) => v2(b) / b.minutes - v2(a) / a.minutes);
     const b2 = ev2[0];
     const v1 = e.score * e.minutes; // the main choice's value for the first zone (revisit included)
@@ -509,7 +530,7 @@ async function beamSearch() {
       const evs = await pool(cands, 2, (z) => evalZone(z, node.S, depth, `beam-${depth}-${node.seq.join('_')}-${z}`));
       for (const e of evs) {
         if (!e || e.minutes <= 0 || e.turnins < (cfg.minTurnins || 5)) continue;
-        const revisit = 1 / (1 + (cfg.revisitPenalty ?? 0.8) * (node.visits[e.z] || 0));
+        const revisit = 1 / (1 + (cfg.revisitPenalty ?? 0.8) * visitsAt(e.z, node.visits[e.z] || 0, node.S.level));
         const xpStep = Math.max(1, Math.round((XP_TO_LEVEL[e.s.level] || 1000) * 0.05));
         const S2 = { hearth: node.S.hearth, level: e.s.level, xp: Math.floor((e.s.xp || 0) / xpStep) * xpStep, completed: [...e.s.completed].sort((a, b) => a - b), active: e.s.active, pos: e.s.pos, zone: e.z, dungeonsRun: e.s.dungeonsRun };
         const n2 = { S: S2, seq: [...node.seq, e.z], minutes: node.minutes + e.minutes, gained: node.gained + e.gained, value: (node.value || 0) + e.value * revisit, visits: { ...node.visits, [e.z]: (node.visits[e.z] || 0) + 1 } };
@@ -573,7 +594,7 @@ async function beamSearch() {
       // 60 went back to more stops
       const minutes = s.minutes + hop(state, z) + (z !== state.zone ? cfg.switchMin ?? 15 : 0);
       const value = gained + (s.rewardValue || 0) * (cfg.rewardWeight ?? 1);
-      const revisit = 1 / (1 + (cfg.revisitPenalty ?? 0.8) * (visits[z] || 0)); // fresh zones beat returning for a few stragglers (0.8: a 1-60 plan came back to wild areas 17% less, for 1.5% more time)
+      const revisit = 1 / (1 + (cfg.revisitPenalty ?? 0.8) * visitsAt(z, visits[z] || 0, state.level)); // fresh zones beat returning for a few stragglers (0.8: a 1-60 plan came back to wild areas 17% less, for 1.5% more time)
       // cfg.otherContinentFactor < 1 makes the other continent beat staying by a margin (off: at 0.8 a 1-60 plan took 5
       // fewer boats but 16% longer, and one path stalled at 34 - the quests are where they are)
       const stay = otherContinent(state, z) ? (cfg.otherContinentFactor ?? 1) : 1;
@@ -610,7 +631,9 @@ async function beamSearch() {
     // where quests run thin (the 30s), a dungeon run for its XP can beat a short leg - dungeon kills pay +50% since
     // Blizzard's Nov 8 2026 hotfix "so it feels better to go back in for more runs". Scored on XP per minute like a leg;
     // in game it is a Run step you can skip (the route goes on, you're just lower)
-    if (cfg.dungeons !== 'none' && (!best || best.turnins < (cfg.minTurnins || 5))) {
+    // (only when you asked for them - cfg.xpRuns: a dungeon is a group and an hour or two, not a step to be routed into;
+    // a level-29 warlock was sent to Gnomeregan, a two-hour run, for its XP)
+    if (cfg.dungeons !== 'none' && cfg.xpRuns === true && (!best || best.turnins < (cfg.minTurnins || 5))) {
       const run = xpRunLeg(state, legs);
       if (run && (!best || run.score > best.score)) {
         legs.push(run.leg);

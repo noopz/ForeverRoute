@@ -181,6 +181,41 @@ class VoxNav {
     this.extra = ex; this.trailLinkCount = n;
     return ex;
   }
+  // lifts (Thunder Bluff's elevators, Undercity's): the walk map can't ride a moving platform, so each lift joins the
+  // bottom floor of its shaft to the floor at the top - the one at the shaft's roof (Undercity: the throne room above),
+  // or for an open shaft (Thunder Bluff's cliffs) the lowest walkable floor above. costYd: the ride and the wait.
+  // Call before any field (fields are cached). points: map points { x, y } (0-100) of this area's map.
+  addLifts(points, costYd = 200) {
+    const ex = this.trailLinks() || new Map(); this.extra = ex;
+    const ref = this.reference(), added = [];
+    const link = (a, b) => { let l = ex.get(a); if (!l) ex.set(a, (l = [])); l.push(b, costYd); };
+    const B = this.meta.bounds;
+    const at = (f) => { const c = this.colOf[f]; return { x: ((c % this.W) + 0.5) * this.cell / (B.left - B.right) * 100, y: (Math.floor(c / this.W) + 0.5) * this.cell / (B.top - B.bottom) * 100 }; };
+    const yd = (a, b) => Math.hypot((a.x - b.x) / 100 * (B.left - B.right), (a.y - b.y) / 100 * (B.top - B.bottom));
+    for (const p of points) {
+      const cand = this.floorsAround(p, 4).filter((f) => isFinite(ref[f]) || this.bigArea(f));
+      if (!cand.length) continue;
+      let bot = cand.reduce((a, b) => (this.z[b] < this.z[a] ? b : a));
+      let above = cand.filter((f) => this.z[f] > this.z[bot] + 20);
+      if (!above.length) {
+        // the spot is a top station (Thunder Bluff's are on the mesa): the bottom is the nearest connected floor at least
+        // 30 yd lower, within 60 yd (the car drops beside the cliff)
+        const topF = cand.reduce((a, b) => (this.z[b] < this.z[a] ? b : a));
+        const low = this.floorsAround(p, 30).filter((f) => this.z[f] < this.z[topF] - 30 && (isFinite(ref[f]) || this.bigArea(f)));
+        if (!low.length) continue;
+        bot = low.reduce((a, b) => (yd(at(b), p) < yd(at(a), p) ? b : a));
+        above = [topF];
+      }
+      const roof = this.ceil[bot];
+      const top = roof < 1e5
+        ? above.reduce((a, b) => (Math.abs(this.z[b] - roof) < Math.abs(this.z[a] - roof) ? b : a))
+        : above.reduce((a, b) => (this.z[b] < this.z[a] ? b : a));
+      link(bot, top); link(top, bot);
+      added.push({ p, bottom: +this.z[bot].toFixed(1), top: +this.z[top].toFixed(1) });
+    }
+    this.cache.clear();
+    return added;
+  }
   col(p) { const B = this.meta.bounds; const c = Math.floor(p.x / 100 * (B.left - B.right) / this.cell), r = Math.floor(p.y / 100 * (B.top - B.bottom) / this.cell); return Math.max(0, Math.min(this.H - 1, r)) * this.W + Math.max(0, Math.min(this.W - 1, c)); }
   // floors in a small radius around a map point (NPCs stand on spots our grid may call steep)
   floorsNear(p, rad = 3) {

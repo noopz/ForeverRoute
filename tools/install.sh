@@ -6,13 +6,14 @@
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/addon/ForeverRoute"
-DEST="$ROOT/../Interface/AddOns/ForeverRoute"
+GAME="$(cygpath -u "$(node "$ROOT/tools/game-dir.js")")" # the game's _forever_ folder (tools/game-dir.js)
+DEST="$GAME/Interface/AddOns/ForeverRoute"
 # yes/no questions to the game go through ns.Is (Core.lua): Forever hides some answers in dungeons and combat, and
 # testing a hidden one is an error. A raw call here is refused before anything runs.
 RAW=$(cd "$SRC" && grep -rnE '(UnitOnTaxi|UnitIsAFK|UnitIsDeadOrGhost|UnitIsGhost|IsFlying|IsIndoors|IsInInstance|IsMounted|IsSwimming|IsResting|UnitInVehicle)[(]' --include=*.lua . | grep -v '^./tests/' | grep -v '^./Libs/')
 if [ -n "$RAW" ]; then echo "$RAW"; echo "NOT installed (ask the game through ns.Is: a hidden answer is an error otherwise)"; exit 1; fi
 SIM="$ROOT/sim/pkg/wow-ui-sim-v0.1.40-forever-windows-x86_64"
-R=$(cd "$SIM" && export WOW_INSTALL_PATH="$(cd "$ROOT/../.." && pwd)"; timeout 900 ./wow-sim.exe --allow-ui-version-mismatch \
+R=$(cd "$SIM" && export WOW_INSTALL_PATH="$(node "$ROOT/tools/game-dir.js" wow)"; timeout 900 ./wow-sim.exe --allow-ui-version-mismatch \
   --addons-path "$(cygpath -w "$ROOT/addon")" --session-wtf-path "$(cygpath -w "$ROOT/sim/wtf")" \
   --class Warlock --race Gnome run-tests ForeverRoute 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -E 'tests,|✗|_test.lua:[0-9]+: [^i]|_harness.lua:[0-9]+:')
 echo "$R"
@@ -30,7 +31,7 @@ for cfg in "$ROOT"/routes/campaign-*.json; do
 done
 cd "$SRC" && find . -type f ! -name 'Route.lua' | while read f; do mkdir -p "$DEST/$(dirname "$f")"; cp "$f" "$DEST/$f"; done
 # the built-in plans, one load-on-demand addon per race and class
-for P in "$ROOT"/addon/ForeverRoute_Starter_*; do [ -d "$P" ] || continue; N=$(basename "$P"); mkdir -p "$ROOT/../Interface/AddOns/$N"; cp "$P"/* "$ROOT/../Interface/AddOns/$N/"; done
+for P in "$ROOT"/addon/ForeverRoute_Starter_*; do [ -d "$P" ] || continue; N=$(basename "$P"); mkdir -p "$GAME/Interface/AddOns/$N"; cp "$P"/* "$GAME/Interface/AddOns/$N/"; done
 # (a Starter.lua left from before the plans moved out would still load: gone)
 rm -f "$DEST/Starter.lua"
 echo "installed"

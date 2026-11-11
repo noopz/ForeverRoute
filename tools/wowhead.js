@@ -30,7 +30,7 @@ async function queue(charDir) {
   try {
     const RF = require('./routefile');
     const folder = path.basename(path.dirname(path.resolve(charDir))).replace(/\s/g, '');
-    const text = RF.own(fs.readFileSync(path.join(ROOT, '..', 'Interface', 'AddOns', 'ForeverRoute', 'Route.lua'), 'utf8'), folder);
+    const text = RF.own(fs.readFileSync(path.join(require('./game-dir').addonDir(), 'Route.lua'), 'utf8'), folder);
     for (const m of text.matchAll(/k = "accept"[^}]*?q = (\d+)/g)) add(m[1], 'on your plan');
   } catch (e) {}
   // your save: quest log, and what givers offered or didn't

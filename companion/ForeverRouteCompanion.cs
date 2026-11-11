@@ -80,7 +80,12 @@ class Companion : ApplicationContext {
       status = "Watching for your saves";
     } catch (Exception ex) { status = "Could not start the planner: " + ex.Message; AppendLog(status); }
   }
-  string AddonDir() { return Path.Combine(Path.GetDirectoryName(Planner), "Interface", "AddOns", "ForeverRoute"); }
+  // the game's _forever_ folder: game-dir.txt in the planner folder (tools/game-dir.js), else the folder above it
+  string GameDir() {
+    try { var t = File.ReadAllText(Path.Combine(Planner, "game-dir.txt")).Trim(); if (t.Length > 0) return t; } catch (Exception) { }
+    return Path.GetDirectoryName(Planner);
+  }
+  string AddonDir() { return Path.Combine(GameDir(), "Interface", "AddOns", "ForeverRoute"); }
   void StopChild() {
     if (child == null || child.HasExited) return;
     try { Process.Start(new ProcessStartInfo("taskkill", "/T /F /PID " + child.Id) { CreateNoWindow = true, UseShellExecute = false }).WaitForExit(5000); } catch { }

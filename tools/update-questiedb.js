@@ -83,8 +83,8 @@ function get(url, binary) {
   // 4. what's made from it
   const conv = path.join(QDB, 'conversion.json'), db = path.join(QDB, 'db.json'), addon = path.join(ROOT, 'addon', 'ForeverRoute');
   node('map-extras.js');
-  node('flightmasters.js', db, conv, path.join(addon, 'FlightMasters.lua'), 'A');
-  node('vendors.js', db, conv, path.join(addon, 'Vendors.lua'), 'A');
+  node('flightmasters.js', db, conv, path.join(addon, 'FlightMasters.lua'));
+  node('vendors.js', db, conv, path.join(addon, 'Vendors.lua'));
   node('gen-breadcrumbs.js');
   node('hostile-towns.js');
   node('gen-travel-data.js');

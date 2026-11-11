@@ -27,7 +27,7 @@ function makeEnsure(db, conv) {
     const out = [];
     if (o.kind === 'kill') { if (N[o.npc]) out.push(...N[o.npc].spawns); }
     else if (o.kind === 'killcredit') { for (const id of o.npcs || []) if (N[id]) out.push(...N[id].spawns); }
-    else if (o.kind === 'item') { for (const id of o.npcDrops || []) if (N[id]) out.push(...N[id].spawns); for (const id of o.objectDrops || []) if (O[id]) out.push(...O[id].spawns); if (!out.length) for (const id of o.vendors || []) if (N[id]) out.push(...N[id].spawns); }
+    else if (o.kind === 'item') { for (const n of require('./world').droppers(o, N)) out.push(...n.spawns); for (const id of o.objectDrops || []) if (O[id]) out.push(...O[id].spawns); if (!out.length) for (const id of o.vendors || []) if (N[id]) out.push(...N[id].spawns); }
     else if (o.kind === 'object') { if (O[o.object]) out.push(...O[o.object].spawns); }
     else if (o.kind === 'explore') out.push(...(o.spawns || []));
     return out.filter((p) => p.x >= 0 && T[p.zone]);
@@ -43,7 +43,8 @@ function makeEnsure(db, conv) {
   const match = (o) => (o.kind === 'item' ? o.name : o.kind === 'kill' ? (N[o.npc] || {}).name : undefined);
   const norm = (s) => (s || '').toLowerCase();
 
-  return function ensureSteps(steps) {
+  // ctx (optional): { done: quests completed before the route, active: quests in your log } - for the prerequisite sweep
+  return function ensureSteps(steps, ctx) {
     // a flight that's followed by errands somewhere else (Stormwind books before 'Fly to Redridge'): do the errands
     // first, then fly - otherwise the card sends you away from the city you're standing in
     steps = flyLater(steps);
@@ -58,6 +59,28 @@ function makeEnsure(db, conv) {
       const gone = (s) => s.q > 0 && orphan.has(s.q) && (s.k === 'accept' || s.k === 'obj');
       for (let i = steps.length - 1; i >= 0; i--) if (gone(steps[i]) && steps[i]._choice) { const j = steps.findIndex((s, k) => k > i && !gone(s)); if (j >= 0) moveChoice(steps[i], steps[j]); }
       steps = steps.filter((s) => !gone(s));
+    }
+    // a pick-up whose prerequisites aren't met by then (all of preGroup, one of preSingle: done before the route, or
+    // handed in earlier on it) - the legs are planned one zone at a time, and across them a pick-up could land before its
+    // prerequisite's hand-in (The Black Shield before James Hyal); the audit counted each, and a plan with the elite
+    // fixes was held back for two more of them. Out goes the quest, all its steps; what it unlocked goes the same way
+    let prereqDropped = 0;
+    if (ctx && ctx.done) {
+      const have = new Set(ctx.done), inLog = new Set((ctx.active || []).map(Number)), drop = new Set();
+      for (const s of steps) {
+        if (!(s.q > 0)) continue;
+        if (s.k === 'accept' && !inLog.has(s.q) && !drop.has(s.q) && Q[s.q]) {
+          const q = Q[s.q], g = q.preGroup || [], one = q.preSingle || [];
+          if (!(g.every((p) => have.has(p)) && (!one.length || one.some((p) => have.has(p))))) drop.add(s.q);
+        }
+        if (s.k === 'turnin' && !drop.has(s.q)) have.add(s.q);
+      }
+      if (drop.size) {
+        const gone = (s) => s.q > 0 && drop.has(s.q) && (s.k === 'accept' || s.k === 'obj' || s.k === 'turnin');
+        for (let i = steps.length - 1; i >= 0; i--) if (gone(steps[i]) && steps[i]._choice) { const j = steps.findIndex((s, k) => k > i && !gone(s)); if (j >= 0) moveChoice(steps[i], steps[j]); }
+        steps = steps.filter((s) => !gone(s));
+        prereqDropped = drop.size;
+      }
     }
     const byQ = new Map();
     steps.forEach((s, i) => { if (s.q && s.q > 0) { const r = byQ.get(s.q) || { first: i, accept: false, objs: [], turnin: -1 }; if (s.k === 'accept') r.accept = true; if (s.k === 'obj') r.objs.push(s); if (s.k === 'turnin' && r.turnin < 0) r.turnin = i; byQ.set(s.q, r); } });
@@ -127,7 +150,7 @@ function makeEnsure(db, conv) {
       // "fly to the Badlands" then "fly to Ironforge")
       else if (p.k === "fly" && q.k === "fly" && !p.boat && !q.boat) { moveChoice(p, q); out.splice(i - 1, 1); } }
     out.forEach((s, i) => { s.id = i + 1; });
-    out.added = added; out.dropped = orphan.size;
+    out.added = added; out.dropped = orphan.size + prereqDropped;
     // where a leg's choice point ended up (step id), 0 if no step carries it
     out.choiceAt = (leg) => out.findIndex((s) => s._choice === leg) + 1;
     return out;

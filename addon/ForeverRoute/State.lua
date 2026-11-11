@@ -90,6 +90,26 @@ function State.Position()
   if pos then return mapID, pos.x, pos.y end
 end
 
+-- your skills: name -> { rank, maxRank } (Skinning 127 of 150). Forever's client has them in C_SkillInfo, each line a
+-- table (name, rank, maxRank, isHeader); the old GetSkillLineInfo returned a list of values instead. Without this the
+-- save's skills were always empty on Forever.
+function State.Skills()
+  local skills = {}
+  local C = type(C_SkillInfo) == "table" and C_SkillInfo
+  if C and type(C.GetNumSkillLines) == "function" and type(C.GetSkillLineInfo) == "function" then
+    for i = 1, (call(C.GetNumSkillLines) or 0) do
+      local s = call(C.GetSkillLineInfo, i)
+      if type(s) == "table" and s.name and not s.isHeader then skills[s.name] = { s.rank or 0, s.maxRank or 0 } end
+    end
+  elseif GetNumSkillLines and GetSkillLineInfo then
+    for i = 1, (call(GetNumSkillLines) or 0) do
+      local ok, name, isHeader, _, rank, _, _, maxRank = pcall(GetSkillLineInfo, i) -- 7 values: not call() (keeps 4)
+      if ok and name and not isHeader then skills[name] = { rank, maxRank } end
+    end
+  end
+  return skills
+end
+
 function State.Snapshot(reason)
   -- At logout the game may already have unloaded quest progress, gear, skills and money while the quest log still
   -- lists its rows. Such a read would tell the planner every finished quest is untouched; where a value reads empty
@@ -114,13 +134,7 @@ function State.Snapshot(reason)
     end
   end
   local mapID, x, y = State.Position()
-  local skills = {}
-  if GetNumSkillLines then
-    for i = 1, (call(GetNumSkillLines) or 0) do
-      local name, isHeader, _, rank, _, _, maxRank = GetSkillLineInfo(i)
-      if name and not isHeader then skills[name] = { rank, maxRank } end
-    end
-  end
+  local skills = State.Skills()
   local gear = {}
   for slot = 1, 19 do local link = GetInventoryItemLink("player", slot); if link then gear[slot] = tonumber(link:match("item:(%d+)")) end end
   local taxi = {}

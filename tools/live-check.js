@@ -1,6 +1,6 @@
 // The live check: the addon's code run in the simulator against YOUR real plan file and YOUR latest save, logging in
 // the way the real game does - a fresh login with a realm name the planner never saw (Forever reports a layer like
-// "CAMWOW US2 Realm 8 PvP", not the WTF folder), and with the name not known yet. Checks: your plan loads, never
+// "Forever Realm 8 PvP", not the WTF folder), and with the name not known yet. Checks: your plan loads, never
 // another character's, your path is in it, and at the spot you saved the card shows a step you haven't done, with
 // arrow and pins agreeing and no error logged. The unit tests use made-up worlds; this is the one that uses yours.
 // Run by tools/install.sh before every install and by the companion before every plan goes in.
@@ -16,7 +16,7 @@ const { saveTestLua, readChar, lua } = require('./save-fixture');
 const ROOT = path.join(__dirname, '..');
 const [charDir, routeFile0, src0] = process.argv.slice(2);
 if (!charDir) { console.log('usage: node tools/live-check.js <character SavedVariables dir> [Route.lua] [addon dir]'); process.exit(2); }
-const routeFile = routeFile0 || path.join(ROOT, '..', 'Interface', 'AddOns', 'ForeverRoute', 'Route.lua');
+const routeFile = routeFile0 || path.join(require('./game-dir').addonDir(), 'Route.lua');
 const src = src0 || path.join(ROOT, 'addon', 'ForeverRoute');
 const SIM = path.join(ROOT, 'sim', 'pkg', 'wow-ui-sim-v0.1.40-forever-windows-x86_64');
 const skip = (why) => { console.log('live check skipped: ' + why); process.exit(0); };
@@ -46,13 +46,13 @@ test("live: the plan file holds a plan for " .. LIVE.folder, function()
   assertTrue(type(ForeverRouteByChar[LIVE.folder]) == "function", "no block for " .. LIVE.folder)
 end)
 test("live: another character never gets your plan", function()
-  local ok, n = login("Someoneelse", "CAMWOW US2 Realm 8 PvP", {})
+  local ok, n = login("Someoneelse", "Forever Realm 8 PvP", {})
   -- nothing of yours: no plan, or the built-in one for its race and class (Starter.lua)
   assertTrue(not (ns.planKey and ns.planKey.found), "a character with another name loaded the plan " .. tostring(ns.planKey and ns.planKey.found))
   assertTrue((not ok and n == 0) or (ns.planKey and ns.planKey.starter), "a character with another name loaded a plan that isn't the built-in one")
 end)
 test("live: fresh login with a realm name the planner never saw (a layer): your plan loads", function()
-  local ok, n = login(LIVE.name, "CAMWOW US2 Realm 41 PvP", {})
+  local ok, n = login(LIVE.name, "Forever Realm 41 PvP", {})
   assertTrue(ok, "no plan loaded"); assertTrue(n > 0, "the plan loaded but has no routes")
 end)
 test("live: the name isn't known yet at login: the key saved last time finds your plan", function()
@@ -66,7 +66,7 @@ end)`;
 const text = saveTestLua(c, 'live', {
   title: 'live: your path at the spot you saved',
   top,
-  prelude: '  local ok = login(LIVE.name, "CAMWOW US2 Realm 8 PvP", {}); assertTrue(ok, "no plan loaded")',
+  prelude: '  local ok = login(LIVE.name, "Forever Realm 8 PvP", {}); assertTrue(ok, "no plan loaded")',
 });
 if (!text) skip('no snapshot with a position in the save (reload in game first)');
 
@@ -83,7 +83,7 @@ try {
   // the results go to stderr as well as stdout: keep both
   const r = spawnSync(path.join(SIM, 'wow-sim.exe'), ['--allow-ui-version-mismatch', '--addons-path', work, '--session-wtf-path', path.join(work, 'wtf'),
     '--class', 'Warlock', '--race', 'Gnome', 'run-tests', 'ForeverRoute'],
-  { cwd: SIM, env: { ...process.env, WOW_INSTALL_PATH: path.resolve(ROOT, '..', '..') }, encoding: 'utf8', timeout: 600000, maxBuffer: 1 << 26, stdio: ['ignore', 'pipe', 'pipe'] });
+  { cwd: SIM, env: { ...process.env, WOW_INSTALL_PATH: require('./game-dir').WOW }, encoding: 'utf8', timeout: 600000, maxBuffer: 1 << 26, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = String(r.stdout || '') + '\n' + String(r.stderr || '') + (r.error ? '\n' + r.error.message : '');
   out = out.replace(/\x1b\[[0-9;]*m/g, '');
   if (process.env.FR_KEEP) fs.writeFileSync(path.join(work, 'out.txt'), out); // FR_KEEP=1: keep the work folder to look at

@@ -21,10 +21,23 @@ function init(conversionPath) {
     const b = t.target_bounds || t.source_bounds;
     if (b) bounds[t.ui_map_id] = { ...b, inst: t.map_id };
   }
-  FLIGHT = {};
+  // FlightMasters.lua holds both factions' flight masters (Alliance = { ... }, Horde = { ... }); neutral ones are in both
+  FLIGHTS = { alliance: {}, horde: {} };
   const lua = fs.readFileSync(path.join(__dirname, '..', 'addon', 'ForeverRoute', 'FlightMasters.lua'), 'utf8');
-  for (const m of lua.matchAll(/\[(\d+)\] = \{ (.*) \},/g)) FLIGHT[+m[1]] = [...m[2].matchAll(/\{ ([\d.]+), ([\d.]+), "([^"]*)" \}/g)].map((x) => [+x[1], +x[2], x[3]]);
+  let side = 'alliance';
+  for (const line of lua.split('\n')) {
+    if (/^\s*Horde = \{/.test(line)) side = 'horde'; else if (/^\s*Alliance = \{/.test(line)) side = 'alliance';
+    const m = line.match(/\[(\d+)\] = \{ (.*) \},/);
+    if (m) FLIGHTS[side][+m[1]] = [...m[2].matchAll(/\{ ([\d.]+), ([\d.]+), "([^"]*)" \}/g)].map((x) => [+x[1], +x[2], x[3]]);
+  }
+  FLIGHT = FLIGHTS.alliance;
 }
+let FLIGHTS = null;
+const CROSS_CLEAR = 150; // yards beyond a hostile town's radius where a border crossing is no way for you
+const sideOf = (faction) => (faction === 'horde' ? 'horde' : 'alliance');
+const flightFor = (faction) => FLIGHTS[sideOf(faction)];
+// a fact (crossing, spell, gate) for one faction only: is it there for this one?
+const forSide = (only, faction) => !only || only === sideOf(faction);
 function world(m, x, y) {
   const b = bounds[m]; if (!b) return null;
   return [b.left + x * (b.right - b.left), b.top + y * (b.bottom - b.top), b.inst];
@@ -48,7 +61,12 @@ function segDist(a, b, p) {
 function plan(from, to, opts = {}) {
   const level = opts.level ?? 60, known = opts.knownFP || new Set();
   const RIDE = F.MOUNT && level >= F.MOUNT.level ? F.MOUNT.speed : F.RIDE; // mounted from 40
-  const risky = (m) => { const z = F.ZONE_MIN[m]; return z !== undefined && z > level + F.DANGER_ABOVE; };
+  // zone levels: a Horde player's own lands are not the 60 that keeps the Alliance out (ZONE_MIN_HORDE)
+  const horde = sideOf(opts.faction) === 'horde';
+  const zoneMin = (m) => (horde && F.ZONE_MIN_HORDE && F.ZONE_MIN_HORDE[m] !== undefined ? F.ZONE_MIN_HORDE[m] : F.ZONE_MIN[m]);
+  const risky = (m) => { const z = zoneMin(m); return z !== undefined && z > level + F.DANGER_ABOVE; };
+  const GATES = F.GATES.filter((g) => forSide(g.faction, opts.faction));
+  const mySide = horde ? 'H' : 'A';
   const N = [{ id: 'you', ...from, w: world(from.m, from.x, from.y) }, { id: 'target', ...to, w: world(to.m, to.x, to.y) }];
   if (!N[0].w || !N[1].w) return null;
   const adj = [[], []];
@@ -62,7 +80,11 @@ function plan(from, to, opts = {}) {
   if (NET) {
     for (const n of NET.nodes) {
       const w = world(n.m, n.x, n.y); if (!w) continue;
-      idx[n.id] = add({ ...n, w, fp: n.kind === 'fp' && known.has(n.m) });
+      // a border crossing inside the other faction's town or camp (Mor'shan Rampart's gate) is no way for you: a
+      // crossing is a chokepoint, and the border has another one clear of it (tools/crossings.js)
+      if (n.kind === 'cross' && HOST.some((h) => h.w[2] === w[2] && Math.hypot(h.w[0] - w[0], h.w[1] - w[1]) < h.r + CROSS_CLEAR)) continue;
+      // a flight master of the other faction is only a spot on the road for you
+      idx[n.id] = add({ ...n, w, fp: n.kind === 'fp' && (!n.side || n.side.includes(mySide)) && known.has(n.m) });
       netMaps.add(n.m); if (n.m2) netMaps.add(n.m2);
     }
     for (const e of NET.edges) {
@@ -73,7 +95,7 @@ function plan(from, to, opts = {}) {
   }
   // without the network (or off it): flight paths and docks as plain nodes, straight rides (the old graph)
   if (!NET) {
-    for (const [m, list] of Object.entries(FLIGHT)) { if (!known.has(+m) || !list.length) continue; const [x, y, npc] = list[0], w = world(+m, x, y); if (w) add({ id: 'fp' + m, kind: 'fp', fp: true, m: +m, x, y, name: npc, w }); }
+    for (const [m, list] of Object.entries(flightFor(opts.faction))) { if (!known.has(+m) || !list.length) continue; const [x, y, npc] = list[0], w = world(+m, x, y); if (w) add({ id: 'fp' + m, kind: 'fp', fp: true, m: +m, x, y, name: npc, w }); }
     for (const [key, d] of Object.entries(F.DOCKS)) { const w = world(d.m, d.x, d.y); if (w) idx['dock-' + key] = add({ id: 'dock-' + key, kind: 'dock', dock: key, ...d, w }); }
   }
   // docks the network doesn't have (a map without a walk map: Zephras Isle's skyship): plain nodes joined in straight
@@ -91,10 +113,10 @@ function plan(from, to, opts = {}) {
   }
   // you and the target join the network at the key points of their own map (anywhere on the continent if the map has none)
   const onMap = (n, m) => n.m === m || n.m2 === m;
-  const gated = (a, b) => !(a.gate || b.gate) && F.GATES.some((g) => (a.m === g.a && b.m === g.b) || (a.m === g.b && b.m === g.a));
+  const gated = (a, b) => !(a.gate || b.gate) && GATES.some((g) => (a.m === g.a && b.m === g.b) || (a.m === g.b && b.m === g.a));
   // gates (the breach past Mor'shan Rampart) join the key points of their own map (and the straight-line fallback)
   const firstGate = N.length;
-  F.GATES.forEach((g, k) => { const w = world(g.via.m, g.via.x, g.via.y); if (w) add({ id: 'gate' + k, kind: 'gate', gate: true, ...g.via, w }); });
+  GATES.forEach((g, k) => { const w = world(g.via.m, g.via.x, g.via.y); if (w) add({ id: 'gate' + k, kind: 'gate', gate: true, ...g.via, w }); });
   for (let gi = firstGate; gi < N.length; gi++) for (let v = 2; v < firstGate; v++) {
     const n = N[v]; if (NET ? onMap(n, N[gi].m) : n.w[2] === N[gi].w[2] && !gated(n, N[gi])) edge(gi, v, (dist(N[gi], n) * (NET ? OFFNET : 1)) / RIDE, 'ride');
   }
@@ -121,9 +143,17 @@ function plan(from, to, opts = {}) {
   for (const u of fps) for (const v of fps) if (u < v && N[u].w[2] === N[v].w[2]) edge(u, v, F.FLY_EXTRA + dist(N[u], N[v]) / F.FLY, 'fly');
   // a crossing limited to some races (5th entry: the Skyborne-only portal) is not there for anyone else
   // (or classes: the druids' hippogryph out of Moonglade)
-  for (const [a, b, cost = F.BOAT, , races] of F.BOATS) { if (races && !((opts.race && races.includes(opts.race)) || (opts.class && races.includes(opts.class)))) continue; const u = idx['dock-' + a], v = idx['dock-' + b]; if (u !== undefined && v !== undefined) edge(u, v, cost, 'boat'); }
+  // (6th entry: a faction's own crossings - the zeppelins, the Stormwind boat)
+  // (7th entry true: one way - a portal with none back)
+  for (const [a, b, cost = F.BOAT, , races, only, oneway] of F.BOATS) {
+    if (!forSide(only, opts.faction)) continue;
+    if (races && !((opts.race && races.includes(opts.race)) || (opts.class && races.includes(opts.class)))) continue;
+    const u = idx['dock-' + a], v = idx['dock-' + b];
+    if (u === undefined || v === undefined) continue;
+    if (oneway) adj[u].push([v, cost, 'boat']); else edge(u, v, cost, 'boat');
+  }
   // a class spell that takes you somewhere from anywhere (Teleport: Moonglade): one way, from where you stand
-  for (const s of F.SPELLS || []) if (opts.class === s.class && level >= s.level && idx['dock-' + s.dock] !== undefined && N[idx['dock-' + s.dock]].m !== from.m) adj[0].push([idx['dock-' + s.dock], s.cast || 10, 'spell']);
+  for (const s of F.SPELLS || []) if (opts.class === s.class && level >= s.level && forSide(s.faction, opts.faction) && idx['dock-' + s.dock] !== undefined && N[idx['dock-' + s.dock]].m !== from.m) adj[0].push([idx['dock-' + s.dock], s.cast || 10, 'spell']);
   // Dijkstra
   const D = N.map(() => Infinity), prev = [], how = [], done = [];
   D[0] = 0;
@@ -142,7 +172,8 @@ function plan(from, to, opts = {}) {
   for (const l of legs) { const p = merged[merged.length - 1]; if (p && p.how === 'ride' && l.how === 'ride') { p.to = l.to; p.via.push(l.from); } else merged.push({ ...l, via: [] }); }
   return { sec: D[1], legs: merged };
 }
-const arrival = (m) => { const f = FLIGHT[m] && FLIGHT[m][0]; return f ? { m, x: f[0], y: f[1] } : { m, x: 0.5, y: 0.5 }; };
+// where you arrive in a zone: your faction's flight master there (the middle of the map if it has none)
+const arrival = (m, faction) => { const FL = flightFor(faction), f = FL[m] && FL[m][0]; return f ? { m, x: f[0], y: f[1] } : { m, x: 0.5, y: 0.5 }; };
 const label = (n) => (n.id === 'target' ? 'there' : n.id === 'you' ? 'you' : n.name || n.id);
 const describe = (r) => (r ? r.legs.map((l) => l.how + ' ' + label(l.to) + (l.via && l.via.length ? ' (via ' + l.via.map(label).join(', ') + ')' : '')).join(' > ') + ` (${Math.round(r.sec / 60)} min)` : 'no safe way');
-module.exports = { hostileTowns, segDist, init, plan, arrival, describe, world, facts: F, net: NET, uiOfArea: (a) => uiOfArea[a], areaOfUi: (m) => areaOfUi[m], flight: () => FLIGHT };
+module.exports = { hostileTowns, segDist, init, plan, arrival, describe, world, facts: F, net: NET, uiOfArea: (a) => uiOfArea[a], areaOfUi: (m) => areaOfUi[m], flight: (faction) => (faction ? flightFor(faction) : FLIGHT), flights: () => FLIGHTS };

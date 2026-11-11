@@ -61,5 +61,17 @@ const show = (out) => out.map((s, i) => `${i + 1}:${s.k}:${s.q || s.dest || ''}$
   const out = ensure(steps), at = out.choiceAt(5);
   check('travel step added at the boundary: you choose before you go', at > 0 && out[at - 1].k === 'fly' && out[at - 1].to === DW && out[at].q === 57, show(out));
 }
+// a pick-up before its prerequisite (The Black Shield needs one of James Hyal / They Call Him Smiling Jim): across legs it
+// landed before them and the audit flagged it - the safety net leaves the quest out unless a prerequisite is in first
+{
+  const bs = Object.values(db.quests).find((q) => q.name === 'The Black Shield' && (q.preSingle || []).includes(1282));
+  const q2 = (id, name) => [{ k: 'accept', q: id, name, m: 1445, x: 0.5, y: 0.5, sec: 1 }, { k: 'turnin', q: id, name, m: 1445, x: 0.5, y: 0.5, sec: 1 }];
+  const without = ensure(q2(bs.id, bs.name), { done: [], active: [] });
+  check('a pick-up with no prerequisite done: left out', !without.some((x) => x.q === bs.id) && without.dropped >= 1, without.map((x) => x.k + ' ' + x.q));
+  const withPre = ensure([...q2(1282, 'They Call Him Smiling Jim'), ...q2(bs.id, bs.name)], { done: [], active: [] });
+  check('the same pick-up after one of its prerequisites: kept', withPre.filter((x) => x.q === bs.id).length === 2, withPre.map((x) => x.k + ' ' + x.q));
+  const done = ensure(q2(bs.id, bs.name), { done: [1302], active: [] });
+  check('a prerequisite done before the route counts', done.filter((x) => x.q === bs.id).length === 2, done.map((x) => x.k + ' ' + x.q));
+}
 console.log(fails ? fails + ' failed' : 'all passed');
 process.exit(fails ? 1 : 0);

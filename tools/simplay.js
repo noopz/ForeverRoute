@@ -23,7 +23,7 @@ const [kind, key] = plan.split(':');
 const lua = (v) => JSON.stringify(v);
 // the sim plays the plan's race and class (a built-in plan's key: human-paladin), else a gnome warlock. The simulator
 // has no Skyborne: a night elf stands in (the plan is loaded by its key, so only the model differs)
-const SIM_RACE = { human: 'Human', dwarf: 'Dwarf', gnome: 'Gnome', nightelf: 'NightElf', skyborne: 'NightElf' }, SIM_CLASS = { warrior: 'Warrior', paladin: 'Paladin', hunter: 'Hunter', rogue: 'Rogue', priest: 'Priest', mage: 'Mage', warlock: 'Warlock', druid: 'Druid', shaman: 'Shaman' };
+const SIM_RACE = { human: 'Human', dwarf: 'Dwarf', gnome: 'Gnome', nightelf: 'NightElf', skyborne: 'NightElf', orc: 'Orc', troll: 'Troll', tauren: 'Tauren', undead: 'Scourge' }, SIM_CLASS = { warrior: 'Warrior', paladin: 'Paladin', hunter: 'Hunter', rogue: 'Rogue', priest: 'Priest', mage: 'Mage', warlock: 'Warlock', druid: 'Druid', shaman: 'Shaman' };
 const [kRace, kClass] = kind === 'starter' ? key.split('-') : [];
 const simRace = SIM_RACE[kRace] || 'Gnome', simClass = SIM_CLASS[kClass] || 'Warlock';
 const STALL_SEC = +(process.env.FR_STALL || 60);
@@ -77,7 +77,7 @@ if (simKey && fs.existsSync(path.join(SIMCACHE, simKey + '.md'))) {
   try {
     const dest = path.join(work, 'ForeverRoute');
     fs.cpSync(src, dest, { recursive: true, filter: (p) => !/[\\/]tests([\\/]|$)/.test(path.relative(src, p) ? '/' + path.relative(src, p) : '') });
-    if (kind === 'char') fs.copyFileSync(path.join(ROOT, '..', 'Interface', 'AddOns', 'ForeverRoute', 'Route.lua'), path.join(dest, 'Route.lua'));
+    if (kind === 'char') fs.copyFileSync(path.join(require('./game-dir').addonDir(), 'Route.lua'), path.join(dest, 'Route.lua'));
     fs.mkdirSync(path.join(dest, 'tests'), { recursive: true });
     for (const f of ['_harness.lua', '_player.lua']) fs.copyFileSync(path.join(src, 'tests', f), path.join(dest, 'tests', f));
     // a built-in plan lives in its own load-on-demand addon: hand the sim its file directly
@@ -105,7 +105,7 @@ if (simKey && fs.existsSync(path.join(SIMCACHE, simKey + '.md'))) {
       await new Promise((resolve) => {
         const child = spawn(path.join(SIM, 'wow-sim.exe'), ['--allow-ui-version-mismatch', '--addons-path', cw, '--session-wtf-path', path.join(cw, 'wtf'),
           '--class', simClass, '--race', simRace, 'run-tests', 'ForeverRoute'],
-        { cwd: SIM, env: { ...process.env, WOW_INSTALL_PATH: path.resolve(ROOT, '..', '..') }, stdio: ['ignore', 'pipe', 'pipe'] });
+        { cwd: SIM, env: { ...process.env, WOW_INSTALL_PATH: require('./game-dir').WOW }, stdio: ['ignore', 'pipe', 'pipe'] });
         child.stdout.on('data', (d) => (raw1 += d)); child.stderr.on('data', (d) => (raw1 += d));
         // the watchdog: the logs grow while the player plays; when none has for STALL_SEC, something loops
         let lastSize = -1, lastChange = Date.now();

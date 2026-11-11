@@ -138,17 +138,19 @@ local function build()
     local angle, dist = HBD:GetWorldVector(pinst, px, py, target.wx, target.wy)
     if not dist then return end
     local shown, hint = dist, nil
-    local P = target.path
+    -- the live line from where you stand (Nav.lua), when this zone has a walk map; else the planner's path
+    local live = ns.Nav and target.key and ns.Nav.PathFor(target.key)
+    local P = live or target.path
     if P and dist > (target.r or 12) then
       local aim, walk, off, zHere = follow(P, px, py)
       -- the planned path runs from the previous stop; you may well have come from somewhere else. Use it only while
       -- you're on it (or still at its start); otherwise point straight at the target and hide the line.
       local St = P.start
       local atStart = St and math.sqrt((px - St[1]) ^ 2 + (py - St[2]) ^ 2) <= (P.startR or 40) + 25
-      local onPath = off <= 45 or atStart
+      local onPath = live and true or off <= 45 or atStart
       -- tell the map line how far along you are, so it only draws what's still ahead (not the part behind you)
       lineAcc = (lineAcc or 0) + el
-      if lineAcc >= 1.5 and (P.cursor ~= P.lastSeg or not P.lastPX or math.sqrt((px - P.lastPX) ^ 2 + (py - P.lastPY) ^ 2) > 12) then
+      if not live and lineAcc >= 1.5 and (P.cursor ~= P.lastSeg or not P.lastPX or math.sqrt((px - P.lastPX) ^ 2 + (py - P.lastPY) ^ 2) > 12) then
         lineAcc = 0; P.lastSeg, P.lastPX, P.lastPY = P.cursor, px, py
         ns.Fire("FR_PATHPROGRESS", target.index, onPath and P.cursor or -1)
       end
@@ -159,7 +161,8 @@ local function build()
         shown = walk
       end
       if dz and math.abs(dz) >= 6 and Arrow.Indoors() then hint = string.format(dz > 0 and "|cff8fd3ff%d yd up|r" or "|cff8fd3ff%d yd down|r", math.floor(math.abs(dz) + 0.5)) end
-    elseif P and P.z1 and P.z0 and dist <= 40 and math.abs(P.z1 - P.z0) >= 6 and Arrow.Indoors() then
+    elseif target.path and target.path.z1 and target.path.z0 and dist <= 40 and math.abs(target.path.z1 - target.path.z0) >= 6 and Arrow.Indoors() then
+      P = target.path
       hint = string.format("|cff8fd3ff%s - %d yd %s|r", P.z1 > P.z0 and "it's upstairs" or "it's below", math.floor(math.abs(P.z1 - P.z0) + 0.5), P.z1 > P.z0 and "up" or "down")
     end
     target.hint = hint
@@ -285,6 +288,9 @@ function Arrow.SetTarget(i, force)
     -- a waypoint gets its own small radius: the step's (25 yd for a dungeon, up to 60 for a kill area) belongs to the step
     target = { index = i, m = m, x = x, y = y, r = leg and 8 or s.r, leg = leg, zone = s.zone, wx = wx, wy = wy, winst = winst, label = label or ns.Card.Plain((ns.Card.Describe(s))) }
     target.path = (not label) and buildPath(s, m, wx, wy) or nil
+    -- the live line (Nav.lua) is for exactly this target: the step itself (with its planned floor height) or a waypoint
+    target.key = wx and (i .. ":" .. math.floor(wx) .. ":" .. math.floor(wy)) or nil
+    target.z = (not leg) and (m == s.m) and s.z or nil
     if target.path then
       local list = ForeverRouteData.steps
       for j = i - 1, math.max(1, i - 12), -1 do
@@ -297,11 +303,13 @@ function Arrow.SetTarget(i, force)
         end
       end
     end
+    if ns.Nav then ns.Nav.Want(target.key and { key = target.key, wx = wx, wy = wy, inst = winst, z = target.z, m = m } or nil) end
     f.label:SetText(target.label)
     f.arrow:Show(); f.check:Hide(); f.pulse:Stop(); f.ring:SetAlpha(0)
     f:SetShown(visible(i)); noteHidden(not visible(i) and hiddenReason(i, s) or nil)
   else
     target = nil; f:Hide(); ns.Fire("FR_DISTANCE", nil)
+    if ns.Nav then ns.Nav.Want(nil) end
     noteHidden(not step and "no step" or ns.Is(UnitOnTaxi, "player") and "on a flight" or (trip and trip.how == "aboard") and "aboard (boat or tram, or somewhere no trip starts from)" or step.k == "hearth" and "hearth step (nowhere to walk)" or ("no position for this step: " .. tostring(step.k) .. " " .. tostring(step.text)))
   end
 end

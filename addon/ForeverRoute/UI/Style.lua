@@ -220,11 +220,16 @@ function Style.Pill(parent, text, color)
   return p
 end
 -- zone chips flowing left to right with ">" between, wrapping at width; returns the height used
-function Style.Chips(holder, zones, width)
+-- max (optional): only the first max zones, then "+N more zones" - the next few give the sense of a path; the ones
+-- beyond are hours away, and the plan is rebuilt long before you get there
+function Style.Chips(holder, zones, width, max)
   holder.chips = holder.chips or {}
   for _, c in ipairs(holder.chips) do c:Hide(); c.sep:Hide() end
+  if holder.more then holder.more:Hide() end
   local x, y, lineH, gap = 0, 0, 18, 4
+  local more = (max and #zones > max) and (#zones - max) or 0
   for i, z in ipairs(zones) do
+    if more > 0 and i > max then break end
     local c = holder.chips[i]
     if not c then
       c = CreateFrame("Frame", nil, holder)
@@ -244,6 +249,13 @@ function Style.Chips(holder, zones, width)
     x = x + sepW
     c:ClearAllPoints(); c:SetPoint("TOPLEFT", holder, "TOPLEFT", x, -y); c:Show()
     x = x + w + gap
+  end
+  if more > 0 then
+    holder.more = holder.more or Style.Text(holder, 10, Style.C.dim)
+    holder.more:SetText("> +" .. more .. " more zone" .. (more == 1 and "" or "s"))
+    local w = holder.more:GetStringWidth() + 4
+    if x > 0 and x + w > width then x = 0; y = y + lineH + 2 end
+    holder.more:ClearAllPoints(); holder.more:SetPoint("TOPLEFT", holder, "TOPLEFT", x + 2, -y - 2); holder.more:Show()
   end
   return y + lineH
 end

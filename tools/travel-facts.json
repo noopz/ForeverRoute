@@ -216,6 +216,120 @@
       "town": "Darnassus",
       "zone": "Darnassus",
       "source": "Elissa Dumas, the city's portal trainer (QuestieDB spawn), where the teleport lands you; levels from warcraft.wiki.gg Teleport (mage ability): Stormwind and Ironforge at 20, Darnassus at 30. Needs a Rune of Teleportation"
+    },
+    "durotarZeppelin": {
+      "m": 1411,
+      "x": 0.5076,
+      "y": 0.1322,
+      "name": "the zeppelin tower (Orgrimmar)",
+      "town": "Orgrimmar",
+      "zone": "Durotar",
+      "say": {
+        "tirisfalZeppelin": "At the zeppelin tower outside Orgrimmar's gate, take Frezza's zeppelin to Undercity (Tirisfal Glades)",
+        "gromgolZeppelin": "At the zeppelin tower outside Orgrimmar's gate, take Snurk Bucksquick's zeppelin to Grom'gol (Stranglethorn)"
+      },
+      "source": "QuestieDB 1.0.13 spawns: Frezza <Zeppelin Master> Durotar 50.82, 13.54 (to Undercity), Snurk Bucksquick 50.69, 12.89 (to Grom'gol); routes: warcraft.wiki.gg Frezza, Snurk Bucksquick, World of Warcraft: Forever (Transport connections). Wowhead Forever (tooltip service, dataEnv 16, 2026-11-10): Frezza (npc 9564) 50.8,13.4-13.6 and Snurk Bucksquick (12136) 50.6,12.8 in Durotar, both Zeppelin Master - verified"
+    },
+    "tirisfalZeppelin": {
+      "m": 1420,
+      "x": 0.6126,
+      "y": 0.5903,
+      "name": "the zeppelin tower (Undercity)",
+      "town": "Undercity",
+      "zone": "Tirisfal Glades",
+      "say": {
+        "durotarZeppelin": "At the zeppelin tower by the Undercity ruins, take Zapetta's zeppelin to Orgrimmar (Durotar)",
+        "gromgolZeppelin": "At the zeppelin tower by the Undercity ruins, take Hin Denburg's zeppelin to Grom'gol (Stranglethorn)"
+      },
+      "source": "QuestieDB 1.0.13 spawns: Zapetta <Zeppelin Master> Tirisfal 60.74, 58.87 (to Orgrimmar), Hin Denburg 61.78, 59.18 (to Grom'gol: warcraft.wiki.gg Hin Denburg). Wowhead Forever (tooltip service, dataEnv 16, 2026-11-10): Zapetta (9566) 60.8,58.8 and Hin Denburg (3150) 61.8,59.0 in Tirisfal, both Zeppelin Master - verified"
+    },
+    "gromgolZeppelin": {
+      "m": 1434,
+      "x": 0.3149,
+      "y": 0.2964,
+      "name": "the zeppelin tower (Grom'gol)",
+      "town": "Grom'gol Base Camp",
+      "zone": "Stranglethorn Vale",
+      "say": {
+        "durotarZeppelin": "At Grom'gol's zeppelin tower, take Nez'raz's zeppelin to Orgrimmar (Durotar)",
+        "tirisfalZeppelin": "At Grom'gol's zeppelin tower, take Squibby Overspeck's zeppelin to Undercity (Tirisfal Glades)"
+      },
+      "source": "QuestieDB 1.0.13 spawns: Nez'raz <Zeppelin Master> STV 31.43, 29.91 (to Orgrimmar: warcraft.wiki.gg Nez'raz), Squibby Overspeck 31.54, 29.36 (to Undercity, by elimination). Wowhead Forever (tooltip service, dataEnv 16, 2026-11-10): Nez'raz (3149) 31.4,29.8 and Squibby Overspeck (12137) 31.4-31.6,29.4 in Stranglethorn - verified (which master flies where is not in the tooltip; the NPC pages refuse scripts)"
+    },
+    "mageOrgrimmar": {
+      "m": 1454,
+      "x": 0.3868,
+      "y": 0.8541,
+      "name": "the Darkbriar Lodge (Orgrimmar)",
+      "town": "Orgrimmar",
+      "zone": "Orgrimmar",
+      "source": "Thuul <Portal Trainer> (QuestieDB 1.0.13 spawns: 1454 38.68, 85.41) as the landing spot, like the Alliance mage docks (unverified in game). Level 20 (Classic; Conquest Capped, WoW Forever travel routes). Wowhead Forever (tooltip service, dataEnv 16, 2026-11-10): Thuul (5958) Portal Trainer, Orgrimmar 38.4-38.6,85.4-85.8; Teleport: Orgrimmar (spell 3567) level 20, unchanged on Forever (wowhead.com/forever/changes/spellbook/mage) - verified"
+    },
+    "mageUndercity": {
+      "m": 1458,
+      "x": 0.8419,
+      "y": 0.1558,
+      "name": "the Magic Quarter (Undercity)",
+      "town": "Undercity",
+      "zone": "Undercity",
+      "source": "Lexington Mortaim <Portal Trainer> (QuestieDB 1.0.13 spawns: 1458 84.19, 15.58) as the landing spot (unverified in game). Level 20 (Classic; Conquest Capped). Wowhead Forever (tooltip service, dataEnv 16, 2026-11-10): Lexington Mortaim (2492) Portal Trainer, Undercity 83.2-84.6,15.2-16.8; Teleport: Undercity (3563) level 20, unchanged on Forever - verified"
+    },
+    "mageThunderBluff": {
+      "m": 1456,
+      "x": 0.225,
+      "y": 0.1691,
+      "name": "the Spirit Rise (Thunder Bluff)",
+      "town": "Thunder Bluff",
+      "zone": "Thunder Bluff",
+      "source": "Birgitte Cranston <Portal Trainer> (QuestieDB 1.0.13 spawns: 1456 22.5, 16.91) as the landing spot (unverified in game). Level 30 (Classic; Conquest Capped). Wowhead Forever (tooltip service, dataEnv 16, 2026-11-10): Birgitte Cranston (5957) Portal Trainer, Thunder Bluff 21.8-22.6,16.4-18.0; Teleport: Thunder Bluff (3566) level 30, unchanged on Forever - verified"
+    },
+    "moongladeDruidH": {
+      "m": 1450,
+      "x": 0.4428,
+      "y": 0.4587,
+      "name": "the druid wind rider master (Moonglade)",
+      "town": "Nighthaven",
+      "zone": "Moonglade",
+      "say": {
+        "thunderBluffFlight": "In Moonglade, fly with Bunthen Plainswind (the druids' wind rider master) to Thunder Bluff"
+      },
+      "source": "QuestieDB 1.0.13 spawns: Bunthen Plainswind <Thunder Bluff Flight Master>, Moonglade 44.28, 45.87. Wowhead Forever (tooltip service, dataEnv 16, 2026-11-10): Bunthen Plainswind (11798) Thunder Bluff Flight Master, Moonglade 44.4-44.6,45.4-45.6 - verified; Teleport: Moonglade (18960) druid level 10"
+    },
+    "thunderBluffFlight": {
+      "m": 1456,
+      "x": 0.47,
+      "y": 0.4983,
+      "name": "Tal (Thunder Bluff)",
+      "town": "Thunder Bluff",
+      "zone": "Thunder Bluff",
+      "say": {
+        "moongladeDruidH": "In Thunder Bluff, fly with Tal to Moonglade (druids only)"
+      },
+      "source": "QuestieDB 1.0.13 spawns: Tal <Wind Rider Master>, Thunder Bluff 47.0, 49.83; Tal flying druids to Moonglade is the Classic twin of Vesprystus (not re-checked for Forever). Wowhead Forever (tooltip service, dataEnv 16, 2026-11-10): Tal (2995) Wind Rider Master, Thunder Bluff 46.8,49.4-50.0 - verified (that Tal flies druids to Moonglade is not in the tooltip)"
+    },
+    "valanaarWest": {
+      "m": 2521,
+      "x": 0.5805,
+      "y": 0.8039,
+      "name": "Valanaar's west skyship dock (Windshapers)",
+      "town": "Valanaar",
+      "zone": "Zephras Isle",
+      "say": {
+        "skywatcher": "Take the skycutter at Valanaar's west dock (the Windshapers' dock) to Skywatcher Plateau (Mulgore)"
+      },
+      "source": "QuestieDB 1.0.13: Windshapers Dockmaster (275270) Zephras Isle 58.05, 80.39. Wowhead Forever (tooltip service, dataEnv 16, 2026-11-10): Windshapers Dockmaster 58.0, 80.4-80.6 - verified; Wowhead Forever npc=275270: 'The Skycutter bound for Mulgore has arrived!'. Conquest Capped: the westernmost Valanaar dock is the Horde one. The Alliance dock 'valanaar' is the High Order Dockmaster (275269)"
+    },
+    "skywatcher": {
+      "m": 1412,
+      "x": 0.342,
+      "y": 0.254,
+      "name": "the skycutter dock (Skywatcher Plateau)",
+      "town": "Skywatcher Plateau",
+      "zone": "Mulgore",
+      "say": {
+        "valanaarWest": "At Skywatcher Plateau, take the skycutter to Zephras Isle (Valanaar)"
+      },
+      "source": "Placed at the launch-week portal to Valanaar (QuestieDB 1.0.14 object 716304, Mulgore 34.2, 25.4; Wowhead Forever verified), which Blizzard spawned near this dock: no dock NPC is in the data. Boats.lua learns the real pier in game"
     }
   },
   "ZONE_MIN": {
@@ -264,22 +378,56 @@
     "1457": 1,
     "2521": 1
   },
+  "_ZONE_MIN_HORDE": "A Horde player's zone levels where they differ from ZONE_MIN (which keeps the Alliance out of Horde land at 60): their own start zones and Silverpine (Classic levels).",
+  "ZONE_MIN_HORDE": {
+    "1411": 1,
+    "1412": 1,
+    "1420": 1,
+    "1421": 10
+  },
   "BOATS": [
     [
       "stormwind",
-      "auberdine"
+      "auberdine",
+      300,
+      "boat",
+      null,
+      "alliance"
     ],
     [
       "menethilN",
-      "southshore"
+      "southshore",
+      300,
+      "boat",
+      null,
+      "alliance",
+      true
     ],
     [
       "southshore",
-      "auberdine"
+      "auberdine",
+      300,
+      "boat",
+      null,
+      "alliance",
+      true
+    ],
+    [
+      "auberdine",
+      "menethilN",
+      300,
+      "boat",
+      null,
+      "alliance",
+      true
     ],
     [
       "menethilS",
-      "theramore"
+      "theramore",
+      300,
+      "boat",
+      null,
+      "alliance"
     ],
     [
       "bootybay",
@@ -287,19 +435,27 @@
     ],
     [
       "auberdine",
-      "rutheran"
+      "rutheran",
+      300,
+      "boat",
+      null,
+      "alliance"
     ],
     [
       "tramSW",
       "tramIF",
       90,
-      "tram"
+      "tram",
+      null,
+      "alliance"
     ],
     [
       "valanaar",
       "dalaran",
       360,
-      "skyship"
+      "skyship",
+      null,
+      "alliance"
     ],
     [
       "dalaran",
@@ -308,13 +464,16 @@
       "portal",
       [
         "skyborne"
-      ]
+      ],
+      "alliance"
     ],
     [
       "darnassusPortal",
       "rutheranPortal",
       10,
-      "portal"
+      "portal",
+      null,
+      "alliance"
     ],
     [
       "moongladeDruid",
@@ -323,7 +482,50 @@
       "flight",
       [
         "druid"
-      ]
+      ],
+      "alliance"
+    ],
+    [
+      "durotarZeppelin",
+      "tirisfalZeppelin",
+      300,
+      "zeppelin",
+      null,
+      "horde"
+    ],
+    [
+      "durotarZeppelin",
+      "gromgolZeppelin",
+      300,
+      "zeppelin",
+      null,
+      "horde"
+    ],
+    [
+      "tirisfalZeppelin",
+      "gromgolZeppelin",
+      300,
+      "zeppelin",
+      null,
+      "horde"
+    ],
+    [
+      "moongladeDruidH",
+      "thunderBluffFlight",
+      240,
+      "flight",
+      [
+        "druid"
+      ],
+      "horde"
+    ],
+    [
+      "valanaarWest",
+      "skywatcher",
+      360,
+      "skyship",
+      null,
+      "horde"
     ]
   ],
   "GATES": [
@@ -335,11 +537,64 @@
         "x": 0.49,
         "y": 0.05,
         "name": "the breach east of Mor'shan Rampart"
-      }
+      },
+      "faction": "alliance"
     }
   ],
+  "_LIFTS": "Lifts the walk maps cannot ride, by area id (map points 0-100 on that area's map): tools/crossings.js joins the bottom and top floors of each (VoxNav.addLifts). Thunder Bluff: QuestieDB objects \"Elevator to Mulgore\" (50496-50528), the top stations. Undercity: the three shafts under the Ruins of Lordaeron throne room, found in the walk map (city floor z -63..-66 to the throne room floor z ~36; Tirisfal 61.5-62.3, 68.5-69.0) - not checked in game.",
+  "LIFTS": {
+    "1497": [
+      [
+        64.3,
+        16.4
+      ],
+      [
+        65.1,
+        17.7
+      ],
+      [
+        68.1,
+        18.6
+      ]
+    ],
+    "1638": [
+      [
+        44.29,
+        59.75
+      ],
+      [
+        37.72,
+        50.78
+      ],
+      [
+        37.75,
+        62.6
+      ],
+      [
+        49.61,
+        36.32
+      ],
+      [
+        46.13,
+        42.43
+      ],
+      [
+        44.23,
+        39.98
+      ],
+      [
+        41.99,
+        34.62
+      ],
+      [
+        43.03,
+        56.19
+      ]
+    ]
+  },
   "_BOATS_races": "A 5th entry on a crossing lists the races (or classes: the druids-only hippogryph out of Moonglade) that may use it: the Dalaran-Stormwind portal is Skyborne-only (Method, \"how to get to all starting zones\", Nov 2026). Other races reach Dalaran overland through Hillsbrad.",
-  "_SPELLS": "class spells that take you somewhere from anywhere (one way): class, from level, the dock you land at, cast seconds, what you do",
+  "_BOATS_faction": "A 6th entry names the one faction that can use a crossing (none: both). The Alliance ones dock in Alliance towns or cities; the zeppelins are Horde (Forever adds no Horde portal: Method, Conquest Capped). Spells and gates take a faction field the same way.",
+  "_SPELLS": "class spells that take you somewhere from anywhere (one way): class, from level, the dock you land at, cast seconds, what you do Mage teleports checked on Wowhead Forever (changes/spellbook/mage, 2026-11-10): all six city teleports unchanged; Forever adds Teleport: Dalaran at 50 (not modelled).",
   "SPELLS": [
     {
       "class": "druid",
@@ -353,21 +608,50 @@
       "level": 20,
       "dock": "mageStormwind",
       "cast": 10,
-      "say": "Cast Teleport: Stormwind"
+      "say": "Cast Teleport: Stormwind",
+      "faction": "alliance"
     },
     {
       "class": "mage",
       "level": 20,
       "dock": "mageIronforge",
       "cast": 10,
-      "say": "Cast Teleport: Ironforge"
+      "say": "Cast Teleport: Ironforge",
+      "faction": "alliance"
     },
     {
       "class": "mage",
       "level": 30,
       "dock": "mageDarnassus",
       "cast": 10,
-      "say": "Cast Teleport: Darnassus"
+      "say": "Cast Teleport: Darnassus",
+      "faction": "alliance"
+    },
+    {
+      "class": "mage",
+      "level": 20,
+      "dock": "mageOrgrimmar",
+      "cast": 10,
+      "faction": "horde",
+      "say": "Cast Teleport: Orgrimmar"
+    },
+    {
+      "class": "mage",
+      "level": 20,
+      "dock": "mageUndercity",
+      "cast": 10,
+      "faction": "horde",
+      "say": "Cast Teleport: Undercity"
+    },
+    {
+      "class": "mage",
+      "level": 30,
+      "dock": "mageThunderBluff",
+      "cast": 10,
+      "faction": "horde",
+      "say": "Cast Teleport: Thunder Bluff"
     }
-  ]
+  ],
+  "_BOATS_portals": "No dock portals: QuestieDB 1.0.14 has 'Portal To ...' objects at most docks and zeppelin towers, but they were Blizzard's temporary launch-week fix while boats and zeppelins got lost (blue post, Aggrend, 2026-11-05: https://us.forums.blizzard.com/en/wow/t/zeppelins-broken/2401777; reported gone 2026-11-06). Routes use the boats and zeppelins.",
+  "_BOATS_loop": "The Menethil ship is a one-way loop: Menethil -> Southshore -> Auberdine -> Menethil (Method, All Travel Routes in WoW Forever, 2026-10-14: https://www.method.gg/wow-forever/all-travel-routes-in-wow-forever-boats-zeppelins). Its three legs carry the 7th entry true (one way)."
 }

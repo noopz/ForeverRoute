@@ -5,7 +5,7 @@
 //   addXp(level, xp, n) -> { level, xp } after gaining n XP (levels roll over; 60 is the cap)
 //   RACE_BIT, CLASS_BIT the quest data's race and class masks; canTake(q, race, klass) checks a quest against them
 //   CAPITAL_AREAS       capital cities by zone area id (no mobs to grind, no quests of their own for the zone choice)
-//   CAPITAL_MAPS        the Alliance capitals by uiMap id
+//   CAPITAL_MAPS        the capitals by uiMap id (both factions: a plan only ever enters its own)
 //   QUEST_LOG_MAX       quests the log holds on Forever
 const XP_TO_LEVEL = [0, 400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600, 8800, 10100, 11400, 12900, 14400, 16000, 17700, 19400, 21300, 23200, 25200, 27300, 29400, 31700, 34000, 36400, 38900, 41400, 44300, 47400, 50800, 54500, 58600, 62800, 67100, 71600, 76100, 80800, 85700, 90700, 95800, 101000, 106300, 111800, 117500, 123200, 129100, 135100, 141200, 147500, 153900, 160400, 167100, 173900, 180800, 187900, 195000, 202300, 209800];
 
@@ -51,7 +51,7 @@ function canTake(q, race, klass) {
 }
 
 const CAPITAL_AREAS = new Set([1519, 1537, 1657, 1497, 1637, 1638]); // Stormwind, Ironforge, Darnassus, Undercity, Orgrimmar, Thunder Bluff
-const CAPITAL_MAPS = new Set([1453, 1455, 1457]); // Stormwind, Ironforge, Darnassus
+const CAPITAL_MAPS = new Set([1453, 1455, 1457, 1454, 1456, 1458]); // Stormwind, Ironforge, Darnassus, Orgrimmar, Thunder Bluff, Undercity
 const QUEST_LOG_MAX = 40;
 // how far above your level the route sends you (the player's choice, 2026-11-08: "up to +2"): quests whose level is at
 // most this much above yours, and mobs at most this much above you. Dungeon quests are done in a group: a little more.
@@ -63,4 +63,14 @@ const DUNGEON_ABOVE = 4;
 const TRAIN_BATCH = 2;
 function trainNow(due, inTrainerCity) { return due.length >= TRAIN_BATCH || (due.length > 0 && !!inTrainerCity); }
 
-module.exports = { raceOk, XP_TO_LEVEL, killXp, classicKillXp, setLearned, questXp, addXp, RACE_BIT, CLASS_BIT, canTake, CAPITAL_AREAS, CAPITAL_MAPS, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, TRAIN_BATCH, trainNow };
+// the mobs that drop a quest item: when normal mobs drop it, elites that also do are left out - Forever's War Banners drop
+// from the classic Dragonmaw camp and from 300 new elite Dragonmaw (rank 1-3: elite, rare elite, boss; 4 is a plain rare)
+function droppers(o, npcs) {
+  const all = (o.npcDrops || []).map((id) => npcs[id]).filter(Boolean);
+  const normal = all.filter((n) => !(n.rank >= 1 && n.rank <= 3) && (n.spawns || []).length);
+  return normal.length && normal.length < all.length ? normal : all;
+}
+// each race's start zone (QuestieDB area ids): where it spawns and quests first
+const RACE_HOME = { human: 12, dwarf: 1, gnome: 1, nightelf: 141, skyborne: 16593, orc: 14, troll: 14, tauren: 215, undead: 85, skybornehorde: 16593 };
+const START_ZONES = new Set(Object.values(RACE_HOME));
+module.exports = { RACE_HOME, START_ZONES, droppers, raceOk, XP_TO_LEVEL, killXp, classicKillXp, setLearned, questXp, addXp, RACE_BIT, CLASS_BIT, canTake, CAPITAL_AREAS, CAPITAL_MAPS, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, TRAIN_BATCH, trainNow };

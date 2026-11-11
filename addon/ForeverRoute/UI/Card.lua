@@ -69,7 +69,9 @@ local function build()
   f:SetSize(ns.db.cardWidth, 160)
   f:SetPoint("RIGHT", UIParent, "RIGHT", -60, 120)
   f:SetClampedToScreen(true); f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
-  f:SetScript("OnDragStart", function(self) if not ns.db.locked and not InCombatLockdown() then self:StartMoving() end end)
+  -- movable in combat too: the card itself is not protected (its secure target / item buttons are their own frames
+  -- on UIParent; moved in combat, they catch up when combat ends - Card.PlaceSecure)
+  f:SetScript("OnDragStart", function(self) if not ns.db.locked then self:StartMoving() end end)
   f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing(); local p, _, rp, x, y = self:GetPoint(); ns.db.cardPos = { p, rp, x, y }; Card.PlaceSecure() end)
   Style.Panel(f)
 
@@ -243,6 +245,13 @@ local function build()
   f.errand.x:SetPoint("RIGHT", f.errand, "RIGHT", 0, 0)
   f.errand.text:SetPoint("RIGHT", f.errand.x, "LEFT", -6, 0)
   f.errand:Hide()
+  -- a finished quest whose hand-in is close by (Engine.ReadyNearby): one line, Do it now
+  f.ready = CreateFrame("Frame", nil, f); f.ready:SetHeight(20)
+  f.ready.text = Style.Text(f.ready, 10, { 0.45, 0.78, 1 }); f.ready.text:SetPoint("LEFT", 0, 0); f.ready.text:SetWordWrap(false)
+  f.ready.go = Style.Button(f.ready, "Do it now", 70, 18, function() local r = Card.readyNear; if r then ns.Engine.FocusOn(r.i, "you chose it: ready to hand in nearby") end end, "Show this hand-in on the card now. Your plan is kept - it comes back after.")
+  f.ready.go:SetPoint("RIGHT", f.ready, "RIGHT", 0, 0)
+  f.ready.text:SetPoint("RIGHT", f.ready.go, "LEFT", -6, 0)
+  f.ready:Hide()
   -- "Also hand in": a finished quest the route doesn't cover, with its NPC nearby
   f.extra = CreateFrame("Frame", nil, f); f.extra:SetHeight(20)
   f.extra.text = Style.Text(f.extra, 10, { 0.45, 0.78, 1.0 }); f.extra.text:SetPoint("LEFT", 0, 0); f.extra.text:SetPoint("RIGHT", 0, 0); f.extra.text:SetWordWrap(false)
@@ -665,6 +674,13 @@ function Card.Layout()
     f.errand:ClearAllPoints(); f.errand:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -top); f.errand:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
     top = top + 22
   end
+  local rd = not ns.Engine.view and Card.readyNear
+  f.ready:SetShown(rd and true or false)
+  if rd then
+    f.ready.text:SetText(string.format("Ready nearby: %s%s, %d yd", rd.name or "a quest", rd.npc and (" to " .. rd.npc) or "", math.floor(rd.d + 0.5)))
+    f.ready:ClearAllPoints(); f.ready:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -top); f.ready:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
+    top = top + 22
+  end
   local nd = ns.LogCheck and ns.LogCheck.dropCount or 0
   f.drop:SetShown(nd > 0 and not ns.Engine.view)
   if nd > 0 and not ns.Engine.view then
@@ -853,3 +869,18 @@ ns.On("FR_DISTANCE", function(yards, arrived, leg)
 end)
 ns.On("PLAYER_REGEN_DISABLED", function() if f and ns.db.combatFade and f:IsShown() then UIFrameFadeOut(f, 0.25, f:GetAlpha(), 0.35) end end)
 ns.On("PLAYER_REGEN_ENABLED", function() if f and f:GetAlpha() < 1 then UIFrameFadeIn(f, 0.25, f:GetAlpha(), 1) end end)
+
+-- the "ready nearby" line: looked at every two seconds where you stand (its own check, apart from the live reordering);
+-- the card redraws only when what it would say changes
+Card.readyNear = nil
+function Card.CheckReadyNearby()
+  if not (f and f:IsShown()) then return end
+  local px, py, pinst = HBDc:GetPlayerWorldPosition()
+  local r = ns.Engine.ReadyNearby and ns.Engine.ReadyNearby(px, py, pinst) or nil
+  if r and r.i == ns.Engine.Shown() then r = nil end
+  local was = Card.readyNear
+  Card.readyNear = r
+  -- (the distance shown moves with you: redraw when it changed by 10 yd, or another quest or none)
+  if (was and was.i) ~= (r and r.i) or (was and r and math.abs(was.d - r.d) >= 10) then Card.Layout() end
+end
+if C_Timer and C_Timer.NewTicker then C_Timer.NewTicker(2, function() pcall(Card.CheckReadyNearby) end) end

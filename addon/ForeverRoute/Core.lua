@@ -158,7 +158,14 @@ function ns.StarterKey()
   local okR, _, race = pcall(UnitRace, "player")
   local okC, _, class = pcall(UnitClass, "player")
   if not (okR and okC) or type(race) ~= "string" or type(class) ~= "string" then return nil end
-  return plain(race) .. "-" .. plain(class)
+  race = plain(race)
+  if race == "scourge" then race = "undead" end -- the game's token for undead; the plans are named undead_<class>
+  -- the Horde's Skyborne (Windshaper Skyborne): skybornehorde, told apart by the faction
+  if race:find("skyborne", 1, true) then
+    local okF, f = pcall(UnitFactionGroup, "player")
+    race = (race:find("windshaper", 1, true) or (okF and f == "Horde")) and "skybornehorde" or "skyborne"
+  end
+  return race .. "-" .. plain(class)
 end
 function ns.LoadMyPlan()
   local key, f, found
@@ -193,8 +200,18 @@ function ns.StarterNote()
   C_Timer.After(5, function() ns.Print("No plan of your own for this character yet: following the built-in plan for your race and class (steps you've already done are skipped).") end)
 end
 
+-- flight masters and vendors come for both factions (FlightMasters.lua, Vendors.lua: ns.FLIGHT_BY, ns.VENDORS_BY);
+-- yours are ns.FLIGHT and ns.VENDORS. Picked when the addon loads and again at login (the faction is surely known then)
+function ns.UseFaction()
+  local ok, f = pcall(UnitFactionGroup, "player")
+  local side = (ok and f == "Horde") and "Horde" or "Alliance"
+  if ns.FLIGHT_BY and ns.FLIGHT_BY[side] then ns.FLIGHT = ns.FLIGHT_BY[side] end
+  if ns.VENDORS_BY and ns.VENDORS_BY[side] then ns.VENDORS = ns.VENDORS_BY[side] end
+  return side
+end
 ns.On("ADDON_LOADED", function(name)
   if name ~= ADDON then return end
+  ns.UseFaction()
   ns.hasPlan = ns.LoadMyPlan()
   ForeverRouteDB = ForeverRouteDB or {}
   ForeverRouteChar = ForeverRouteChar or {}
@@ -236,6 +253,7 @@ function ns.RecordMapBounds()
   return n
 end
 ns.On("PLAYER_LOGIN", function()
+  ns.UseFaction()
   pcall(ns.RecordMapBounds)
   local key = ns.CharKey()
   if ForeverRouteChar and key then ForeverRouteChar.charKey = key end
@@ -455,6 +473,7 @@ SlashCmdList.FOREVERROUTE = function(msg)
   elseif msg == "dungeons" or msg == "dungeon" or msg == "trips" or msg == "bag" then ns.Fire("FR_TOGGLE_DUNGEONS")
   elseif msg == "logcheck" or msg == "cleanup" then ns.Fire("FR_TOGGLE_LOGCHECK")
   elseif msg == "nope" then ns.Engine.Nope()
+  elseif msg == "nav" or msg == "pins" then for _, l in ipairs(ns.Nav.Report()) do ns.Print(l) end
   elseif msg == "perf" then
     local p = ns.Perf()
     ns.Print(string.format("memory %s  ·  refresh %.2f ms  ·  progress %.2f ms  ·  %d routes, %d unpacked", p.memoryKB and string.format("%.1f MB", p.memoryKB / 1024) or "?", p.refreshMs or 0, p.progressMs or 0, p.routes, p.unpacked))
@@ -477,7 +496,7 @@ SlashCmdList.FOREVERROUTE = function(msg)
   elseif msg == "snapshot" then ns.State.Snapshot("manual"); ns.Print("snapshot saved - written to disk on /reload or logout.")
   elseif msg == "options" or msg == "config" then ns.Fire("FR_OPEN_OPTIONS")
   else
-    ns.Print("/fr - card · /fr list - whole route · /fr paths - choose a path · /fr dungeons - dungeon routes · /fr logcheck - what to abandon · /fr log - recent errors · /fr skip · /fr back · /fr undo · /fr lock · /fr arrow · /fr demo · /fr options")
+    ns.Print("/fr - card · /fr list - whole route · /fr paths - choose a path · /fr dungeons - dungeon routes · /fr logcheck - what to abandon · /fr log - recent errors · /fr nav - where the game says you, the step and the minimap are · /fr skip · /fr back · /fr undo · /fr lock · /fr arrow · /fr demo · /fr options")
   end
 end
 

@@ -24,7 +24,7 @@ const key = norm(snap.race) + '-' + norm(snap.class);
 const folder = path.basename(path.dirname(path.resolve(charDir))).replace(/\s/g, '');
 
 // the two plans
-const own = RF.own(fs.readFileSync(path.join(ROOT, '..', 'Interface', 'AddOns', 'ForeverRoute', 'Route.lua'), 'utf8'), folder);
+const own = RF.own(fs.readFileSync(path.join(require('./game-dir').addonDir(), 'Route.lua'), 'utf8'), folder);
 const starterRaw = fs.readFileSync(path.join(ROOT, 'addon', 'ForeverRoute', 'Starter.lua'), 'utf8');
 const sm = new RegExp(`-- ForeverRoute starter for ${key} begin\\n[\\s\\S]*?= function\\(\\)\\n([\\s\\S]*?)\\nend\\n-- ForeverRoute starter for ${key} end`).exec(starterRaw);
 if (!own || !sm) { console.log(!own ? 'no plan of yours in Route.lua for ' + folder : 'no built-in plan for ' + key); process.exit(1); }

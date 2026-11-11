@@ -80,7 +80,7 @@ function objSpawns(o) {
   const out = [];
   if (o.kind === 'kill') { if (N[o.npc]) out.push(...N[o.npc].spawns); }
   else if (o.kind === 'killcredit') { for (const id of o.npcs || []) if (N[id]) out.push(...N[id].spawns); }
-  else if (o.kind === 'item') { for (const id of o.npcDrops || []) if (N[id]) out.push(...N[id].spawns); for (const id of o.objectDrops || []) if (O[id]) out.push(...O[id].spawns); if (!out.length) for (const id of o.vendors || []) if (N[id]) out.push(...N[id].spawns); }
+  else if (o.kind === 'item') { for (const n of require('./world').droppers(o, N)) out.push(...n.spawns); for (const id of o.objectDrops || []) if (O[id]) out.push(...O[id].spawns); if (!out.length) for (const id of o.vendors || []) if (N[id]) out.push(...N[id].spawns); }
   else if (o.kind === 'object') { if (O[o.object]) out.push(...O[o.object].spawns); }
   else if (o.kind === 'explore') out.push(...(o.spawns || []));
   return out;

@@ -1,0 +1,958 @@
+{
+  "_about": "Reviewed side trips and must-do quests for Horde characters (special[].class limits a trip to one class, special[].races to some races). Must-do quests are the chains expert guides call worth doing. Sources and reasoning: docs/research/class-quests-horde.md.",
+  "special": [
+    {
+      "class": "warlock",
+      "races": [
+        "orc",
+        "troll"
+      ],
+      "name": "Voidwalker (warlock 10)",
+      "minLevel": 10,
+      "quests": [
+        1506,
+        1501,
+        1504
+      ],
+      "minutes": 35,
+      "why": "Your level-10 class quest: the Voidwalker. Ophek (Razor Hill) sends you to Gan'rul Bloodeye in the Cleft of Shadow, Orgrimmar; the Tablet of Verga is in the Burning Blade Stash at Skull Rock (north Durotar, about 51.6, 9.8); then use the Glyphs of Summoning and defeat the summoned Voidwalker.",
+      "travel": {
+        "Durotar": "Ophek: Razor Hill. Skull Rock: the cave north of Orgrimmar's gate (about 51.6, 9.8).",
+        "Orgrimmar": "Gan'rul Bloodeye: Cleft of Shadow (about 48.3, 45.3)."
+      },
+      "tag": "your tank pet",
+      "id": "Voidwalkerwarlockorc",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives). The quest data marks 1501/1504 orc-only (Classic mask); troll warlocks are new in Forever and start beside orcs in the Valley of Trials - unverified which chain they get",
+      "inPath": true
+    },
+    {
+      "class": "warlock",
+      "races": [
+        "undead"
+      ],
+      "name": "Voidwalker (warlock 10)",
+      "minLevel": 10,
+      "quests": [
+        1478,
+        1473,
+        1471
+      ],
+      "minutes": 30,
+      "why": "Your level-10 class quest: the Voidwalker. Ageron Kargal (Brill) sends you to Carendin Halgar in the Magic Quarter of the Undercity; Egalin's Grimoire is in Perrine's Chest in the Agamand Mills area of Tirisfal (about 51.1, 67.6); then use the Runes of Summoning and defeat the summoned Voidwalker.",
+      "travel": {
+        "Tirisfal Glades": "Ageron Kargal: Brill. Perrine's Chest: about 51.1, 67.6.",
+        "Undercity": "Carendin Halgar: Magic Quarter (about 85, 26)."
+      },
+      "tag": "your tank pet",
+      "id": "Voidwalkerwarlockundead",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives)",
+      "inPath": true
+    },
+    {
+      "class": "warlock",
+      "name": "Succubus + Incubus (warlock 20)",
+      "minLevel": 20,
+      "quests": [
+        1507,
+        1508,
+        1509,
+        1510,
+        1511,
+        1515,
+        1512,
+        1513,
+        65601,
+        65610,
+        65604
+      ],
+      "minutes": 110,
+      "why": "Your level-20 class quests: two new pets in one trip - the Succubus and the Incubus. Gan'rul Bloodeye (Cleft of Shadow, Orgrimmar) sends you to Cazul, then Zankaja; Gazrog at the Crossroads; Ken'zigla at Malaka'jin (south Stonetalon) for her draught; Grunt Logmar at Camp Taurajo; Grunt Dogran in the Barrens (about 43, 48) gives the Dirt-caked Pendant. For the Incubus, Cazul sends you to Magar (Orgrimmar), who wants the Withered Scarf from the Shadethicket ancients at Fallen Sky Lake, south-east Ashenvale. Back to Gan'rul to bind both. (The Undercity version, Carendin Halgar's Hearts of the Pure, sends you into the Wetlands - this one stays in Horde Kalimdor.)",
+      "travel": {
+        "Orgrimmar": "Gan'rul, Cazul: Cleft of Shadow. Zankaja: Valley of Spirits side. Magar: Valley of Honor side (about 63.7, 49.9).",
+        "The Barrens": "Gazrog: Crossroads. Grunt Logmar: Camp Taurajo. Grunt Dogran: about 43.3, 47.9.",
+        "Stonetalon Mountains": "Ken'zigla: Malaka'jin, the troll camp at the southern edge of Stonetalon (about 73, 95), up the road west of the Crossroads.",
+        "Ashenvale": "Fallen Sky Lake, south-east Ashenvale (about 66, 82): Shadethicket Stone Movers, Bark Rippers and Oracles drop the Withered Scarf."
+      },
+      "tag": "two new pets",
+      "id": "Succubuswarlockhorde",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives, NPC spawns)",
+      "inPath": true
+    },
+    {
+      "class": "warlock",
+      "name": "Felhunter (warlock 30)",
+      "minLevel": 30,
+      "quests": [
+        2996,
+        1801,
+        1803,
+        1805,
+        1795
+      ],
+      "minutes": 120,
+      "why": "Your level-30 class quest: the Felhunter pet. Gan'rul Bloodeye (Orgrimmar) sends you to Strahad Farsan (Ratchet), who sends you to Jorah Annison (Undercity); the Moldy Tome is on the south-west Hillsbrad coast (about 27.8, 72.8, near Alliance Southshore) and the Tattered Manuscript in the Damaged Chest at Splithoof Crag, Thousand Needles (about 43.4, 32.7); three Rods of Channeling from Dragonmaw casters in the Wetlands (an Alliance zone). Back to Strahad to bind it - best done while your path passes those zones.",
+      "travel": {
+        "The Barrens": "Strahad Farsan: his tower above Ratchet (about 62.6, 35.5).",
+        "Undercity": "Jorah Annison: Apothecarium side (about 75.9, 37.9).",
+        "Hillsbrad Foothills": "Fly to Tarren Mill; the Moldy Tome is on the coast south-west of Southshore (about 27.8, 72.8) - Alliance guards nearby.",
+        "Thousand Needles": "Damaged Chest at Splithoof Crag (about 43.4, 32.7).",
+        "Wetlands": "Dragonmaw Shadowwarders and Bonewarders, central Wetlands (about 46-54, 45-55). Alliance zone: no Horde flight path."
+      },
+      "tag": "new pet",
+      "id": "Felhunterwarlockhorde",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objects, NPC spawns)"
+    },
+    {
+      "class": "warlock",
+      "name": "Infernal (warlock 55)",
+      "minLevel": 55,
+      "quests": [
+        7601,
+        7602,
+        7603
+      ],
+      "minutes": 120,
+      "why": "Your level-55 class quest: Inferno (summon an Infernal, needs an Infernal Stone; 1h cooldown, outdoors) and the Shard of the Green Flame off-hand. Niby the Almighty in Felwood starts it; three Flawless Fel Essences (Azshara, Jaedenar in Felwood, and the Dark Portal in the Blasted Lands), then kill Kroshius at Shatter Scar Vale, Felwood; Niby hands it in.",
+      "travel": {
+        "Felwood": "Fly to Bloodvenom Post. Niby the Almighty and Impsy (about 41.4, 45.0); Jaedenar and Shatter Scar Vale are in Felwood too.",
+        "Azshara": "Fly to Valormok. One Fel Essence is in Azshara.",
+        "Blasted Lands": "Fly to Stonard (Swamp of Sorrows) and ride south. One Fel Essence is at the Dark Portal."
+      },
+      "tag": "Inferno + off-hand",
+      "id": "Infernalwarlockhorde",
+      "source": "QuestieDB 1.0.14; same chain as the reviewed Alliance entry (any race)"
+    },
+    {
+      "class": "hunter",
+      "races": [
+        "orc",
+        "troll"
+      ],
+      "name": "Taming the Beast (hunter 10)",
+      "minLevel": 10,
+      "quests": [
+        6062,
+        6083,
+        6082,
+        6081
+      ],
+      "minutes": 40,
+      "inPath": true,
+      "tag": "your pet",
+      "why": "Your level-10 class quests: Tame Beast and Beast Training - a hunter without a pet levels far slower. Thotar in Razor Hill sends you to tame a Dire Mottled Boar, a Surf Crawler and an Armored Scorpid in Durotar; Ormak Grimshot (Valley of Honor, Orgrimmar) teaches Beast Training.",
+      "travel": {
+        "Durotar": "Thotar: Razor Hill (about 51.9, 43.5); the boar, crawler and scorpid are around Durotar.",
+        "Orgrimmar": "Ormak Grimshot: Valley of Honor (about 66, 18.5)."
+      },
+      "id": "Tamehunterorc",
+      "source": "QuestieDB 1.0.14 (race mask orc+troll; quest givers, objectives)"
+    },
+    {
+      "class": "hunter",
+      "races": [
+        "tauren"
+      ],
+      "name": "Taming the Beast (hunter 10)",
+      "minLevel": 10,
+      "quests": [
+        6061,
+        6087,
+        6088,
+        6089
+      ],
+      "minutes": 40,
+      "inPath": true,
+      "tag": "your pet",
+      "why": "Your level-10 class quests: Tame Beast and Beast Training. Yaw Sharpmane in Bloodhoof Village sends you to tame an Adult Plainstrider, a Prairie Stalker and a Swoop in Mulgore; Holt Thunderhorn (Hunter Rise, Thunder Bluff) teaches Beast Training.",
+      "travel": {
+        "Mulgore": "Yaw Sharpmane: Bloodhoof Village (about 46.9, 59.7); the three beasts are around Mulgore.",
+        "Thunder Bluff": "Holt Thunderhorn: Hunter Rise."
+      },
+      "id": "Tamehuntertauren",
+      "source": "QuestieDB 1.0.14 (race mask tauren; quest givers, objectives)"
+    },
+    {
+      "class": "hunter",
+      "races": [
+        "skybornehorde"
+      ],
+      "name": "Taming the Beast (Skyborne hunter 10)",
+      "minLevel": 10,
+      "quests": [
+        94007,
+        94978,
+        94979,
+        94013,
+        94050
+      ],
+      "minutes": 40,
+      "inPath": true,
+      "tag": "your pet",
+      "why": "Your level-10 class quests on Zephras Isle: Elayaa Easewind sends you to Quel'ana Quickgale (Valanaar), who has you tame three of the island's beasts; Quel'dora Quickgale teaches Beast Training. A hunter without a pet levels far slower.",
+      "travel": {
+        "Zephras Isle": "Elayaa Easewind: Shen'dar Village (45, 44). Quel'ana and Quel'dora Quickgale: Valanaar (60, 73)."
+      },
+      "id": "Tameskybornehorde",
+      "source": "QuestieDB Forever quest data (race mask Skyborne Alliance + Horde, zone 16593 Zephras Isle); the same chain as the reviewed Alliance Skyborne entry"
+    },
+    {
+      "class": "druid",
+      "races": [
+        "tauren"
+      ],
+      "name": "Bear Form (druid 10)",
+      "minLevel": 10,
+      "quests": [
+        5928,
+        5922,
+        5930,
+        5932,
+        6002
+      ],
+      "minutes": 50,
+      "inPath": true,
+      "tag": "Bear Form + Moonglade",
+      "why": "Your level-10 class quests: Bear Form (and Teleport: Moonglade on the way). Gennia Runetotem (Bloodhoof Village) sends you to Turak Runetotem (Elder Rise, Thunder Bluff); teleport to Moonglade, see the Great Bear Spirit (north-west Moonglade) and Dendrite Starblaze; back to Turak, then use the Cenarion Lunardust at the Moonkin Stone between Mulgore and the Barrens and defeat Lunaclaw.",
+      "travel": {
+        "Mulgore": "Gennia Runetotem: Bloodhoof Village.",
+        "Thunder Bluff": "Turak Runetotem: Elder Rise (about 76.5, 27.2).",
+        "Moonglade": "Teleport: Moonglade. Dendrite Starblaze: Nighthaven (56, 31); the Great Bear Spirit: about 39, 27.5.",
+        "The Barrens": "The Moonkin Stone: west of Camp Taurajo (about 42, 61)."
+      },
+      "id": "Beardruidtauren",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives, objects); what each quest teaches: warcraft.wiki.gg (Classic)"
+    },
+    {
+      "class": "druid",
+      "races": [
+        "tauren"
+      ],
+      "name": "Cure Poison (druid 14)",
+      "minLevel": 14,
+      "quests": [
+        6126,
+        6127,
+        6128,
+        6129,
+        6130
+      ],
+      "minutes": 60,
+      "inPath": true,
+      "tag": "Cure Poison",
+      "why": "Your level-14 class quests end with Power over Poison, which teaches Cure Poison: Turak Runetotem (Thunder Bluff) sends you to Dendrite Starblaze in Moonglade; fill the sampler at the pool on Dreadmist Peak (north Barrens, about 48.4, 18.9) for Tonga Runetotem at the Crossroads; 5 Earthroot and 5 Kodo Horns; cure 10 Sickly Gazelles north of the Crossroads road; back to Dendrite, then Turak.",
+      "travel": {
+        "Thunder Bluff": "Turak Runetotem: Elder Rise.",
+        "Moonglade": "Teleport: Moonglade; Dendrite Starblaze at Nighthaven.",
+        "The Barrens": "Tonga Runetotem: Crossroads. Dreadmist Peak pool: about 48.4, 18.9. Sickly Gazelles north of the east-west road through the Crossroads."
+      },
+      "id": "Curepoisondruidtauren",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives, objects); what each quest teaches: warcraft.wiki.gg (Classic)"
+    },
+    {
+      "class": "druid",
+      "races": [
+        "tauren"
+      ],
+      "name": "Aquatic Form (druid 16)",
+      "minLevel": 16,
+      "quests": [
+        27,
+        28,
+        30,
+        31
+      ],
+      "minutes": 60,
+      "inPath": true,
+      "tag": "Aquatic Form",
+      "why": "Aquatic Form: Turak Runetotem (Thunder Bluff) sends you to Dendrite Starblaze in Moonglade; the Shrine Bauble from Lake Elune'ara to the Shrine of Remulos (Tajarri); the two Half Pendants for the Pendant of the Sea Lion; back to Turak.",
+      "travel": {
+        "Thunder Bluff": "Turak Runetotem: Elder Rise.",
+        "Moonglade": "Teleport: Moonglade. Dendrite Starblaze: Nighthaven; Tajarri: Shrine of Remulos (about 36.5, 40)."
+      },
+      "id": "Aquaticdruidtauren",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives); what each quest teaches: warcraft.wiki.gg (Classic)"
+    },
+    {
+      "class": "druid",
+      "races": [
+        "tauren"
+      ],
+      "name": "Cat Form (druid 20)",
+      "minLevel": 20,
+      "quests": [
+        98340,
+        98405,
+        98342,
+        98739,
+        98362
+      ],
+      "minutes": 45,
+      "inPath": true,
+      "tag": "Cat Form",
+      "why": "In Forever, Cat Form comes from a level-20 quest instead of the trainer. Turak Runetotem (Thunder Bluff) sends you to Dendrite Starblaze in Moonglade; the Great Cat Spirit (south Moonglade, about 58.4, 73.5) wants the Relics of the Fang, the Claw and the Silent Shadow from the Stormrage Barrow Dens (about 72-75, 65-67); back to Dendrite, then Turak teaches Cat Form.",
+      "travel": {
+        "Thunder Bluff": "Turak Runetotem: Elder Rise.",
+        "Moonglade": "Teleport: Moonglade. Dendrite Starblaze: Nighthaven; the Great Cat Spirit: about 58.4, 73.5; the relics: Stormrage Barrow Dens, about 72-75, 65-67."
+      },
+      "id": "Catdruidtauren",
+      "source": "QuestieDB Forever quest data (98340 > 98405 > 98342 > 98739 > 98362, objects 672821/673093/673094); Wowhead /forever quest 98362 (teaches Cat Form, spell 768) and series pages, 2026-11-10"
+    },
+    {
+      "class": "druid",
+      "races": [
+        "skybornehorde"
+      ],
+      "name": "Teleport: Moonglade (Skyborne druid 10)",
+      "minLevel": 10,
+      "quests": [
+        94911,
+        94913
+      ],
+      "minutes": 25,
+      "inPath": true,
+      "tag": "Teleport: Moonglade",
+      "why": "Muln Earthfury at Skywatcher Plateau in Mulgore (where the skycutter from Zephras Isle docks) sends you to Turak Runetotem on the Elder Rise of Thunder Bluff, then to Moonglade - Teleport: Moonglade, a free hearth to a flight path and a druid trainer.",
+      "travel": {
+        "Mulgore": "Muln Earthfury and Alaana Stormwalker: Skywatcher Plateau, north-west of Thunder Bluff (about 33.4, 22.6).",
+        "Thunder Bluff": "Turak Runetotem: Elder Rise."
+      },
+      "id": "Moongladeskybornehorde",
+      "source": "QuestieDB Forever quest data (94911, 94913: race mask Skyborne Horde only; NPC spawns in Mulgore); the Horde counterpart of the reviewed Alliance 94912/94914"
+    },
+    {
+      "class": "druid",
+      "races": [
+        "skybornehorde"
+      ],
+      "name": "Cat Form (Skyborne druid 20)",
+      "minLevel": 20,
+      "quests": [
+        98340,
+        98341,
+        98738,
+        98362
+      ],
+      "minutes": 45,
+      "inPath": true,
+      "tag": "Cat Form",
+      "why": "In Forever, Cat Form comes from a level-20 quest instead of the trainer. Turak Runetotem (Thunder Bluff) sends you to Dendrite Starblaze in Moonglade, who sends you to the Avatar of Saeyleenan, the Great Windborne Cat Spirit (south Moonglade, about 43.9, 73.4); her blessing back to Dendrite, then Turak teaches Cat Form. The relic step (three relics from the Stormrage Barrow Dens, about 72-75, 65-67) has no Windshaper version in the quest data - 98404 is Alliance Skyborne only and 98342 tauren only - so expect to be given one of them in game.",
+      "travel": {
+        "Thunder Bluff": "Turak Runetotem: Elder Rise.",
+        "Moonglade": "Teleport: Moonglade. Dendrite Starblaze: Nighthaven; the Avatar of Saeyleenan: about 43.9, 73.4; the relics: Stormrage Barrow Dens, about 72-75, 65-67."
+      },
+      "id": "Catskybornehorde",
+      "source": "QuestieDB 1.0.14 (98340/98362 tauren + Skyborne Horde; 98341/98738 both Skyborne; 98404 Alliance Skyborne only); Wowhead /forever quest 98362 (teaches Cat Form), 2026-11-10"
+    },
+    {
+      "class": "rogue",
+      "name": "Poisons (rogue 20)",
+      "minLevel": 20,
+      "quests": [
+        2460,
+        2458,
+        2478,
+        2479,
+        2480
+      ],
+      "minutes": 75,
+      "inPath": true,
+      "tag": "poisons",
+      "why": "Your level-20 class quests teach Poisons. Shenthul (Cleft of Shadow, Orgrimmar): the Shattered Salute, then fire two flares at the Venture Co. tower north of the Sludge Fen (north Barrens) for Taskmaster Fizzule; steal Silixiz's Tower Key, kill the drones, patrollers and lookouts, take Grand Foreman Gallywix's head and the Cache of Zanzil's Altered Mixture from his lockbox; back to Shenthul, then deliver the sample to Serge Hinott in Tarren Mill and wait for the cure.",
+      "travel": {
+        "Orgrimmar": "Shenthul: Cleft of Shadow (about 43, 53.7).",
+        "The Barrens": "Taskmaster Fizzule and the Venture Co. tower: north of the Sludge Fen (about 55.4, 5.6).",
+        "Hillsbrad Foothills": "Zeppelin to the Undercity, then fly to Tarren Mill; Serge Hinott (about 61.6, 19.2)."
+      },
+      "id": "Poisonsroguehorde",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives); what the chain teaches: warcraft.wiki.gg (Classic)"
+    },
+    {
+      "class": "warrior",
+      "races": [
+        "orc",
+        "troll",
+        "tauren",
+        "skybornehorde"
+      ],
+      "name": "Defensive Stance (warrior 10)",
+      "minLevel": 10,
+      "quests": [
+        1505,
+        1498
+      ],
+      "minutes": 30,
+      "inPath": true,
+      "tag": "Defensive Stance, Taunt, Sunder Armor",
+      "why": "Your level-10 class quest teaches Defensive Stance, Taunt and Sunder Armor (no other way to learn them). Forever keeps Defensive Stance and raised its threat bonus from 30% to 80% (Wowhead Forever spell 71, tooltip service dataEnv 16: \"Increases all threat generated by 80%\"; Blizzard's Forever development notes, 2026-11-03); Taunt (355) still requires it, and Forever's Defiance needs it with a shield. Tarshaw Jaggedscar (Razor Hill) or Krang Stonehoof (Bloodhoof Village) sends you to Uzzek at Far Watch Post (north-east Barrens), who wants 5 Singed Scales from the Thunder Lizards and Lightning Hides around the post. A Windshaper Skyborne has no warrior quest on Zephras Isle in the quest data, so this is theirs too. Uzzek then offers Thun'grim Firegaze's Forged Steel (a weapon), optional.",
+      "travel": {
+        "Durotar": "Tarshaw Jaggedscar: Razor Hill.",
+        "Mulgore": "Krang Stonehoof: Bloodhoof Village.",
+        "The Barrens": "Uzzek: Far Watch Post (about 61.4, 21.1), over the bridge west of Durotar."
+      },
+      "id": "Stancewarriororc",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives; 1505/1498 race mask includes Skyborne Horde; 94003 is Alliance Skyborne only); Classic reward: Wowhead Classic quest 1498 (casts Path of Defense); Defensive Stance removed on Forever per the Wowhead Forever warrior spellbook changes (checked by the coordinator), 2026-11-10"
+    },
+    {
+      "class": "warrior",
+      "races": [
+        "undead"
+      ],
+      "name": "Defensive Stance (warrior 10)",
+      "minLevel": 10,
+      "quests": [
+        1818,
+        1819
+      ],
+      "minutes": 25,
+      "inPath": true,
+      "tag": "Defensive Stance, Taunt, Sunder Armor",
+      "why": "Your level-10 class quest teaches Defensive Stance, Taunt and Sunder Armor (no other way to learn them). Forever keeps Defensive Stance and raised its threat bonus from 30% to 80% (Wowhead Forever spell 71, tooltip service dataEnv 16: \"Increases all threat generated by 80%\"; Blizzard's Forever development notes, 2026-11-03); Taunt (355) still requires it, and Forever's Defiance needs it with a shield. Austil de Mon (Brill) sends you to Deathguard Dillinger in Brill; kill Ulag the Cleaver at the mausoleum north of Brill (about 59.5, 48.3) and report back.",
+      "travel": {
+        "Tirisfal Glades": "Austil de Mon and Deathguard Dillinger: Brill. Ulag the Cleaver: the mausoleum north of Brill (about 59.5, 48.3)."
+      },
+      "id": "Stancewarriorundead",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives; 1819 and 1498 are exclusive); Defensive Stance removed on Forever per the Wowhead Forever warrior spellbook changes (checked by the coordinator), 2026-11-10"
+    },
+    {
+      "class": "warrior",
+      "name": "Berserker Stance and the Whirlwind weapon (warrior 30-40)",
+      "minLevel": 30,
+      "quests": [
+        1718,
+        1719,
+        1791,
+        1714,
+        1712,
+        1713,
+        1792
+      ],
+      "minutes": 240,
+      "tag": "stance + 2H weapon",
+      "why": "Berserker Stance (Klannoc Macleod, Fray Island off the Barrens), then Bath'rah the Windwatcher (east of Tarren Mill) for the Whirlwind Axe, Warhammer or Sword - long (Liferoot, 30 Bloodscalp Tusks, the charms) but the best two-hander for the 40s in Classic; Forever stats not checked. Not built into the path: the Whirlwind Heart comes from the Cyclonian (an elite in Alterac Mountains) and the quest data has no source for the Essence of the Exile.",
+      "travel": {
+        "The Barrens": "Klannoc Macleod: Fray Island, south of Ratchet (about 68.6, 49.2).",
+        "Alterac Mountains": "Fly to Tarren Mill; Bath'rah the Windwatcher: ruins east of Tarren Mill (about 80.5, 66.9)."
+      },
+      "id": "Whirlwindwarriorhorde",
+      "source": "QuestieDB 1.0.14 (any race); same chain as the reviewed Alliance entry, with Horde starters (Sorek, Orgrimmar; Torm Ragetotem, Thunder Bluff; Baltus Fowler, Undercity)"
+    },
+    {
+      "class": "shaman",
+      "races": [
+        "orc",
+        "troll"
+      ],
+      "name": "Call of Earth (shaman 4)",
+      "minLevel": 4,
+      "quests": [
+        1516,
+        1517,
+        1518
+      ],
+      "minutes": 25,
+      "inPath": true,
+      "tag": "Earth totem",
+      "why": "Your first totem: Canaga Earthcaller (Valley of Trials); 2 Felstalker Hooves; drink the Earth Sapta at the Spirit Rock and bring the Rough Quartz from the Minor Manifestation of Earth back to Canaga.",
+      "travel": {
+        "Durotar": "Canaga Earthcaller: Valley of Trials (about 42.4, 69.2). The Spirit Rock: about 44, 76."
+      },
+      "id": "Earthshamanorc",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives); what each quest gives: warcraft.wiki.gg (Classic)"
+    },
+    {
+      "class": "shaman",
+      "races": [
+        "tauren"
+      ],
+      "name": "Call of Earth (shaman 4)",
+      "minLevel": 4,
+      "quests": [
+        1519,
+        1520,
+        1521
+      ],
+      "minutes": 25,
+      "inPath": true,
+      "tag": "Earth totem",
+      "why": "Your first totem: Seer Ravenfeather (Camp Narache); 2 Ritual Salves from the Bristleback quilboars; drink the Earth Sapta at Kodo Rock and bring the Rough Quartz back to the Seer.",
+      "travel": {
+        "Mulgore": "Seer Ravenfeather: Camp Narache (about 44.4, 76.8). Kodo Rock is a short walk from the camp."
+      },
+      "id": "Earthshamantauren",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives); what each quest gives: warcraft.wiki.gg (Classic)"
+    },
+    {
+      "class": "shaman",
+      "races": [
+        "skybornehorde"
+      ],
+      "name": "Call of Earth (Skyborne shaman 4)",
+      "minLevel": 4,
+      "quests": [
+        92466,
+        92467,
+        92468
+      ],
+      "minutes": 25,
+      "inPath": true,
+      "tag": "Earth totem",
+      "why": "Your first totem, on Zephras Isle: Windshaper Boro (Thendal Grove) wants a Signet of Akir; drink the Earth Sapta at the Rise of Spirits (about 49.7, 23.8) and bring the Rough Quartz back to Boro.",
+      "travel": {
+        "Zephras Isle": "Windshaper Boro: Thendal Grove (about 42.8, 23.6)."
+      },
+      "id": "Earthshamanskyborne",
+      "source": "QuestieDB Forever quest data (92466 > 92467 > 92468, zone 16593 Zephras Isle; exclusive with 1516/1519)"
+    },
+    {
+      "class": "shaman",
+      "races": [
+        "orc",
+        "troll"
+      ],
+      "name": "Call of Fire (shaman 10)",
+      "minLevel": 10,
+      "quests": [
+        2983,
+        1524,
+        1525,
+        1526,
+        1527
+      ],
+      "minutes": 60,
+      "inPath": true,
+      "tag": "Fire totem",
+      "why": "Your Fire totem: Swart (Razor Hill) sends you to Kranal Fiss at Far Watch Post (Barrens); Telf Joolam in Durotar wants Fire Tar and a Reagent Pouch; defeat the Minor Manifestation of Fire and place the Glowing Ember in the brazier atop the Shrine of Eternal Flame; take the Torch of Eternal Flame back to Kranal Fiss.",
+      "travel": {
+        "Durotar": "Swart: Razor Hill. Telf Joolam and the Shrine of Eternal Flame: about 38.6, 59.0.",
+        "The Barrens": "Kranal Fiss: Far Watch Post (about 56, 19.9)."
+      },
+      "id": "Fireshamanorc",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives); what each quest gives: warcraft.wiki.gg (Classic)"
+    },
+    {
+      "class": "shaman",
+      "races": [
+        "tauren"
+      ],
+      "name": "Call of Fire (shaman 10)",
+      "minLevel": 10,
+      "quests": [
+        2984,
+        1524,
+        1525,
+        1526,
+        1527
+      ],
+      "minutes": 75,
+      "inPath": true,
+      "tag": "Fire totem",
+      "why": "Your Fire totem: Narm Skychaser (Bloodhoof Village) sends you to Kranal Fiss at Far Watch Post (Barrens); Telf Joolam in Durotar wants Fire Tar and a Reagent Pouch; defeat the Minor Manifestation of Fire and place the Glowing Ember in the brazier atop the Shrine of Eternal Flame; take the Torch of Eternal Flame back to Kranal Fiss.",
+      "travel": {
+        "Mulgore": "Narm Skychaser: Bloodhoof Village.",
+        "The Barrens": "Ride east from Mulgore through the Crossroads; Kranal Fiss: Far Watch Post (about 56, 19.9).",
+        "Durotar": "Telf Joolam and the Shrine of Eternal Flame: about 38.6, 59.0, just over the bridge from Far Watch."
+      },
+      "id": "Fireshamantauren",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives); what each quest gives: warcraft.wiki.gg (Classic)"
+    },
+    {
+      "class": "shaman",
+      "races": [
+        "skybornehorde"
+      ],
+      "name": "Call of Fire (Skyborne shaman 10)",
+      "minLevel": 10,
+      "quests": [
+        97243,
+        97244,
+        97245,
+        97257
+      ],
+      "minutes": 45,
+      "inPath": true,
+      "tag": "Fire totem",
+      "why": "Your Fire totem, on Zephras Isle: Sessaria Skystride (Valanaar) or Aarnor Galestrike (Shen'dar Village) sends you to Olariaan Swiftburn at the Shrine of Flames, Gustberry Lowlands; slay Skypriest Faladiel for his heart; defeat Kuramaa in the Shen'dar Highlands for her mask; then carry the Eternal Flame to Valanaar before the timer runs out.",
+      "travel": {
+        "Zephras Isle": "Sessaria Skystride: Valanaar (58.3, 78.5). Olariaan Swiftburn: Shrine of Flames (51.2, 86.2). Skypriest Faladiel: about 64.4, 63.7. Kuramaa: about 42.4, 68.8."
+      },
+      "id": "Fireshamanskyborne",
+      "source": "QuestieDB Forever quest data (97243 > 97244 > 97245 > 97257, race mask Skyborne Horde only, zone 16593). 98517 (Swart, Razor Hill) sends a Skyborne who has already left the island back to Sessaria"
+    },
+    {
+      "class": "shaman",
+      "name": "Call of Water (shaman 20)",
+      "minLevel": 20,
+      "quests": [
+        1530,
+        1535,
+        1536,
+        1534,
+        220,
+        63,
+        100,
+        96
+      ],
+      "minutes": 180,
+      "inPath": true,
+      "tag": "Water totem",
+      "why": "Your Water totem (Healing Stream, Mana Spring). Islen Waterseer (east Barrens, about 65.8, 43.8) sends you to Brine (south Barrens, about 43.4, 77.4), who wants three waterskins filled: below her hut, at the well in Tarren Mill (Hillsbrad) and at the Ruins of Stardust fountain (Ashenvale, about 33.6, 67.5); the Vial of Purest Water to Islen; then defeat the Corrupt Manifestation of Water at the Brazier of Everfount by the Sepulcher (Silverpine) and speak to the Minor Manifestation of Water; the Shard of Water back to Islen. Long and on both continents - best done while your path passes Hillsbrad, Silverpine and Ashenvale.",
+      "travel": {
+        "The Barrens": "Islen Waterseer: east of the Crossroads road towards Ratchet (about 65.8, 43.8). Brine: south Barrens (about 43.4, 77.4).",
+        "Hillsbrad Foothills": "Zeppelin to the Undercity, fly to Tarren Mill; the Spring Well is in Tarren Mill (about 62.2, 20.8).",
+        "Ashenvale": "Fly to Zoram'gar Outpost; the Ruins of Stardust fountain is south-west Ashenvale (about 33.6, 67.5).",
+        "Silverpine Forest": "Fly to the Sepulcher; the Brazier of Everfount is just west of it (about 38.3, 44.6)."
+      },
+      "id": "Watershamanhorde",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins, objectives, objects; 1530 needs no breadcrumb - 2985/2986/1528/1529 are optional starts); what the chain gives: warcraft.wiki.gg (Classic)"
+    },
+    {
+      "class": "shaman",
+      "races": [
+        "orc",
+        "troll"
+      ],
+      "name": "Call of Air (shaman 30)",
+      "minLevel": 30,
+      "quests": [
+        1531
+      ],
+      "minutes": 25,
+      "inPath": true,
+      "tag": "Air totem",
+      "why": "Your Air totem: Searn Firewarder (Orgrimmar) sends you to Prate Cloudseer in Thousand Needles, who gives the Air Totem.",
+      "travel": {
+        "Orgrimmar": "Searn Firewarder: Valley of Wisdom (about 38, 37.7).",
+        "Thousand Needles": "Fly to Freewind Post; Prate Cloudseer is there (about 53.5, 42.7)."
+      },
+      "id": "Airshamanorc",
+      "source": "QuestieDB 1.0.14; Wowhead /forever quest 1531 (rewards the Air Totem), 2026-11-10"
+    },
+    {
+      "class": "shaman",
+      "races": [
+        "tauren",
+        "skybornehorde"
+      ],
+      "name": "Call of Air (shaman 30)",
+      "minLevel": 30,
+      "quests": [
+        1532
+      ],
+      "minutes": 25,
+      "inPath": true,
+      "tag": "Air totem",
+      "why": "Your Air totem: Xanis Flameweaver (Elder Rise, Thunder Bluff) sends you to Prate Cloudseer in Thousand Needles, who gives the Air Totem.",
+      "travel": {
+        "Thunder Bluff": "Xanis Flameweaver: Elder Rise (about 25.2, 20.5).",
+        "Thousand Needles": "Fly to Freewind Post; Prate Cloudseer is there (about 53.5, 42.7)."
+      },
+      "id": "Airshamantauren",
+      "source": "QuestieDB 1.0.14 (1532 is exclusive with 1531); Wowhead /forever quest 1531 (rewards the Air Totem), 2026-11-10"
+    },
+    {
+      "class": "shaman",
+      "name": "The Tempest's Weapons (shaman 33-40)",
+      "minLevel": 33,
+      "quests": [
+        79360,
+        79364,
+        79361,
+        79366,
+        79442
+      ],
+      "minutes": 150,
+      "tag": "shaman weapon",
+      "why": "A Forever shaman chain for a choice of Lightning's Grasp, Tidebringer's Claw or Rage of the Storm, plus the Elementalist's Guard and the Rune of the Storm: Rau Cliffrunner (Freewind Post) and Prate Cloudseer; Twisted Totems from four kinds of totem-carrying mobs; end the quilboar ritual; deliver the Eye of the Tempest to Bath'rah the Windwatcher in Alterac. Not built into the path: Elemental Aid needs Charlga Razorflank, the last boss of Razorfen Kraul (a dungeon), and the quest data has no start NPCs for the order.",
+      "travel": {
+        "Thousand Needles": "Rau Cliffrunner and Prate Cloudseer: Freewind Post.",
+        "Alterac Mountains": "Fly to Tarren Mill; Bath'rah the Windwatcher: ruins east of Tarren Mill (about 80.5, 66.9)."
+      },
+      "id": "Tempestshamanhorde",
+      "source": "QuestieDB Forever quest data (79360, 79361, 79364, 79366, 79442; the Horde counterpart of the Alliance 96264/79358/96135/96016); Wowhead /forever quest 79442 (series and rewards), 2026-11-10"
+    },
+    {
+      "class": "priest",
+      "races": [
+        "troll"
+      ],
+      "name": "Hex of Weakness and Shadowguard (priest 10, 20)",
+      "minLevel": 10,
+      "quests": [
+        5654,
+        5680
+      ],
+      "minutes": 15,
+      "inPath": true,
+      "tag": "racial priest spells",
+      "why": "Your racial priest spells come from quests at Ur'kyo (Valley of Spirits, Orgrimmar): Tai'jin in Razor Hill sends you to him at 10 for Hex of Weakness, and he gives Shadowguard at 20 - talk to him, done.",
+      "travel": {
+        "Durotar": "Tai'jin: Razor Hill.",
+        "Orgrimmar": "Ur'kyo: Valley of Spirits (about 35.6, 87.8)."
+      },
+      "id": "Racialpriesttroll",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins; each spell has several exclusive starters); what each quest teaches: warcraft.wiki.gg (Classic)"
+    },
+    {
+      "class": "priest",
+      "races": [
+        "undead"
+      ],
+      "name": "Touch of Weakness and Devouring Plague (priest 10, 20)",
+      "minLevel": 10,
+      "quests": [
+        5658,
+        5679
+      ],
+      "minutes": 15,
+      "inPath": true,
+      "tag": "racial priest spells",
+      "why": "Your racial priest spells come from quests at Aelthalyste (War Quarter, Undercity): Touch of Weakness at 10 and Devouring Plague (Dark Sacrifice) at 20 - talk to her, done.",
+      "travel": {
+        "Undercity": "Aelthalyste: about 49.3, 17.1."
+      },
+      "id": "Racialpriestundead",
+      "source": "QuestieDB 1.0.14 (quest givers, hand-ins); Wowhead Classic quest 5679 (teaches Devouring Plague), 2026-11-10"
+    },
+    {
+      "class": "mage",
+      "races": [
+        "orc",
+        "troll"
+      ],
+      "name": "Ju-Ju Heaps (mage 10)",
+      "minLevel": 10,
+      "quests": [
+        1883,
+        1884
+      ],
+      "minutes": 25,
+      "tag": "orb or staff",
+      "why": "Uthel'nay (Valley of Spirits, Orgrimmar) sends you to Un'Thuwa in Sen'jin Village: destroy 4 Ju-Ju Heaps on the Echo Isles for the Ley Orb or Ley Staff.",
+      "travel": {
+        "Orgrimmar": "Uthel'nay: Valley of Spirits.",
+        "Durotar": "Un'Thuwa: Sen'jin Village (about 56.3, 75.1). The Ju-Ju Heaps: Echo Isles (about 67-69, 84-88)."
+      },
+      "id": "Jujumage",
+      "source": "QuestieDB 1.0.14 (quest givers, objects); Wowhead Classic quest 1884 (Ley Orb or Ley Staff), 2026-11-10"
+    },
+    {
+      "class": "mage",
+      "races": [
+        "undead"
+      ],
+      "name": "The Balnir Farmstead (mage 10)",
+      "minLevel": 10,
+      "quests": [
+        1881,
+        1882
+      ],
+      "minutes": 25,
+      "tag": "orb or staff",
+      "why": "Cain Firesong (Brill) sends you to Anastasia Hartwell (Magic Quarter, Undercity): Balnir Snapdragons from the Balnir Farmstead in east Tirisfal for the Ley Orb or Ley Staff.",
+      "travel": {
+        "Tirisfal Glades": "Cain Firesong: Brill. Balnir Snapdragons: Balnir Farmstead (about 77.6, 61.8).",
+        "Undercity": "Anastasia Hartwell: Magic Quarter (about 85, 10)."
+      },
+      "id": "Balnirmage",
+      "source": "QuestieDB 1.0.14 (quest givers, objects; 1882 and 1884 are exclusive and share the reward)"
+    },
+    {
+      "class": "paladin",
+      "races": [
+        "undead"
+      ],
+      "name": "Redemption (undead paladin 12)",
+      "minLevel": 12,
+      "quests": [
+        94427,
+        94434,
+        94435,
+        94436,
+        94438,
+        94440,
+        94441
+      ],
+      "minutes": 60,
+      "inPath": true,
+      "tag": "Redemption",
+      "why": "Your Redemption quest (new in Forever for undead paladins): Danitha Morr (Bandarion Keep, west Tirisfal) sends you to Tanis Alderwood in the Undercity with 10 Linen Cloth; back to Danitha, then Deathguard Billmuth gives the Symbol of Life to resurrect Deathguard Falgan at Venomweb Vale (east Tirisfal); the Scarlet Crusade Attack Plans from the Crusaders there; back to Billmuth and Danitha.",
+      "travel": {
+        "Tirisfal Glades": "Danitha Morr and Deathguard Billmuth: Bandarion Keep (about 22, 44.7). Deathguard Falgan: Venomweb Vale (about 86.7, 47.7).",
+        "Undercity": "Tanis Alderwood: about 65.5, 37.5."
+      },
+      "id": "Redemptionpaladinundead",
+      "source": "QuestieDB Forever quest data (94427 > 94434 > 94435 > 94436 > 94438 > 94440 > 94441, race mask undead, class paladin)"
+    },
+    {
+      "class": "paladin",
+      "races": [
+        "undead"
+      ],
+      "name": "The Moonsilver Blade (undead paladin 18-26)",
+      "minLevel": 18,
+      "quests": [
+        91858,
+        91859,
+        91860,
+        91861,
+        91862,
+        96204,
+        95034,
+        95042,
+        95036,
+        95111,
+        95125,
+        95126,
+        95140
+      ],
+      "minutes": 180,
+      "tag": "2H weapon",
+      "why": "A Forever undead-paladin chain, the Horde counterpart of Verigan's Fist: Danitha Morr sends you to Trevan Rol at the Sepulcher; find the missing Earthen Ring party on Fenris Isle, free Lumina Windsinger from Fenris Keep and escort her out; then Trevan Rol's weapon materials, Ott in Hillsbrad forges the Moonsilver Blade, and you use it on Old Fire-Eye. Not built into the path: A Moon-Kissed Blade needs Whitestone Oak Lumber, which drops only from the Goblin Woodcarvers in The Deadmines (an Alliance-side dungeon), and a Purified Kor Gem (Seeking the Kor Gem, Ulric Frostveil, west Ashenvale - the gems drop from Blackfathom naga). The Fenris Isle half (to The Debt) is fine on its own while you level in Silverpine.",
+      "travel": {
+        "Silverpine Forest": "Trevan Rol and Lumina Windsinger: the Sepulcher (about 43.4, 41). Fenris Isle and Fenris Keep: east, across the water (about 65, 23-34).",
+        "Hillsbrad Foothills": "Ott: Tarren Mill side (about 60.4, 26.2).",
+        "Ashenvale": "Ulric Frostveil: far west Ashenvale (about 11.8, 34.5), near Zoram'gar."
+      },
+      "id": "Moonsilverpaladin",
+      "source": "QuestieDB Forever quest data (race mask undead, class paladin); Wowhead /forever quest 95126 (series order and the Moonsilver Blade reward), 2026-11-10"
+    },
+    {
+      "name": "Cozy Sleeping Bag",
+      "quests": [
+        79007,
+        79192,
+        79980,
+        79974,
+        79975,
+        79976
+      ],
+      "why": "Rewards the Cozy Sleeping Bag - a lasting XP bonus, worth far more than the quests themselves. Every stop is a single click, but it goes round the world (Horde order: the Barrens first, then Westfall): do it in one trip, or pick it up again whenever your path passes these zones.",
+      "travel": {
+        "The Barrens": "The Burned-Out Remains are south of Camp Taurajo (about 46.4, 73.9).",
+        "Westfall": "Alliance zone: no Horde flight path. From Grom'gol (Stranglethorn) ride north through Duskwood, or from the Undercity take the long road south; the Burned-Out Remains are at the Alexston Farmstead (about 37.4, 50.7).",
+        "Stonetalon Mountains": "Fly to Sun Rock Retreat, or ride in from the Barrens. The hidden camp is up a trail that starts around 50.9, 52.3; the Pocket Litter is beside the tent.",
+        "Loch Modan": "Alliance zone: no Horde flight path. Ride in from the Wetlands or the Badlands; the Carved Figurine is north Loch Modan (about 49.4, 12.9).",
+        "Arathi Highlands": "Fly to Tarren Mill, ride east into Hillsbrad to the cart at 87.4, 49.7 and climb up onto Thoradin's Wall. The Messenger Bag is up there (about 22.5, 24.1)."
+      },
+      "minutes": 120,
+      "tag": "lasting XP bonus",
+      "id": "CozySleepingBaghorde",
+      "source": "QuestieDB Forever quest data (79007 Horde-only start in the Barrens; 79008 is the Alliance start); Wowhead /forever series for 79974; warcraft.wiki.gg '...and that note you found (Horde)' (the Horde visits the first two places in reverse order), 2026-11-10"
+    },
+    {
+      "class": "warlock",
+      "races": [
+        "orc",
+        "troll"
+      ],
+      "name": "Felsteed (warlock 40)",
+      "minLevel": 40,
+      "quests": [
+        3631,
+        4490
+      ],
+      "minutes": 20,
+      "tag": "mount + riding",
+      "why": "Your level-40 class quest: Summon Felsteed, your mount, and with it the riding skill (Blizzard's Nov 10 hotfix: completing it grants riding) - instead of 100g at a riding trainer. Short: a talk in your capital, then a talk with Strahad Farsan in Ratchet. Zevrost (Cleft of Shadow, Orgrimmar) starts it.",
+      "travel": {
+        "Orgrimmar": "Zevrost, Cleft of Shadow.",
+        "The Barrens": "Strahad Farsan, Ratchet."
+      },
+      "id": "Felsteedwarlockorc",
+      "source": "Blizzard, WoW: Forever Hotfixes - November 10, 2026: \"Completing 'Summon Felsteed' will correctly grant the player the appropriate riding skill\" (https://us.forums.blizzard.com/en/wow/c/wow-forever/wow-forever-bug-report/352); Wowhead Forever (tooltip service, dataEnv 16): quests 3631, 4487-4490 and spell 5784 Summon Felsteed - verified 2026-11-10",
+      "inPath": true
+    },
+    {
+      "class": "warlock",
+      "races": [
+        "undead"
+      ],
+      "name": "Felsteed (warlock 40)",
+      "minLevel": 40,
+      "quests": [
+        4489,
+        4490
+      ],
+      "minutes": 25,
+      "tag": "mount + riding",
+      "why": "Your level-40 class quest: Summon Felsteed, your mount, and with it the riding skill (Blizzard's Nov 10 hotfix: completing it grants riding) - instead of 100g at a riding trainer. Short: a talk in your capital, then a talk with Strahad Farsan in Ratchet. Kaal Soulreaper (Magic Quarter, Undercity) starts it.",
+      "travel": {
+        "Undercity": "Kaal Soulreaper, Magic Quarter.",
+        "The Barrens": "Strahad Farsan, Ratchet."
+      },
+      "id": "Felsteedwarlockundead",
+      "source": "Blizzard, WoW: Forever Hotfixes - November 10, 2026: \"Completing 'Summon Felsteed' will correctly grant the player the appropriate riding skill\" (https://us.forums.blizzard.com/en/wow/c/wow-forever/wow-forever-bug-report/352); Wowhead Forever (tooltip service, dataEnv 16): quests 3631, 4487-4490 and spell 5784 Summon Felsteed - verified 2026-11-10",
+      "inPath": true
+    }
+  ],
+  "mustDo": [
+    894,
+    900,
+    901,
+    902,
+    858,
+    863,
+    850,
+    851,
+    852,
+    4021,
+    855,
+    4921,
+    881,
+    905,
+    3261,
+    882,
+    6548,
+    6629,
+    1090,
+    1092,
+    527,
+    528,
+    529,
+    532,
+    539,
+    541,
+    550,
+    509,
+    513,
+    515,
+    517,
+    524,
+    6544,
+    6441,
+    6571,
+    4904,
+    1176,
+    1178,
+    1180,
+    1181,
+    1182,
+    1183,
+    5561,
+    1362,
+    1365,
+    1251,
+    1321,
+    1322,
+    1323,
+    1270,
+    95494,
+    95507,
+    95495,
+    95508,
+    95621,
+    98094,
+    98095
+  ],
+  "bonusQuests": [
+    79007,
+    79192,
+    79980,
+    79974,
+    79975,
+    79976
+  ],
+  "bonusNotes": {
+    "79007": "Starts the Cozy Sleeping Bag chain (bonus XP item) for the Horde, south of Camp Taurajo in the Barrens. It continues in Westfall, Stonetalon, Loch Modan and Arathi (Thoradin's Wall)."
+  }
+}

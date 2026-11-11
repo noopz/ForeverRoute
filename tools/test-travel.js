@@ -57,5 +57,23 @@ check('a level-9 druid has no teleport yet', T.plan({ m: 1457, x: 0.4, y: 0.8 },
 check('mage 20, Stranglethorn -> Ironforge: Teleport: Ironforge', T.plan({ m: 1434, x: 0.38, y: 0.5 }, { m: 1455, x: 0.3, y: 0.1 }, { level: 20, knownFP: new Set(), race: 'gnome', class: 'mage' }), (r) => r && r.legs.some((l) => l.how === 'spell'));
 check('mage 25 has no Teleport: Darnassus yet', T.plan({ m: 1433, x: 0.3, y: 0.5 }, { m: 1457, x: 0.41, y: 0.82 }, { level: 25, knownFP: new Set(), race: 'human', class: 'mage' }), (r) => !r || !r.legs.some((l) => l.how === 'spell' && /Darnassus/.test(l.text || l.to || '')));
 check('a level-19 mage has no teleport yet', T.plan({ m: 1434, x: 0.38, y: 0.5 }, { m: 1455, x: 0.3, y: 0.1 }, { level: 19, knownFP: new Set(), race: 'gnome', class: 'mage' }), (r) => !r || !r.legs.some((l) => l.how === 'spell'));
+// ---- Horde: the zeppelins, their own lands, their own spells; none of the Alliance's crossings
+const H = (level, extra = {}) => ({ level, knownFP: new Set(), faction: 'horde', ...extra });
+const ORG = { m: 1454, x: 0.45, y: 0.64 }, UC_GATE = { m: 1420, x: 0.62, y: 0.66 }, GROMGOL = { m: 1434, x: 0.32, y: 0.28 };
+check('horde, Orgrimmar -> Undercity gates at 20: the zeppelin', T.plan(ORG, UC_GATE, H(20)), (r) => r && via(r, 'durotarZeppelin') && via(r, 'tirisfalZeppelin'));
+check("horde, Tirisfal -> Grom'gol at 30: the zeppelin straight there", T.plan(UC_GATE, GROMGOL, H(30)), (r) => r && via(r, 'tirisfalZeppelin') && via(r, 'gromgolZeppelin') && !via(r, 'durotarZeppelin'));
+check("alliance, Stormwind -> Grom'gol: never a zeppelin", T.plan(SW, GROMGOL, { level: 30, knownFP: KNOWN_FP }), (r) => !nodesOf(r).some((n) => /Zeppelin/.test(n.id || '')));
+check('horde, Crossroads -> Wetlands at 25: never the Theramore or Auberdine boats', T.plan(XROADS, { m: 1437, x: 0.5, y: 0.4 }, H(25)), (r) => !['menethilS', 'theramore', 'auberdine', 'southshore', 'stormwind'].some((d) => via(r, d)));
+check('horde, level 3 in Mulgore -> Bloodhoof Village: a ride (their own start zone is not a level-60 zone)', T.plan({ m: 1412, x: 0.45, y: 0.75 }, { m: 1412, x: 0.47, y: 0.58 }, H(3)), (r) => r && hows(r).every((h) => h === 'ride'));
+check('horde, level 6 Durotar -> Orgrimmar: a ride', T.plan({ m: 1411, x: 0.52, y: 0.42 }, ORG, H(6)), (r) => r !== null);
+check("alliance, level 20 still can't ride through Durotar", T.plan({ m: 1413, x: 0.62, y: 0.37 }, { m: 1411, x: 0.52, y: 0.42 }, { level: 20, knownFP: new Set() }), (r) => r === null);
+check('horde mage 20, Stranglethorn -> Orgrimmar: Teleport: Orgrimmar', T.plan({ m: 1434, x: 0.38, y: 0.5 }, ORG, H(20, { race: 'troll', class: 'mage' })), (r) => r && r.legs.some((l) => l.how === 'spell' && l.to.dock === 'mageOrgrimmar'));
+check('horde mage 25 has no Teleport: Thunder Bluff yet', T.plan({ m: 1433, x: 0.3, y: 0.5 }, { m: 1456, x: 0.3, y: 0.3 }, H(25, { race: 'troll', class: 'mage' })), (r) => !r || !r.legs.some((l) => l.how === 'spell' && l.to.dock === 'mageThunderBluff'));
+check('horde mage never gets Teleport: Stormwind', T.plan({ m: 1434, x: 0.38, y: 0.5 }, SW, H(40, { race: 'undead', class: 'mage' })), (r) => !r || !r.legs.some((l) => l.how === 'spell' && /^mage(Stormwind|Ironforge|Darnassus)$/.test(l.to.dock || '')));
+check('tauren druid, Moonglade -> Mulgore: the wind rider to Thunder Bluff, never Rut\'theran', T.plan({ m: 1450, x: 0.44, y: 0.46 }, { m: 1412, x: 0.47, y: 0.58 }, H(16, { race: 'tauren', class: 'druid' })), (r) => r && via(r, 'moongladeDruidH') && !via(r, 'rutheranFlight'));
+check('horde, flying from Orgrimmar to the Crossroads: Horde flight masters', T.plan(ORG, XROADS, H(20, { knownFP: new Set([1454, 1413]) })), (r) => r && hows(r).includes('fly'));
+// ---- getting into Undercity (its lifts) and up to Thunder Bluff (its lifts)
+check('horde, Orgrimmar -> inside Undercity at 20: the zeppelin and the lifts', T.plan(ORG, { m: 1458, x: 0.66, y: 0.44 }, H(20)), (r) => r && via(r, 'tirisfalZeppelin') && r.sec < 1200);
+check('horde, Mulgore -> Thunder Bluff (on the mesa): a ride up the lifts', T.plan({ m: 1412, x: 0.47, y: 0.58 }, { m: 1456, x: 0.45, y: 0.6 }, H(12)), (r) => r !== null && r.sec < 600);
 console.log(fail ? fail + ' failed' : 'all passed');
 process.exit(fail ? 1 : 0);

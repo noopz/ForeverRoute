@@ -95,7 +95,7 @@ function dist(a, b) {
 }
 // flight masters in the planned zones (and trainer cities)
 const FLIGHT = {};
-for (const n of Object.values(N)) if (n && /Gryphon Master|Hippogryph Master|Flight Master/.test(n.sub || '') && n.friendly !== 'H')
+for (const n of Object.values(N)) if (n && /Gryphon Master|Hippogryph Master|Flight Master|Wind Rider Master|Bat Handler/.test(n.sub || '') && n.friendly !== (cfg.faction === 'horde' ? 'A' : 'H'))
   for (const s of n.spawns) if (!FLIGHT[s.zone]) FLIGHT[s.zone] = { ...s, name: n.name };
 // no start given (flying in from another zone): start at the first zone's flight master
 if (!cfg.start) cfg.start = FLIGHT[cfg.zones[0]] ? { zone: cfg.zones[0], x: FLIGHT[cfg.zones[0]].x, y: FLIGHT[cfg.zones[0]].y } : null;
@@ -290,7 +290,12 @@ for (const q of Object.values(Q)) {
       const obs = (cfg.observedDrops || {})[o.name];
       const measured = obs && obs.kills >= 15 ? Math.max(0.005, obs.drops / obs.kills) : null;
       const rate = (d) => (measured != null ? measured : o.rates && o.rates[d] != null ? o.rates[d] / 100 : null);
-      const drops = o.npcDrops.filter((d) => rate(d) == null || rate(d) >= 0.02).map((d) => N[d]).filter(Boolean), objs = o.objectDrops.map((d) => O[d]).filter(Boolean);
+      let drops = o.npcDrops.filter((d) => rate(d) == null || rate(d) >= 0.02).map((d) => N[d]).filter(Boolean);
+      const objs = o.objectDrops.map((d) => O[d]).filter(Boolean);
+      // normal mobs that drop it beat elites that do (Forever's War Banners: the classic Dragonmaw camp drops them, and
+      // so do 300 new elite Dragonmaw further east - the step went to the elites, "130 elites around the objective")
+      const normal = drops.filter((d) => !(d.rank >= 1 && d.rank <= 3) && d.spawns.some(inZones));
+      if (normal.length && normal.length < drops.length) drops = normal;
       drops.forEach((d) => spawns.push(...d.spawns)); objs.forEach((d) => spawns.push(...d.spawns));
       const n = countFor(q, o.name);
       if (!drops.length && !objs.length && o.vendors.length) { label = `Buy ${n} ${o.name}`; work = 20; spawns = o.vendors.flatMap((v) => (N[v] ? N[v].spawns : [])); buying = true; }
@@ -339,7 +344,10 @@ for (const q of Object.values(Q)) {
   const totalKills = t.objs.reduce((s, o) => s + o.kills, 0);
   if (totalKills > cfg.maxKills && !(cfg.keep || []).includes(q.id) && !finishedInLog(q.id)) { skipped.push([q, `about ${totalKills} kills needed: not worth it`]); continue; }
   if (outside && !finishedInLog(q.id)) { skipped.push([q, 'objectives outside the planned zones (dungeon or other zone)']); continue; }
-  if (elite && !(petClass && q.level <= cfg.level + 1) && !cfg.includeElite && !finishedInLog(q.id)) { skipped.push([q, 'elite objectives: group quest']); continue; }
+  // a pet class (warlock, hunter) soloes elites well below it - not by the quest's level: Forever's elite Dark Iron and
+  // Dragonmaw camps (27-31) came with quests of level 27-29, and a level-29 warlock was sent into them
+  const eliteMax = Math.max(0, ...t.objs.map((o) => o.mobLevel || 0));
+  if (elite && !(petClass && eliteMax > 0 && eliteMax <= cfg.level - 2) && !cfg.includeElite && !finishedInLog(q.id)) { skipped.push([q, 'elite objectives: group quest']); continue; }
   if (elite) t.flags.push('elite');
   if ((cfg.skip || []).includes(q.id)) { skipped.push([q, 'skipped in config']); continue; }
   // it needs an item brought in that isn't one of its objectives (Wowhead says so: tools/wowhead.js -> needsItems) -
@@ -438,7 +446,7 @@ const npcPts = [];
   const seen = new Set();
   const addNpc = (n) => { if (!n || seen.has(n.id) || n.friendly === foe || !n.friendly || n.spawns.length > 6) return; /* skip critters and wandering mobs that happen to give quests */ seen.add(n.id); for (const sp of n.spawns) if (inZones(sp)) npcPts.push({ ...sp, npc: n.id, who: n.name }); };
   for (const q of Object.values(Q)) { if (q.races && !raceOk(q.races, cfg.race)) continue; for (const st of [...q.starters, ...q.finishers]) if (st.type === 'npc') addNpc(N[st.id]); }
-  for (const n of Object.values(N)) if (n && /Innkeeper|Gryphon Master|Flight Master/.test(n.sub || '')) addNpc(n);
+  for (const n of Object.values(N)) if (n && /Innkeeper|Gryphon Master|Flight Master|Wind Rider Master|Bat Handler/.test(n.sub || '')) addNpc(n);
 }
 const hubs = [];
 for (const p of npcPts) {
@@ -723,7 +731,7 @@ function tripSec(a, b) {
     const m1 = travelNet.uiOfArea(a.zone), m2 = travelNet.uiOfArea(b.zone);
     if (!m1 || !m2) return null;
     const known = new Set((cfg.flightPaths || []).map((z) => travelNet.uiOfArea(z)).filter(Boolean));
-    const r = travelNet.plan({ m: m1, x: a.x / 100, y: a.y / 100 }, { m: m2, x: b.x / 100, y: b.y / 100 }, { level, knownFP: known, race: cfg.race, class: cfg.class });
+    const r = travelNet.plan({ m: m1, x: a.x / 100, y: a.y / 100 }, { m: m2, x: b.x / 100, y: b.y / 100 }, { level, knownFP: known, race: cfg.race, class: cfg.class, faction: cfg.faction });
     return r ? r.sec : null;
   } catch (e) { return null; }
 }

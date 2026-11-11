@@ -302,6 +302,19 @@ local function statusRaw(i)
     end
     if seen >= 2 and done == seen then return "done" end
   end
+  -- a flight (or hearth) to nothing: every step from it to the next travel is already done - the safety-net pick-up of
+  -- a quest you already have (ensure-steps) sat in the Wetlands between two Stormwind stops, and the list read "Fly to
+  -- Wetlands, Fly to Stormwind" twice over
+  if (k == "fly" or k == "hearth" or k == "boat") and not (ns.ChoiceFor and ns.ChoiceFor(i)) then
+    local list, any = steps(), false
+    for j = i + 1, math.min(#list, i + 40) do
+      local t = list[j]
+      if t.k == "fly" or t.k == "hearth" or t.k == "boat" then break end
+      any = true
+      if Engine.Status(j) ~= "done" then any = nil; break end
+    end
+    if any then return "done" end
+  end
   return "todo"
 end
 -- during a refresh (and the card / list redraw it triggers) each step's status is worked out once and reused
@@ -812,32 +825,111 @@ local function setFocus(i, why, kind)
   if ns.Why and s then ns.Why("reorder", "now on step " .. i .. " (" .. (s.name or s.text or s.k) .. "): " .. (why or "")) end
   Engine.Refresh()
 end
+-- a finished quest whose hand-in is close by, wherever the plan has it: the card's "ready nearby" line (The Hermit was
+-- ready with Abercrombie 20 yd away and the card said nothing). Its own check, not the live reordering's - one line you
+-- choose from, nothing moves by itself. -> { i, q, name, npc, d } or nil
+Engine.READY_LINE_YD = 300 -- within the hold of a chosen hand-in (READY_NEAR + 40)
+function Engine.ReadyNearby(px, py, pinst)
+  if not px then return nil end
+  State = State or ns.State
+  local list, shown, best = steps(), Engine.Shown(), nil
+  for j, s in ipairs(list) do
+    if s.k == "turnin" and s.q and s.q > 0 and j ~= shown and State.QuestReady(s.q) then
+      local d = distTo(s, px, py, pinst)
+      if d and d <= Engine.READY_LINE_YD and (not best or d < best.d) and Engine.Status(j) == "todo" then best = { i = j, q = s.q, name = s.name, npc = s.npc, d = d } end
+    end
+  end
+  return best
+end
+-- you picked it ("Do it now"): the card shows it until it's handed in (held like a ready hand-in the card picked)
+function Engine.FocusOn(i, why) if i then setFocus(i, why or "you chose it", "ready") end end
 
 -- called by the arrow driver about once a second with your position
 -- can you do this step right now? A pick-up whose earlier chain quest isn't handed in yet isn't offered (Chef Grual
 -- has nothing until Jitters' Growling Gut is in), and a hand-in needs the quest in your log
 local prereqOf
+-- the quests that must be handed in before this one is offered (the plan's ForeverRouteUnlocks, turned around)
+function Engine.PrereqsOf(q)
+  if prereqOf == nil or prereqOf.src ~= ForeverRouteUnlocks then
+    prereqOf = { src = ForeverRouteUnlocks }
+    for p, list in pairs(ForeverRouteUnlocks or {}) do for _, d in ipairs(list) do prereqOf[d] = prereqOf[d] or {}; table.insert(prereqOf[d], p) end end
+  end
+  return prereqOf[q] or {}
+end
 function Engine.Available(j)
   local s = steps()[j]
   if not s or not s.q or s.q <= 0 then return true end
   State = State or ns.State
   if s.k == "turnin" then return State.OnQuest(s.q) and true or false end
   if s.k ~= "accept" then return true end
-  if prereqOf == nil or prereqOf.src ~= ForeverRouteUnlocks then
-    prereqOf = { src = ForeverRouteUnlocks }
-    for p, list in pairs(ForeverRouteUnlocks or {}) do for _, d in ipairs(list) do prereqOf[d] = prereqOf[d] or {}; table.insert(prereqOf[d], p) end end
-  end
-  for _, p in ipairs(prereqOf[s.q] or {}) do if not State.IsCompleted(p) then return false end end
+  for _, p in ipairs(Engine.PrereqsOf(s.q)) do if not State.IsCompleted(p) then return false end end
   return true
+end
+-- why a step can't be done at this moment, or nil when it can. For the pins: a step you can't act on yet must not
+-- look like an instruction (a hand-in pin beside you for a quest you only get two stops from now - "dafuq is up with
+-- this turn in"). Returns a reason and, where the route has it, the step that opens this one:
+--   "level", nil, N        waits for level N
+--   "pickup", j            its quest isn't in your log; step j picks it up
+--   "handin", j            a pick-up whose earlier chain quest isn't handed in; step j hands it in
+--   "objectives", j        a hand-in with objectives left; step j is the first of them
+--   "dungeon", nil, name   left for your next run of that dungeon
+function Engine.NotYet(i)
+  local list = steps()
+  local s = list[i]
+  if not s then return nil end
+  State = State or ns.State
+  local st = Engine.Status(i)
+  if st == "done" then return nil end
+  if st == "wait" then return "level", nil, s.minLevel or s.until_ end
+  if st == "later" then
+    local name = Engine.InsideOf(s)
+    if not name then for _, j in ipairs(Engine.ObjStepsOf(s.q)) do name = name or Engine.InsideOf(list[j]) end end
+    return "dungeon", nil, name
+  end
+  if st == "notready" then
+    for _, j in ipairs(Engine.ObjStepsOf(s.q)) do if j ~= i and not Engine.IsDone(j) then return "objectives", j end end
+    return "objectives"
+  end
+  -- the step of that kind for that quest still to do: the last one before this step, else the first one after it
+  local function opener(kind, q)
+    local found
+    for j, t in ipairs(list) do
+      if t.k == kind and t.q == q and not Engine.IsDone(j) then
+        if j < i then found = j elseif not found then return j end
+      end
+    end
+    return found
+  end
+  if st == "blocked" then return "pickup", opener("accept", s.q) end
+  if s.k == "accept" and s.q and s.q > 0 then
+    for _, p in ipairs(Engine.PrereqsOf(s.q)) do if not State.IsCompleted(p) then return "handin", opener("turnin", p) end end
+  end
+  return nil
 end
 function Engine.UpdateFocus(px, py, pinst)
   if Engine.view or not px then return end
   local planned = Engine.planned or Engine.current
   if not planned then return end
   local list = steps()
+  State = State or ns.State
+  -- standing at an NPC you can hand a finished quest to: that hand-in, now - wherever the plan has it (From the Ashes
+  -- was step 282, out of the reorder's reach, with Captain Stoutfist right there) and over any other step the card
+  -- holds (it kept Crocs of the Sky, 40 yd away). Not the planned step itself: that one is shown anyway
+  do
+    local best, bestD
+    for j, s in ipairs(list) do
+      if s.k == "turnin" and s.q and s.q > 0 and j ~= planned and State.QuestReady(s.q) then
+        local d = distTo(s, px, py, pinst)
+        if d and d <= (s.r or 6) + 12 and (not bestD or d < bestD) and Engine.Status(j) == "todo" then best, bestD = j, d end
+      end
+    end
+    if best then
+      if Engine.focus ~= best then setFocus(best, "it is ready to hand in and you are at the NPC", "ready") end
+      return
+    end
+  end
   -- hold the current focus while it's open and you're still near it - or, when your kills / loot made it, while they
   -- keep counting (however far from its marker you farm)
-  State = State or ns.State
   if Engine.focus then
     local s = list[Engine.focus]
     local d = s and distTo(s, px, py, pinst)
@@ -854,19 +946,31 @@ function Engine.UpdateFocus(px, py, pinst)
   local ps = list[planned]
   local dP = ps and distTo(ps, px, py, pinst)
   if dP and dP <= (ps.r or 40) + 10 then return end -- you're at the planned step: nothing to do
+  -- farming the planned kill / loot step: its mobs roam well past the one marker the planner picked (Wetlands: the
+  -- Pristine Crimson Scale crocs ran into the War Banners' circle, 100 yd off, and the card jumped there)
+  if ps and ps.k == "obj" and dP and dP <= 2 * (ps.r or 40) + 80 then return end
+  -- never past a step you are making progress on (its kills / loot counted in the last PROGRESS_HOLD seconds)
+  local function busyBefore(j)
+    for i = planned, j - 1 do local t = progressAt[key(i)]; if t and GetTime() - t <= Engine.PROGRESS_HOLD then return true end end
+    return false
+  end
   local inArea, near, nearD
   for _, j in ipairs(Engine.Upcoming(planned, WINDOW)) do
     local s = list[j]
-    if Engine.Status(j) == "todo" and (s.k == "obj" or s.k == "accept" or s.k == "turnin" or s.k == "fp") and Engine.Available(j) then
+    -- an NPC stop you're standing at (pick-up, hand-in, flight path) - not a kill / loot step: walking through a
+    -- quest's circle doesn't mean you're doing it (the Wetlands' circles overlap everywhere, and the card kept
+    -- jumping to War Banners); those take over when your kills or loot count for them (FR_STATE below)
+    if Engine.Status(j) == "todo" and (s.k == "accept" or s.k == "turnin" or s.k == "fp") and Engine.Available(j) then
       local d = distTo(s, px, py, pinst)
       if d then
-        if d <= (s.r or 40) and (not inArea or (s.k == "obj" and list[inArea].k ~= "obj")) then inArea = j end
+        if d <= (s.r or 40) and not inArea then inArea = j end
         if d < 120 and (not nearD or d < nearD) then near, nearD = j, d end
       end
     end
   end
   local pick = inArea
   if not pick and near and dP and dP > 200 and nearD < dP * 0.4 then pick = near end
+  if pick and busyBefore(pick) then pick = nil end
   local why = inArea and "you are standing at it" or "it is right next to you and your planned step is far away"
   -- a quest already done (or a delivery, done as you take it) whose hand-in is right here, though the plan hands it
   -- in much later: hand it in while you're here, not on a trip back (Menethil: the plan sent you to one hand-in and
@@ -892,15 +996,20 @@ ns.On("FR_STATE", function()
   local planned = Engine.planned or Engine.current
   if not planned or Engine.view then return end
   local list = steps()
-  for _, j in ipairs(Engine.Upcoming(planned, WINDOW)) do
+  -- the planned step too: its loot counting means you're on it (UpdateFocus never jumps past it then), and if the card
+  -- had moved on to another step, it comes back
+  local js = Engine.Upcoming(planned, WINDOW); table.insert(js, 1, planned)
+  for _, j in ipairs(js) do
     local s = list[j]
-    if s.k == "obj" then
+    if s and s.k == "obj" and not Engine.IsDone(j) then
       local o = Engine.ObjectiveFor(s)
       local k = key(j)
       if o and o.have then
         if lastHave[k] and o.have > lastHave[k] and not o.finished then
           progressAt[k] = GetTime()
-          if Engine.focus == j then Engine.focusWhy = "progress" -- shown for being here, now also counting: hold it as such
+          if j == planned then
+            if Engine.focus and Engine.focus ~= planned then Engine.focus, Engine.focusWhy = nil, nil; Engine.Refresh() end
+          elseif Engine.focus == j then Engine.focusWhy = "progress" -- shown for being here, now also counting: hold it as such
           elseif j ~= Engine.current then setFocus(j, "you are making progress on it", "progress") end
         end
         lastHave[k] = o.have
@@ -1106,7 +1215,24 @@ ns.On("FR_ROUTE_CHANGED", function() C_Timer.After(0.5, function() if applyInser
 local function questName(q)
   for _, s in ipairs(steps()) do if s.q == q and s.name then return s.name end end
   local e = ForeverRouteEnders and ForeverRouteEnders[q]
-  return e and e.name or ("quest " .. q)
+  if e and e.name then return e.name end
+  local t = C_QuestLog and C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(q)
+  return t or ("quest " .. q)
+end
+Engine.QuestName = questName
+-- the quests you said you won't do: { q, name, ready }, by name (the quest log check lists them, each with Bring back)
+function Engine.Noped()
+  local out = {}
+  for q, how in pairs((ns.char and ns.char.nope) or {}) do out[#out + 1] = { q = q, name = questName(q), ready = how == "ready" } end
+  table.sort(out, function(a, b) return a.name < b.name end)
+  return out
+end
+-- changed your mind: the quest is back on your route (its steps show again; the next replan plans it)
+function Engine.Unnope(q)
+  if not (q and ns.char and ns.char.nope and ns.char.nope[q]) then return end
+  ns.char.nope[q] = nil
+  if ns.Why then ns.Why("abandon", questName(q) .. ": you brought it back; on your route again") end
+  Engine.Refresh()
 end
 -- the quests on the route that come after this one in its chain (and aren't done yet)
 function Engine.Dependents(q)
@@ -1118,7 +1244,9 @@ function Engine.Dependents(q)
 end
 function Engine.NopeNow(qs)
   ns.char.nope = ns.char.nope or {}
-  for _, q in ipairs(qs) do ns.char.nope[q] = true end
+  -- "ready": it was already finished when you dropped it (a hand-in you chose to skip) - it stays dropped (FR_STATE below)
+  State = State or ns.State
+  for _, q in ipairs(qs) do ns.char.nope[q] = State.QuestReady(q) and "ready" or true end
   table.insert(ns.char.history, { kind = "nope", ids = {}, nope = qs })
   Engine.view = nil
   Engine.Refresh()
@@ -1129,7 +1257,8 @@ end
 -- (A plain abandon in the game's quest log still sends you back: that's how a failed escort is taken again.)
 function Engine.Abandoned(qs, why)
   ns.char.nope = ns.char.nope or {}
-  for _, q in ipairs(qs) do ns.char.nope[q] = true; if ns.Why then ns.Why("abandon", questName(q) .. ": abandoned from the quest log check (" .. (why or "not worth doing") .. "); dropped from the route") end end
+  State = State or ns.State
+  for _, q in ipairs(qs) do ns.char.nope[q] = State.QuestReady(q) and "ready" or true; if ns.Why then ns.Why("abandon", questName(q) .. ": abandoned from the quest log check (" .. (why or "not worth doing") .. "); dropped from the route") end end
   table.insert(ns.char.history, { kind = "nope", ids = {}, nope = qs })
   if #ns.char.history > 50 then table.remove(ns.char.history, 1) end
   Engine.Refresh()
@@ -1141,6 +1270,20 @@ ns.On("QUEST_ACCEPTED", function(a, b)
     ns.char.nope[q] = nil
     if ns.Why then ns.Why("abandon", questName(q) .. ": you took it again; back on your route") end
   end
+end)
+-- and so does finishing one you said you wouldn't do, while it was in your log all along (From the Ashes: marked
+-- "not doing", then done anyway - no pick-up to notice, and its hand-in stayed off the route)
+ns.On("FR_STATE", function()
+  if not (ns.char and ns.char.nope and next(ns.char.nope)) then return end
+  State = State or ns.State
+  local back = false
+  for q, how in pairs(ns.char.nope) do
+    if how == true and State.OnQuest(q) and State.QuestReady(q) then
+      ns.char.nope[q] = nil; back = true
+      if ns.Why then ns.Why("abandon", questName(q) .. ": you finished it after all; its hand-in is back on your route") end
+    end
+  end
+  if back then Engine.Refresh() end
 end)
 -- the quest giver has nothing for you (no window opens, so the addon can't see it): this quest leaves your route
 -- until your next level, then it's tried again - its chain stays (Availability.lua; the planner reads the same record)

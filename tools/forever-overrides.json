@@ -26,25 +26,13 @@
       "reqLevel": 35,
       "_why": "Gelkis Alliance: the Desolace Gelkis/Magram chain needs 35 on Forever (was 30)"
     },
-    "3631": {
-      "notInForever": true,
-      "_whyRemoved": "Summon Felsteed is not in Forever (Wowhead, Classic Era 1.15.8 vs Forever 1.60.1: https://www.wowhead.com/forever/changes/spellbook/warlock/summon-felsteed); warlocks learn riding at a riding trainer at 40 like every class"
+    "1501": {
+      "races": 130,
+      "_why": "Forever added troll warlocks and they get the Voidwalker (the player, 2026-11-10: troll warlocks do have voidwalkers); the quest data still has the Classic orc-only race mask. Races: orc 2 + troll 128"
     },
-    "4487": {
-      "notInForever": true,
-      "_whyRemoved": "Summon Felsteed is not in Forever (Wowhead, Classic Era 1.15.8 vs Forever 1.60.1: https://www.wowhead.com/forever/changes/spellbook/warlock/summon-felsteed); warlocks learn riding at a riding trainer at 40 like every class"
-    },
-    "4488": {
-      "notInForever": true,
-      "_whyRemoved": "Summon Felsteed is not in Forever (Wowhead, Classic Era 1.15.8 vs Forever 1.60.1: https://www.wowhead.com/forever/changes/spellbook/warlock/summon-felsteed); warlocks learn riding at a riding trainer at 40 like every class"
-    },
-    "4489": {
-      "notInForever": true,
-      "_whyRemoved": "Summon Felsteed is not in Forever (Wowhead, Classic Era 1.15.8 vs Forever 1.60.1: https://www.wowhead.com/forever/changes/spellbook/warlock/summon-felsteed); warlocks learn riding at a riding trainer at 40 like every class"
-    },
-    "4490": {
-      "notInForever": true,
-      "_whyRemoved": "Summon Felsteed is not in Forever (Wowhead, Classic Era 1.15.8 vs Forever 1.60.1: https://www.wowhead.com/forever/changes/spellbook/warlock/summon-felsteed); warlocks learn riding at a riding trainer at 40 like every class"
+    "1504": {
+      "races": 130,
+      "_why": "Forever added troll warlocks and they get the Voidwalker (the player, 2026-11-10: troll warlocks do have voidwalkers); the quest data still has the Classic orc-only race mask. Races: orc 2 + troll 128"
     },
     "7562": {
       "notInForever": true,
@@ -93,6 +81,78 @@
         79008
       ],
       "_why": "Wowhead (https://www.wowhead.com/forever/quest=79192): needs 79008 first - the quest data did not say"
+    },
+    "81730": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81731": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81732": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81733": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81734": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81735": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81736": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81737": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81738": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81739": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81740": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81741": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81742": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81743": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81744": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81745": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81746": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
+    },
+    "81747": {
+      "special": 1,
+      "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
     },
     "92458": {
       "preSingle": [

@@ -17,12 +17,20 @@ const ROOT = path.join(__dirname, '..');
 const args = {}; for (let i = 2; i < process.argv.length; i += 2) args[process.argv[i].replace(/^--/, '')] = process.argv[i + 1];
 const ALLIANCE = new Set(['human', 'dwarf', 'nightelf', 'gnome', 'skyborne']);
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+// race keys: the game's token for undead is "Scourge"; the Horde's Skyborne (Windshaper Skyborne) are skybornehorde -
+// told apart from the Alliance's by the faction (the save has it), or by the name
+const raceKey = (s, faction) => {
+  const r = norm(s);
+  if (r === 'scourge') return 'undead';
+  if (r.includes('skyborne')) return r.includes('windshaper') || r === 'skybornehorde' || norm(faction) === 'horde' ? 'skybornehorde' : 'skyborne';
+  return r;
+};
 
-let me = { name: args.name, race: norm(args.race), class: norm(args.class), level: +args.level || 1, zone: +args.zone || null, charDir: null };
+let me = { name: args.name, race: raceKey(args.race, args.faction), class: norm(args.class), level: +args.level || 1, zone: +args.zone || null, charDir: null };
 if (args.save) {
   const st = require('./snapshot').loadCharState(args.save, path.join(ROOT, 'qdb', 'conversion.json'));
   if (!st) { console.log('no character save in ' + args.save + ' (log in with the addon once, then /reload)'); process.exit(1); }
-  me = { name: st.name || path.basename(path.dirname(args.save)).split('-')[0], race: norm(st.race), class: norm(st.class), level: st.level || 1, zone: st.pos ? st.pos.zone : null, charDir: args.save.replace(/\\/g, '/') };
+  me = { name: st.name || path.basename(path.dirname(args.save)).split('-')[0], race: raceKey(st.race, st.faction), class: norm(st.class), level: st.level || 1, zone: st.pos ? st.pos.zone : null, charDir: args.save.replace(/\\/g, '/') };
 }
 if (!RACE_BIT[me.race] || !CLASS_BIT[me.class]) { console.log('unknown race or class: ' + me.race + ' ' + me.class); process.exit(1); }
 const faction = ALLIANCE.has(me.race) ? 'alliance' : 'horde';
@@ -36,7 +44,7 @@ const zoneName = Object.fromEntries(conv.map((t) => [t.area_id, t.target_name]))
 // trainers: "<Class> Trainer" NPCs of your faction in the capitals, one stop per capital, and each one in your race's
 // home zone (Northshire and Goldshire, Anvilmar and Kharanos, Valanaar on Zephras Isle): early training without
 // leaving the start zone - a Skyborne would otherwise sail to Stormwind at level 2. Route2 trains at the nearest.
-const RACE_HOME = { human: 12, dwarf: 1, gnome: 1, nightelf: 141, skyborne: 16593 };
+const { RACE_HOME } = require('./world');
 const title = me.class.charAt(0).toUpperCase() + me.class.slice(1) + ' Trainer';
 const byCity = new Map();
 for (const n of Object.values(db.npcs)) {
@@ -70,11 +78,11 @@ const out = {
   special, mustDo: reviewed.mustDo || [], bonusQuests: reviewed.bonusQuests || [], bonusNotes: reviewed.bonusNotes || {},
 };
 const file = args.out || path.join(ROOT, 'routes', `campaign-${norm(me.name)}.json`);
-// the defaults' folders are relative to this repo (it sits in the game's _forever_ folder): written out in full, so the
-// planner finds them whatever folder it is started from
-for (const k of ['addonsDir', 'dungeonFile']) if (typeof out[k] === 'string' && !path.isAbsolute(out[k])) out[k] = path.resolve(ROOT, out[k]);
+// the defaults' folders are relative: addonsDir to the game's _forever_ folder (tools/game-dir.js), dungeonFile to this
+// repo. Written out in full, so the planner finds them whatever folder it is started from
+if (typeof out.addonsDir === 'string' && !path.isAbsolute(out.addonsDir)) out.addonsDir = path.resolve(require('./game-dir').GAME, out.addonsDir);
+if (typeof out.dungeonFile === 'string' && !path.isAbsolute(out.dungeonFile)) out.dungeonFile = path.resolve(ROOT, out.dungeonFile);
 fs.writeFileSync(file, JSON.stringify(out, null, 2) + '\n');
 console.log(`wrote ${file}: ${me.name}, ${me.race} ${me.class} (${faction}) level ${me.level}${me.zone ? ' in ' + zoneName[me.zone] : ''}`);
 console.log(`  trainers: ${trainers.map((t) => t.name).join(', ') || 'none found'}; training at ${trainLevels.join(', ') || '-'}`);
 console.log(`  side trips: ${special.map((s) => s.name).join(', ') || 'none reviewed for a ' + me.class + ' yet'}; must-do quests: ${out.mustDo.length}`);
-if (faction === 'horde') console.log('  note: Horde travel facts (zeppelins, Horde towns as safe) are not in tools/travel-facts.json yet');

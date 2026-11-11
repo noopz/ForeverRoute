@@ -42,10 +42,10 @@
    "name": "Splintertree Post",
    "m": 1440,
    "zone": "Ashenvale",
-   "x": 0.7176,
-   "y": 0.6302,
-   "r": 188,
-   "n": 58,
+   "x": 0.7183,
+   "y": 0.6294,
+   "r": 192,
+   "n": 60,
    "fm": "Vhulgra"
   },
   {
@@ -172,10 +172,10 @@
    "name": "a Horde camp",
    "m": 1411,
    "zone": "Durotar",
-   "x": 0.5233,
-   "y": 0.4213,
-   "r": 143,
-   "n": 69
+   "x": 0.5235,
+   "y": 0.4219,
+   "r": 146,
+   "n": 72
   },
   {
    "name": "a Horde camp",
@@ -190,10 +190,10 @@
    "name": "a Horde camp",
    "m": 1411,
    "zone": "Durotar",
-   "x": 0.5551,
-   "y": 0.7459,
-   "r": 75,
-   "n": 42
+   "x": 0.555,
+   "y": 0.744,
+   "r": 88,
+   "n": 46
   },
   {
    "name": "Brackenwall Village",
@@ -224,6 +224,15 @@
    "r": 104,
    "n": 43,
    "fm": "Shyn"
+  },
+  {
+   "name": "a Horde camp",
+   "m": 1444,
+   "zone": "Feralas",
+   "x": 0.3582,
+   "y": 0.325,
+   "r": 40,
+   "n": 8
   },
   {
    "name": "Tarren Mill",
@@ -284,10 +293,10 @@
    "name": "a Horde camp",
    "m": 1454,
    "zone": "Orgrimmar",
-   "x": 0.3568,
-   "y": 0.375,
+   "x": 0.3564,
+   "y": 0.3755,
    "r": 56,
-   "n": 41
+   "n": 43
   },
   {
    "name": "a Horde camp",
@@ -302,10 +311,28 @@
    "name": "a Horde camp",
    "m": 1454,
    "zone": "Orgrimmar",
+   "x": 0.5553,
+   "y": 0.3698,
+   "r": 58,
+   "n": 35
+  },
+  {
+   "name": "a Horde camp",
+   "m": 1454,
+   "zone": "Orgrimmar",
    "x": 0.7205,
    "y": 0.2617,
    "r": 59,
    "n": 35
+  },
+  {
+   "name": "a Horde camp",
+   "m": 1454,
+   "zone": "Orgrimmar",
+   "x": 0.5243,
+   "y": 0.6867,
+   "r": 67,
+   "n": 34
   },
   {
    "name": "a Horde camp",
@@ -320,19 +347,10 @@
    "name": "a Horde camp",
    "m": 1454,
    "zone": "Orgrimmar",
-   "x": 0.5238,
-   "y": 0.6881,
-   "r": 66,
+   "x": 0.5983,
+   "y": 0.4852,
+   "r": 69,
    "n": 32
-  },
-  {
-   "name": "a Horde camp",
-   "m": 1454,
-   "zone": "Orgrimmar",
-   "x": 0.5527,
-   "y": 0.3698,
-   "r": 59,
-   "n": 30
   },
   {
    "name": "a Horde camp",
@@ -342,15 +360,6 @@
    "y": 0.7183,
    "r": 57,
    "n": 30
-  },
-  {
-   "name": "a Horde camp",
-   "m": 1454,
-   "zone": "Orgrimmar",
-   "x": 0.6028,
-   "y": 0.4899,
-   "r": 71,
-   "n": 27
   },
   {
    "name": "a Horde camp",
@@ -383,6 +392,15 @@
    "name": "a Horde camp",
    "m": 1454,
    "zone": "Orgrimmar",
+   "x": 0.3672,
+   "y": 0.8672,
+   "r": 40,
+   "n": 15
+  },
+  {
+   "name": "a Horde camp",
+   "m": 1454,
+   "zone": "Orgrimmar",
    "x": 0.692,
    "y": 0.1697,
    "r": 54,
@@ -401,15 +419,6 @@
    "name": "a Horde camp",
    "m": 1454,
    "zone": "Orgrimmar",
-   "x": 0.3697,
-   "y": 0.8666,
-   "r": 40,
-   "n": 12
-  },
-  {
-   "name": "a Horde camp",
-   "m": 1454,
-   "zone": "Orgrimmar",
    "x": 0.4987,
    "y": 0.779,
    "r": 56,
@@ -419,10 +428,10 @@
    "name": "a Horde camp",
    "m": 1454,
    "zone": "Orgrimmar",
-   "x": 0.7894,
-   "y": 0.3139,
+   "x": 0.7891,
+   "y": 0.3126,
    "r": 40,
-   "n": 11
+   "n": 10
   },
   {
    "name": "a Horde camp",
@@ -495,10 +504,10 @@
    "name": "the Crossroads",
    "m": 1413,
    "zone": "The Barrens",
-   "x": 0.5159,
-   "y": 0.2981,
-   "r": 278,
-   "n": 127,
+   "x": 0.5158,
+   "y": 0.298,
+   "r": 269,
+   "n": 130,
    "fm": "Devrak"
   },
   {
@@ -542,9 +551,9 @@
    "name": "a Horde camp",
    "m": 1413,
    "zone": "The Barrens",
-   "x": 0.6388,
-   "y": 0.3616,
-   "r": 279,
+   "x": 0.6392,
+   "y": 0.363,
+   "r": 271,
    "n": 9
   },
   {
@@ -607,19 +616,10 @@
    "name": "a Horde camp",
    "m": 1456,
    "zone": "Thunder Bluff",
-   "x": 0.2553,
-   "y": 0.1976,
-   "r": 46,
-   "n": 27
-  },
-  {
-   "name": "a Horde camp",
-   "m": 1456,
-   "zone": "Thunder Bluff",
-   "x": 0.5717,
-   "y": 0.7907,
+   "x": 0.2637,
+   "y": 0.1991,
    "r": 40,
-   "n": 26
+   "n": 48
   },
   {
    "name": "a Horde camp",
@@ -634,37 +634,46 @@
    "name": "a Horde camp",
    "m": 1456,
    "zone": "Thunder Bluff",
-   "x": 0.4398,
-   "y": 0.5885,
-   "r": 45,
-   "n": 19
-  },
-  {
-   "name": "a Horde camp",
-   "m": 1456,
-   "zone": "Thunder Bluff",
-   "x": 0.3795,
-   "y": 0.5356,
+   "x": 0.3888,
+   "y": 0.5406,
    "r": 40,
-   "n": 12
+   "n": 20
   },
   {
    "name": "a Horde camp",
    "m": 1456,
    "zone": "Thunder Bluff",
-   "x": 0.5242,
-   "y": 0.5459,
-   "r": 42,
-   "n": 11
+   "x": 0.5869,
+   "y": 0.508,
+   "r": 47,
+   "n": 20
   },
   {
    "name": "a Horde camp",
    "m": 1456,
    "zone": "Thunder Bluff",
-   "x": 0.38,
-   "y": 0.6291,
+   "x": 0.5802,
+   "y": 0.785,
+   "r": 41,
+   "n": 18
+  },
+  {
+   "name": "a Horde camp",
+   "m": 1456,
+   "zone": "Thunder Bluff",
+   "x": 0.4627,
+   "y": 0.5914,
    "r": 40,
-   "n": 10
+   "n": 14
+  },
+  {
+   "name": "a Horde camp",
+   "m": 1456,
+   "zone": "Thunder Bluff",
+   "x": 0.3866,
+   "y": 0.6284,
+   "r": 40,
+   "n": 13
   },
   {
    "name": "a Horde camp",
@@ -697,10 +706,10 @@
    "name": "a Horde camp",
    "m": 1420,
    "zone": "Tirisfal Glades",
-   "x": 0.6031,
-   "y": 0.524,
-   "r": 89,
-   "n": 76
+   "x": 0.6033,
+   "y": 0.5239,
+   "r": 85,
+   "n": 77
   },
   {
    "name": "a Horde camp",
@@ -733,10 +742,10 @@
    "name": "a Horde camp",
    "m": 1420,
    "zone": "Tirisfal Glades",
-   "x": 0.5282,
-   "y": 0.5491,
-   "r": 87,
-   "n": 18
+   "x": 0.5289,
+   "y": 0.5514,
+   "r": 96,
+   "n": 20
   },
   {
    "name": "the Undercity",
@@ -752,9 +761,36 @@
    "name": "a Horde camp",
    "m": 1458,
    "zone": "Undercity",
-   "x": 0.5823,
-   "y": 0.893,
+   "x": 0.4942,
+   "y": 0.7173,
    "r": 40,
+   "n": 31
+  },
+  {
+   "name": "a Horde camp",
+   "m": 1458,
+   "zone": "Undercity",
+   "x": 0.484,
+   "y": 0.1712,
+   "r": 40,
+   "n": 29
+  },
+  {
+   "name": "a Horde camp",
+   "m": 1458,
+   "zone": "Undercity",
+   "x": 0.8256,
+   "y": 0.2538,
+   "r": 40,
+   "n": 28
+  },
+  {
+   "name": "a Horde camp",
+   "m": 1458,
+   "zone": "Undercity",
+   "x": 0.7617,
+   "y": 0.4432,
+   "r": 49,
    "n": 22
   },
   {
@@ -770,10 +806,10 @@
    "name": "a Horde camp",
    "m": 1458,
    "zone": "Undercity",
-   "x": 0.5003,
-   "y": 0.7233,
+   "x": 0.7891,
+   "y": 0.1684,
    "r": 40,
-   "n": 21
+   "n": 20
   },
   {
    "name": "a Horde camp",
@@ -788,35 +824,17 @@
    "name": "a Horde camp",
    "m": 1458,
    "zone": "Undercity",
-   "x": 0.5103,
-   "y": 0.2311,
+   "x": 0.5128,
+   "y": 0.2365,
    "r": 40,
-   "n": 17
+   "n": 14
   },
   {
    "name": "a Horde camp",
    "m": 1458,
    "zone": "Undercity",
-   "x": 0.7777,
-   "y": 0.4468,
-   "r": 44,
-   "n": 13
-  },
-  {
-   "name": "a Horde camp",
-   "m": 1458,
-   "zone": "Undercity",
-   "x": 0.8531,
-   "y": 0.153,
-   "r": 40,
-   "n": 12
-  },
-  {
-   "name": "a Horde camp",
-   "m": 1458,
-   "zone": "Undercity",
-   "x": 0.4817,
-   "y": 0.1613,
+   "x": 0.8554,
+   "y": 0.1525,
    "r": 40,
    "n": 11
   },
@@ -828,15 +846,6 @@
    "y": 0.5621,
    "r": 43,
    "n": 11
-  },
-  {
-   "name": "a Horde camp",
-   "m": 1458,
-   "zone": "Undercity",
-   "x": 0.7943,
-   "y": 0.2065,
-   "r": 40,
-   "n": 8
   },
   {
    "name": "a Horde camp",
@@ -898,10 +907,10 @@
    "name": "a Alliance camp",
    "m": 1416,
    "zone": "Alterac Mountains",
-   "x": 0.1634,
-   "y": 0.6647,
-   "r": 129,
-   "n": 149
+   "x": 0.1638,
+   "y": 0.6646,
+   "r": 127,
+   "n": 152
   },
   {
    "name": "a Alliance camp",
@@ -916,10 +925,10 @@
    "name": "a Alliance camp",
    "m": 1416,
    "zone": "Alterac Mountains",
-   "x": 0.1334,
-   "y": 0.5564,
-   "r": 102,
-   "n": 70
+   "x": 0.1328,
+   "y": 0.5561,
+   "r": 105,
+   "n": 68
   },
   {
    "name": "a Alliance camp",
@@ -998,10 +1007,10 @@
    "name": "Daelyshia's town",
    "m": 1440,
    "zone": "Ashenvale",
-   "x": 0.3586,
-   "y": 0.5034,
+   "x": 0.3589,
+   "y": 0.5032,
    "r": 120,
-   "n": 33,
+   "n": 34,
    "fm": "Daelyshia"
   },
   {
@@ -1017,19 +1026,19 @@
    "name": "a Alliance camp",
    "m": 1440,
    "zone": "Ashenvale",
-   "x": 0.6075,
-   "y": 0.7237,
-   "r": 122,
-   "n": 25
+   "x": 0.2825,
+   "y": 0.2745,
+   "r": 81,
+   "n": 26
   },
   {
    "name": "a Alliance camp",
    "m": 1440,
    "zone": "Ashenvale",
-   "x": 0.2825,
-   "y": 0.2715,
-   "r": 98,
-   "n": 18
+   "x": 0.6075,
+   "y": 0.7237,
+   "r": 122,
+   "n": 25
   },
   {
    "name": "a Alliance camp",
@@ -1109,11 +1118,20 @@
    "name": "Caylais Moonfeather's town",
    "m": 1439,
    "zone": "Darkshore",
-   "x": 0.3716,
-   "y": 0.4287,
-   "r": 174,
-   "n": 56,
+   "x": 0.3715,
+   "y": 0.4291,
+   "r": 171,
+   "n": 59,
    "fm": "Caylais Moonfeather"
+  },
+  {
+   "name": "a Alliance camp",
+   "m": 1439,
+   "zone": "Darkshore",
+   "x": 0.4892,
+   "y": 0.1452,
+   "r": 193,
+   "n": 31
   },
   {
    "name": "a Alliance camp",
@@ -1128,10 +1146,10 @@
    "name": "a Alliance camp",
    "m": 1457,
    "zone": "Darnassus",
-   "x": 0.3857,
-   "y": 0.8315,
-   "r": 43,
-   "n": 55
+   "x": 0.389,
+   "y": 0.8442,
+   "r": 48,
+   "n": 72
   },
   {
    "name": "a Alliance camp",
@@ -1146,10 +1164,10 @@
    "name": "a Alliance camp",
    "m": 1457,
    "zone": "Darnassus",
-   "x": 0.6279,
-   "y": 0.2208,
+   "x": 0.6284,
+   "y": 0.2184,
    "r": 40,
-   "n": 19
+   "n": 18
   },
   {
    "name": "a Alliance camp",
@@ -1164,28 +1182,10 @@
    "name": "a Alliance camp",
    "m": 1457,
    "zone": "Darnassus",
-   "x": 0.3977,
-   "y": 0.9049,
-   "r": 40,
-   "n": 15
-  },
-  {
-   "name": "a Alliance camp",
-   "m": 1457,
-   "zone": "Darnassus",
    "x": 0.3971,
    "y": 0.7474,
    "r": 40,
    "n": 14
-  },
-  {
-   "name": "a Alliance camp",
-   "m": 1457,
-   "zone": "Darnassus",
-   "x": 0.5919,
-   "y": 0.358,
-   "r": 40,
-   "n": 13
   },
   {
    "name": "a Alliance camp",
@@ -1200,8 +1200,26 @@
    "name": "a Alliance camp",
    "m": 1457,
    "zone": "Darnassus",
+   "x": 0.394,
+   "y": 0.9111,
+   "r": 40,
+   "n": 11
+  },
+  {
+   "name": "a Alliance camp",
+   "m": 1457,
+   "zone": "Darnassus",
    "x": 0.5829,
    "y": 0.5427,
+   "r": 40,
+   "n": 10
+  },
+  {
+   "name": "a Alliance camp",
+   "m": 1457,
+   "zone": "Darnassus",
+   "x": 0.5939,
+   "y": 0.3543,
    "r": 40,
    "n": 10
   },
@@ -1228,10 +1246,10 @@
    "name": "a Alliance camp",
    "m": 1426,
    "zone": "Dun Morogh",
-   "x": 0.4736,
-   "y": 0.5127,
-   "r": 169,
-   "n": 58
+   "x": 0.4732,
+   "y": 0.5144,
+   "r": 171,
+   "n": 63
   },
   {
    "name": "a Alliance camp",
@@ -1241,6 +1259,24 @@
    "y": 0.6932,
    "r": 152,
    "n": 54
+  },
+  {
+   "name": "a Alliance camp",
+   "m": 1426,
+   "zone": "Dun Morogh",
+   "x": 0.2934,
+   "y": 0.4203,
+   "r": 204,
+   "n": 48
+  },
+  {
+   "name": "a Alliance camp",
+   "m": 1426,
+   "zone": "Dun Morogh",
+   "x": 0.3467,
+   "y": 0.3559,
+   "r": 125,
+   "n": 28
   },
   {
    "name": "a Alliance camp",
@@ -1273,19 +1309,10 @@
    "name": "a Alliance camp",
    "m": 1426,
    "zone": "Dun Morogh",
-   "x": 0.6123,
-   "y": 0.5068,
-   "r": 123,
-   "n": 14
-  },
-  {
-   "name": "a Alliance camp",
-   "m": 1426,
-   "zone": "Dun Morogh",
-   "x": 0.3005,
-   "y": 0.4535,
-   "r": 81,
-   "n": 12
+   "x": 0.6126,
+   "y": 0.503,
+   "r": 120,
+   "n": 17
   },
   {
    "name": "a Alliance camp",
@@ -1347,9 +1374,9 @@
    "m": 1445,
    "zone": "Dustwallow Marsh",
    "x": 0.6666,
-   "y": 0.4799,
-   "r": 153,
-   "n": 86,
+   "y": 0.4793,
+   "r": 156,
+   "n": 88,
    "fm": "Baldruc"
   },
   {
@@ -1401,10 +1428,10 @@
    "name": "a Alliance camp",
    "m": 1429,
    "zone": "Elwynn Forest",
-   "x": 0.4314,
-   "y": 0.6533,
+   "x": 0.4316,
+   "y": 0.6535,
    "r": 100,
-   "n": 48
+   "n": 49
   },
   {
    "name": "a Alliance camp",
@@ -1501,18 +1528,18 @@
    "name": "a Alliance camp",
    "m": 1424,
    "zone": "Hillsbrad Foothills",
-   "x": 0.7142,
-   "y": 0.793,
-   "r": 82,
-   "n": 48
+   "x": 0.506,
+   "y": 0.5804,
+   "r": 93,
+   "n": 49
   },
   {
    "name": "a Alliance camp",
    "m": 1424,
    "zone": "Hillsbrad Foothills",
-   "x": 0.5059,
-   "y": 0.5803,
-   "r": 94,
+   "x": 0.7142,
+   "y": 0.793,
+   "r": 82,
    "n": 48
   },
   {
@@ -1538,6 +1565,15 @@
    "name": "a Alliance camp",
    "m": 1455,
    "zone": "Ironforge",
+   "x": 0.5111,
+   "y": 0.1115,
+   "r": 40,
+   "n": 43
+  },
+  {
+   "name": "a Alliance camp",
+   "m": 1455,
+   "zone": "Ironforge",
    "x": 0.4159,
    "y": 0.5373,
    "r": 40,
@@ -1547,10 +1583,10 @@
    "name": "a Alliance camp",
    "m": 1455,
    "zone": "Ironforge",
-   "x": 0.5094,
-   "y": 0.1113,
+   "x": 0.317,
+   "y": 0.202,
    "r": 40,
-   "n": 33
+   "n": 30
   },
   {
    "name": "a Alliance camp",
@@ -1601,6 +1637,15 @@
    "name": "a Alliance camp",
    "m": 1455,
    "zone": "Ironforge",
+   "x": 0.7005,
+   "y": 0.9014,
+   "r": 40,
+   "n": 13
+  },
+  {
+   "name": "a Alliance camp",
+   "m": 1455,
+   "zone": "Ironforge",
    "x": 0.575,
    "y": 0.7662,
    "r": 40,
@@ -1619,28 +1664,19 @@
    "name": "a Alliance camp",
    "m": 1455,
    "zone": "Ironforge",
-   "x": 0.7002,
-   "y": 0.9026,
-   "r": 40,
-   "n": 12
-  },
-  {
-   "name": "a Alliance camp",
-   "m": 1455,
-   "zone": "Ironforge",
-   "x": 0.3205,
-   "y": 0.2069,
-   "r": 40,
-   "n": 11
-  },
-  {
-   "name": "a Alliance camp",
-   "m": 1455,
-   "zone": "Ironforge",
    "x": 0.6865,
    "y": 0.4657,
    "r": 40,
    "n": 11
+  },
+  {
+   "name": "a Alliance camp",
+   "m": 1455,
+   "zone": "Ironforge",
+   "x": 0.3711,
+   "y": 0.1343,
+   "r": 40,
+   "n": 10
   },
   {
    "name": "a Alliance camp",
@@ -1837,10 +1873,10 @@
    "name": "a Alliance camp",
    "m": 1453,
    "zone": "Stormwind City",
-   "x": 0.8024,
-   "y": 0.3788,
-   "r": 41,
-   "n": 25
+   "x": 0.8027,
+   "y": 0.3783,
+   "r": 43,
+   "n": 24
   },
   {
    "name": "a Alliance camp",
@@ -1850,6 +1886,15 @@
    "y": 0.4626,
    "r": 85,
    "n": 23
+  },
+  {
+   "name": "a Alliance camp",
+   "m": 1453,
+   "zone": "Stormwind City",
+   "x": 0.5047,
+   "y": 0.4655,
+   "r": 55,
+   "n": 18
   },
   {
    "name": "a Alliance camp",
@@ -1877,15 +1922,6 @@
    "y": 0.5404,
    "r": 76,
    "n": 16
-  },
-  {
-   "name": "a Alliance camp",
-   "m": 1453,
-   "zone": "Stormwind City",
-   "x": 0.5052,
-   "y": 0.4644,
-   "r": 58,
-   "n": 15
   },
   {
    "name": "a Alliance camp",
@@ -1991,9 +2027,9 @@
    "m": 1438,
    "zone": "Teldrassil",
    "x": 0.5617,
-   "y": 0.5987,
-   "r": 176,
-   "n": 52
+   "y": 0.5985,
+   "r": 174,
+   "n": 54
   },
   {
    "name": "a Alliance camp",

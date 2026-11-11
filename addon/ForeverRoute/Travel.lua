@@ -23,7 +23,15 @@ Travel.DANGER_ABOVE, Travel.TOWN_WALK = TD.DANGER_ABOVE, TD.TOWN_WALK
 Travel.AHEAD_YD = 40
 Travel.DOCKS, Travel.ZONE_MIN, Travel.BOATS, Travel.GATES = TD.DOCKS, TD.ZONE_MIN, TD.BOATS, TD.GATES
 Travel.SPELLS = TD.SPELLS or {}
+Travel.ZONE_MIN_HORDE = TD.ZONE_MIN_HORDE or {}
+Travel.CROSS_CLEAR = 150 -- yards beyond a hostile town's radius where a border crossing is no way for you
 Travel.NET = TD.NET
+-- your faction, as the travel facts name it: crossings, spells and gates with a faction are only there for that one
+function Travel.Side()
+  local ok, f = pcall(UnitFactionGroup, "player")
+  return (ok and f == "Horde") and "horde" or "alliance"
+end
+local function forSide(only, side) return not only or only == side end
 Travel.OFFNET = 1.25 -- straight-line yards to the network's key points count this much longer (roads bend)
 
 local function world(m, x, y)
@@ -85,7 +93,7 @@ local function net()
   for _, n in ipairs((Travel.NET and Travel.NET.nodes) or {}) do
     local w = world(n.m, n.x, n.y)
     if w then
-      local c = { id = n.id, kind = n.kind, m = n.m, x = n.x, y = n.y, name = n.name, dock = n.dock, m2 = n.m2, x2 = n.x2, y2 = n.y2, w = w }
+      local c = { id = n.id, kind = n.kind, m = n.m, x = n.x, y = n.y, name = n.name, dock = n.dock, m2 = n.m2, x2 = n.x2, y2 = n.y2, side = n.side, w = w }
       local D = n.dock and Travel.DOCKS[n.dock]
       if D then c.town, c.zone, c.pier, c.name, c.say = D.town, D.zone, D.pier, D.name, D.say end
       netNodes[#netNodes + 1] = c; netById[n.id] = c; netInst[w[3]] = true
@@ -146,12 +154,21 @@ function Travel.Plan(from, to)
   from.w = from.w or world(from.m, from.x, from.y); to.w = to.w or world(to.m, to.x, to.y)
   if not (from.w and to.w) then return nil end
   local lvl = UnitLevel and UnitLevel("player") or 60
-  local function risky(m) local z = Travel.ZONE_MIN[m]; return z and z > lvl + Travel.DANGER_ABOVE end
+  local side = Travel.Side()
+  -- a Horde player's own lands are not the 60 that keeps the Alliance out (ZONE_MIN_HORDE)
+  local function risky(m)
+    local z = Travel.ZONE_MIN[m]
+    if side == "horde" and Travel.ZONE_MIN_HORDE[m] ~= nil then z = Travel.ZONE_MIN_HORDE[m] end
+    return z and z > lvl + Travel.DANGER_ABOVE
+  end
+  local gates = {}
+  for _, g in ipairs(Travel.GATES) do if forSide(g.faction, side) then gates[#gates + 1] = g end end
   local function gated(a, b)
     if a.gate or b.gate then return false end
-    for _, g in ipairs(Travel.GATES) do if (a.m == g.a and b.m == g.b) or (a.m == g.b and b.m == g.a) then return true end end
+    for _, g in ipairs(gates) do if (a.m == g.a and b.m == g.b) or (a.m == g.b and b.m == g.a) then return true end end
     return false
   end
+  local myLetter = side == "horde" and "H" or "A"
   local N = { { id = "you", w = from.w, m = from.m, x = from.x, y = from.y, name = "you" }, { id = "target", w = to.w, m = to.m, x = to.x, y = to.y, name = to.name or "there" } }
   local adj = { {}, {} }
   local idx = {}
@@ -161,6 +178,13 @@ function Travel.Plan(from, to)
     local au, av = adj[u], adj[v]; au[#au + 1] = { v, c, how }; av[#av + 1] = { u, c, how }
   end
   local learned = (ForeverRouteDB and ForeverRouteDB.docks) or {}
+  local hostile = Travel.HostileTowns()
+  local function inCamp(n)
+    for _, h in ipairs(hostile) do
+      if n.w and h.w[3] == n.w[3] and math.sqrt((h.w[1] - n.w[1]) ^ 2 + (h.w[2] - n.w[2]) ^ 2) < h.r + Travel.CROSS_CLEAR then return true end
+    end
+    return false
+  end
   for _, n in ipairs(net()) do
     local c = n
     if n.dock then
@@ -171,8 +195,11 @@ function Travel.Plan(from, to)
         if w then c = setmetatable({ x = L.x, y = L.y, w = w }, { __index = n }) end
       end
     end
-    if n.kind == "fp" and knowsFP(n.m) then c = setmetatable({ fp = true }, { __index = c }) end
-    idx[n.id] = add(c)
+    -- a flight master of the other faction is only a spot on the road for you
+    if n.kind == "fp" and (not n.side or n.side:find(myLetter, 1, true)) and knowsFP(n.m) then c = setmetatable({ fp = true }, { __index = c }) end
+    -- a border crossing inside the other faction's town or camp (Mor'shan Rampart's gate) is no way for you: a crossing
+    -- is a chokepoint, and the border has another one clear of it (tools/travel.js does the same)
+    if not (n.kind == "cross" and inCamp(n)) then idx[n.id] = add(c) end
   end
   for _, e in ipairs((Travel.NET and Travel.NET.edges) or {}) do
     local u, v = idx[e[1]], idx[e[2]]
@@ -206,7 +233,7 @@ function Travel.Plan(from, to)
   end
   -- gates (the breach past Mor'shan Rampart): the only way across their border when riding in straight lines
   local firstGate = #N + 1
-  for k, g in ipairs(Travel.GATES) do
+  for k, g in ipairs(gates) do
     local w = world(g.via.m, g.via.x, g.via.y)
     if w then add({ id = "gate" .. k, kind = "gate", gate = true, w = w, m = g.via.m, x = g.via.x, y = g.via.y, name = g.via.name }) end
   end
@@ -259,13 +286,20 @@ function Travel.Plan(from, to)
     local u, v = idx["dock-" .. bt[1]], idx["dock-" .. bt[2]]
     local allowed = not bt[5]
     if bt[5] then for _, r in ipairs(bt[5]) do if r == myRace or r == myClass then allowed = true end end end
-    if u and v and allowed then edge(u, v, bt[3] or Travel.BOAT, "boat") end
+    -- (6th entry: a faction's own crossings - the zeppelins, the Stormwind boat)
+    if not forSide(bt[6], side) then allowed = false end
+    if u and v and allowed then
+      -- the kind rides along (a portal reads "take the portal"); a 7th entry true: one way (no portal back)
+      local c = bt[3] or Travel.BOAT
+      if bt[7] then adj[u][#adj[u] + 1] = { v, c, "boat", bt[4] }
+      else edge(u, v, c, "boat"); adj[u][#adj[u]][4] = bt[4]; adj[v][#adj[v]][4] = bt[4] end
+    end
   end
   -- a class spell that takes you somewhere from anywhere (Teleport: Moonglade): one way, from where you stand
   local myLevel = (UnitLevel and UnitLevel("player")) or 1
   for _, sp in ipairs(Travel.SPELLS) do
     local v = idx["dock-" .. sp.dock]
-    if v and sp.class == myClass and myLevel >= (sp.level or 1) and N[v].m ~= from.m then adj[1][#adj[1] + 1] = { v, sp.cast or 10, "spell" }; N[v].spellSay = sp.say end
+    if v and sp.class == myClass and myLevel >= (sp.level or 1) and forSide(sp.faction, side) and N[v].m ~= from.m then adj[1][#adj[1] + 1] = { v, sp.cast or 10, "spell" }; N[v].spellSay = sp.say end
   end
   -- your hearthstone, when it is ready: from wherever you are to your inn. It costs an hour's cooldown, so it only
   -- wins when it saves a few minutes (HEARTH_VALUE)
@@ -283,7 +317,7 @@ function Travel.Plan(from, to)
     end
   end
   -- Dijkstra
-  local dist, prev, how, done = {}, {}, {}, {}
+  local dist, prev, how, done, kindOf = {}, {}, {}, {}, {}
   for i = 1, #N do dist[i] = math.huge end
   dist[1] = 0
   while true do
@@ -293,19 +327,19 @@ function Travel.Plan(from, to)
     done[u] = true
     for _, e in ipairs(adj[u]) do
       local v, c = e[1], e[2]
-      if not done[v] and dist[u] + c < dist[v] then dist[v], prev[v], how[v] = dist[u] + c, u, e[3] end
+      if not done[v] and dist[u] + c < dist[v] then dist[v], prev[v], how[v], kindOf[v] = dist[u] + c, u, e[3], e[4] end
     end
   end
   if dist[2] == math.huge then return nil end
   -- walk back from the target: the hops in order; consecutive rides are one ride (through the crossings)
   local chain = {}
   local v = 2
-  while v and v ~= 1 do table.insert(chain, 1, { node = N[v], how = how[v], from = N[prev[v]] }); v = prev[v] end
+  while v and v ~= 1 do table.insert(chain, 1, { node = N[v], how = how[v], kind = kindOf[v], from = N[prev[v]] }); v = prev[v] end
   local hops = {}
   for _, c in ipairs(chain) do
     local last = hops[#hops]
     if last and last.how == "ride" and c.how == "ride" then last.via[#last.via + 1] = c.from; last.node = c.node
-    else hops[#hops + 1] = { node = c.node, from = c.from, how = c.how, via = {} } end
+    else hops[#hops + 1] = { node = c.node, from = c.from, how = c.how, kind = c.kind, via = {} } end
   end
   -- what you do, leg by leg; "ride to the flight master, fly to X" reads as one "Fly to X" leg
   local function placeName(n) return n.id == "target" and (to.name or mapName(n.m)) or (n.kind == "cross" and ((("the " .. n.name:gsub(" / ", " - ") .. " border"):gsub("^the The ", "the ")))) or n.town or n.name or mapName(n.m) end
@@ -355,6 +389,8 @@ function Travel.Plan(from, to)
       local tram = f.dock and f.dock:find("^tram")
       -- a crossing that is more than a boat (the skyship and portal off Zephras Isle) says what you do
       local say = type(f.say) == "table" and n.dock and f.say[n.dock]
+      -- a dock portal (Forever added them beside the boats and zeppelins): the dock's text may name the boat
+      if c.kind == "portal" and not (say and say:lower():find("portal", 1, true)) then say = "Take the portal to " .. (n.town or n.name) .. " (" .. (n.zone or mapName(n.m)) .. ")" end
       local text = say or tram and ("Take the Deeprun Tram to " .. (n.town or n.name)) or ((sameTown and ("In " .. f.town .. ", walk to " .. (f.pier or "the other pier") .. " and take the boat to ") or "Boat to ") .. (n.town or n.name) .. " (" .. (n.zone or mapName(n.m)) .. ")")
       legs[#legs + 1] = { sm = f.m, sx = f.x, sy = f.y, how = "boat", m = f.m, x = f.x, y = f.y, toTown = n.town, text = text, dock = (f.dock and Travel.DOCKS[f.dock] and Travel.DOCKS[f.dock].learned) or f.dock }
     end

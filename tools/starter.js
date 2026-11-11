@@ -10,9 +10,10 @@ const { execFileSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const [race = 'gnome', cls = 'warlock', target = '30', N = '1'] = process.argv.slice(2);
 // start zones (QuestieDB area ids): where a new character of the race appears
-const START = { gnome: 1, dwarf: 1, human: 12, nightelf: 141, skyborne: 16593 }; // skyborne: Zephras Isle (Forever)
+const START = { gnome: 1, dwarf: 1, human: 12, nightelf: 141, skyborne: 16593, // skyborne: Zephras Isle (Forever)
+  orc: 14, troll: 14, tauren: 215, undead: 85, skybornehorde: 16593 }; // Windshaper Skyborne: Zephras Isle too // Durotar (Valley of Trials), Mulgore (Camp Narache), Tirisfal (Deathknell)
 const zone = START[race];
-if (!zone) { console.log('no start zone known for ' + race + ' (Alliance only so far)'); process.exit(2); }
+if (!zone) { console.log('no start zone known for ' + race + ' (add it to START)'); process.exit(2); }
 const key = `${race}-${cls}`;
 // FR_EXPERIMENT=<name> FR_EXTRA='{"lonelyYards":400}': a trial plan with extra planner settings, in
 // paths-starter/<key>-<name>, and no addon written (the built-in plans stay as they are)
@@ -45,6 +46,12 @@ const folder = 'ForeverRoute_Starter_' + key.replace(/-/g, '_');
 const dir = path.join(ROOT, 'addon', folder);
 fs.mkdirSync(dir, { recursive: true });
 const mainToc = fs.readFileSync(path.join(ROOT, 'addon', 'ForeverRoute', 'ForeverRoute.toc'), 'utf8');
+// the plans stamp (CLAUDE.md, Versioning): when it was built, from which quest data and planner - shown in the addon, so
+// a report says which plan someone had, apart from the addon's version
+const qdbVer = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'qdb', 'questiedb-version.json'), 'utf8')).version; } catch (e) { return '?'; } })();
+const commit = (() => { try { return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).trim(); } catch (e) { return '?'; } })();
+const built = new Date().toISOString().slice(0, 10);
+const stamp = `plans ${built} · QuestieDB ${qdbVer} · planner ${commit}`;
 const iface = (/## Interface: (\S+)/.exec(mainToc) || [, '16001'])[1];
 fs.writeFileSync(path.join(dir, folder + '.toc'), [
   '## Interface: ' + iface,
@@ -52,9 +59,14 @@ fs.writeFileSync(path.join(dir, folder + '.toc'), [
   '## Notes: Loaded by Forever Route only for a ' + race + ' ' + cls + ' with no plan of its own.',
   '## Dependencies: ForeverRoute',
   '## LoadOnDemand: 1',
+  '## Version: plans ' + built,
+  '## X-Plans: ' + stamp,
   '', 'Plan.lua', ''].join('\n'));
 const block = `-- Built-in plan for a ${race} ${cls} (tools/starter.js): followed when there is no plan of your own for this character.
+-- ${stamp}
 ForeverRouteStarter = ForeverRouteStarter or {}
+ForeverRouteStarterStamp = ForeverRouteStarterStamp or {}
+ForeverRouteStarterStamp[${JSON.stringify(key)}] = ${JSON.stringify(stamp)}
 ForeverRouteStarter[${JSON.stringify(key)}] = function()
 ${inner}
 end
