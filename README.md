@@ -28,6 +28,25 @@ Skyborne skyship:
 
 ![Every Alliance plan, checked](docs/img/plans.gif)
 
-Optional: the Windows companion (see Releases) replans your route from your save every time you `/reload`.
+## Getting started
+
+Install Forever Route from CurseForge or from [Releases](https://github.com/noopz/ForeverRoute/releases) and log in. A
+built-in plan for your race and class loads by itself, and quests you've already done are skipped, so it works for a
+character of any level. Flight paths you already know are picked up at login.
+
+| Command | What it does |
+|---|---|
+| `/fr` | Show or hide the card |
+| `/fr list` | The whole route |
+| `/fr skip` · `/fr back` · `/fr undo` | Move through the steps by hand |
+| `/fr dungeons` | Dungeon routes, as side trips you choose |
+| `/fr logcheck` | Quests in your log the route won't use |
+| `/fr why` | Why the addon did what it just did |
+| `/fr options` | Settings |
+
+**Optional: the Windows companion** replans your route from your own save every time you `/reload`, with several
+paths to choose between. It isn't in the releases yet; it will come as a separate download.
+
+What changed in each release: [CHANGELOG.md](CHANGELOG.md).
 
 Forever Route by noopz. [CC BY-NC-SA 4.0](LICENSE): share and adapt it with credit, never sell it. The quest data it is built from is GPL-3.0 (QuestieDB); see [NOTICE](NOTICE). Contributions: [CONTRIBUTING.md](CONTRIBUTING.md).

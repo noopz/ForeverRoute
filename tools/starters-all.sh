@@ -26,7 +26,7 @@ SUM=reports/starters.md
 for c in $COMBOS; do
   race=${c%-*}; cls=${c#*-}; out=reports/starters/$c.txt
   rm -rf "paths-starter/$c"
-  node tools/starter.js "$race" "$cls" 60 > "$out" 2>&1 || { echo "| $c | planner failed | | | | |" >> "$SUM"; continue; }
+  node tools/starter.js "$race" "$cls" 60 "${FR_PATHS:-1}" > "$out" 2>&1 || { echo "| $c | planner failed | | | | |" >> "$SUM"; continue; }
   line=$(grep -e "h, [0-9]* steps" "$out" | head -1)
   lvl=$(echo "$line" | sed -E 's/.*: 1 -> ([0-9]+).*/\1/'); hrs=$(echo "$line" | sed -E 's/.*~([0-9.]+) h.*/\1/'); stp=$(echo "$line" | sed -E 's/.*h, ([0-9]+) steps.*/\1/')
   F=paths-starter/$c/Route.lua; issues=0
