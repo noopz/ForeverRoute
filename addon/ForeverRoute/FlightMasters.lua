@@ -33,6 +33,8 @@ ns.FLIGHT_BY = {
     [1452] = { { 0.6233, 0.3661, "Maethrya" } },
     [1453] = { { 0.7129, 0.7223, "Dungar Longdrink" } },
     [1455] = { { 0.5550, 0.4774, "Gryth Thurden" } },
+    [2482] = { { 0.6884, 0.4399, "Fayran Elthas" } },
+    [2548] = { { 0.5845, 0.7978, "Gretchen Mayberry" }, { 0.5965, 0.8083, "Gretchen Mayberry" }, { 0.6033, 0.7923, "Gretchen Mayberry" }, { 0.6064, 0.8151, "Gretchen Mayberry" }, { 0.6080, 0.8222, "Gretchen Mayberry" }, { 0.6101, 0.7992, "Gretchen Mayberry" }, { 0.6115, 0.8094, "Gretchen Mayberry" }, { 0.6128, 0.8315, "Gretchen Mayberry" }, { 0.6154, 0.8058, "Gretchen Mayberry" }, { 0.6180, 0.7991, "Gretchen Mayberry" }, { 0.6271, 0.7757, "Gretchen Mayberry" } },
   },
   Horde = {
     [1413] = { { 0.5150, 0.3034, "Devrak" }, { 0.4445, 0.5915, "Omusa Thunderhorn" }, { 0.6308, 0.3716, "Bragok" } },
@@ -62,6 +64,7 @@ ns.FLIGHT_BY = {
     [1454] = { { 0.4512, 0.6389, "Doras" } },
     [1456] = { { 0.4700, 0.4983, "Tal" } },
     [1458] = { { 0.6325, 0.4856, "Michael Garrett" } },
+    [2548] = { { 0.5910, 0.4552, "Grakna" }, { 0.5911, 0.4474, "Grakna" }, { 0.5953, 0.4595, "Grakna" }, { 0.5956, 0.4673, "Grakna" }, { 0.5957, 0.4514, "Grakna" }, { 0.5961, 0.4739, "Grakna" } },
   },
 }
 ns.FLIGHT = ns.FLIGHT_BY.Alliance -- until ns.UseFaction (Core.lua) knows yours

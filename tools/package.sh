@@ -10,6 +10,10 @@ cp -r addon/ForeverRoute dist/pkg/
 rm -rf dist/pkg/ForeverRoute/tests
 # your own plan (the companion writes it) is never shipped
 rm -f dist/pkg/ForeverRoute/Route.lua
+# ...nor listed in the TOC: the game warns "Error loading ForeverRoute/Route.lua" on every load for a file that an
+# addon-site install never has (the built-in plan is used then). The companion's own install (tools/install.sh) keeps the line
+T=dist/pkg/ForeverRoute/ForeverRoute.toc; grep -v '^Route[.]lua' "$T" > "$T.new" && mv "$T.new" "$T"
+if grep -q '^Route.lua' dist/pkg/ForeverRoute/ForeverRoute.toc; then echo "package: Route.lua still in the TOC"; exit 1; fi
 sed -i "s/^## Version: .*/## Version: $VER/" dist/pkg/ForeverRoute/ForeverRoute.toc
 for d in addon/ForeverRoute_Starter_*/; do cp -r "$d" dist/pkg/; done
 # the licenses (NOTICE says which is which): the addon is CC BY-NC-SA with a few GPL quest-data files; each built-in

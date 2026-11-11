@@ -3122,7 +3122,7 @@ test("travel: a ride through the other faction's town is flagged (Alliance: the 
     local function w(x, y) local a, b, c = HBD:GetWorldCoordinatesFromZone(x, y, 1413); return { a, b, c } end
     UnitFactionGroup = function() return "Alliance" end
     assertEquals("the Crossroads", ns.Travel.Through(w(0.52, 0.22), w(0.52, 0.40)).name) -- straight through it
-    assertTrue(not ns.Travel.Through(w(0.30, 0.22), w(0.30, 0.40))) -- far west of it
+    assertTrue(not ns.Travel.Through(w(0.38, 0.22), w(0.38, 0.40))) -- well west of it (at 0.30 the Horde camp by the Thunder Bluff lift in Mulgore, from QuestieDB 1.0.15, is 58 yd off)
     UnitFactionGroup = function() return "Horde" end
     assertTrue(not ns.Travel.Through(w(0.52, 0.22), w(0.52, 0.40)))
   end)
@@ -3828,6 +3828,35 @@ test("nav line: drawn from where you stand, on the minimap too, and only the par
   end)
 end)
 
+test("nav line: the arrow re-aiming ('not there yet') does not lay a second set of dots that walking never takes away", function()
+  lineWorld(function(w)
+    ns.Nav.Settle()
+    local P = ns.Nav.PathFor(ns.Arrow.Current().key)
+    assertTrue(P ~= nil, "no live line")
+    local HBDP = LibStub("HereBeDragons-Pins-2.0")
+    -- every world-map icon that is not a step pin is a dot of the line (HereBeDragons keeps no owner per icon)
+    local function onMap() local pin = {}; for _, p in ipairs(ns.Pins._used) do pin[p] = true end; local n = 0; for fr in pairs(HBDP.worldmapPins) do if not pin[fr] then n = n + 1 end end; return n end
+    assertEquals(#w:dots("world"), onMap(), "dots on the world map before")
+    -- the arrow takes a fresh aim at the same step: its first check says 'not arrived'
+    ns.Fire("FR_ARRIVED", w:shown(), false); ns.Fire("FR_ARRIVED", w:shown(), false)
+    assertEquals(#w:dots("world"), onMap(), "dots on the world map after the arrow re-aimed")
+    -- walk 80 yd along the line: none behind you is left
+    local i, walked = 1, 0
+    while walked + (P.rem[i] - P.rem[i + 1]) < 80 do walked = walked + (P.rem[i] - P.rem[i + 1]); i = i + 1 end
+    local a, b = P.pts[i], P.pts[i + 1]
+    local t = (80 - walked) / (P.rem[i] - P.rem[i + 1])
+    local D = ns.Nav.Data(1453)
+    local nx, ny = a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t
+    w:walk(1453, (nx - D.left) / (D.right - D.left), (ny - D.top) / (D.bottom - D.top))
+    assertEquals(#w:dots("world"), onMap(), "dots on the world map after walking (some behind you stayed)")
+    -- arriving and walking back out still brings the line back
+    ns.Fire("FR_ARRIVED", w:shown(), true)
+    assertEquals(0, onMap(), "dots while standing at the step")
+    ns.Fire("FR_ARRIVED", w:shown(), false)
+    assertTrue(onMap() > 0 and onMap() == #w:dots("world"), "the line did not come back after walking out")
+  end)
+end)
+
 test("nav line: stray from it and a new one runs from where you are; the next step gets its own", function()
   lineWorld(function(w)
     ns.Nav.Settle()
@@ -3898,4 +3927,38 @@ test("nav across a zone border: from Goldshire to the Trade District on the walk
   -- a target in a zone with no walk map: no live line (the planned path is used)
   assertEquals(nil, ns.Nav.MapFor(sx, sy, -10500, -1200, 0, 1429, 1431))
   assertEquals(nil, ns.Nav.MapFor(sx, sy, tx, ty, 1, 1429, 1453), "another continent")
+end)
+
+test("flight paths you know come from the world map's flight points, no flight master needed", function()
+  local sv = { api = C_TaxiMap, known = ns.State.knownTaxi, charKnown = ns.char.knownTaxi, fac = UnitFactionGroup }
+  local F = Enum.FlightPathFaction
+  local nodes = {
+    [1429] = { { name = "Stormwind, Elwynn", faction = F.Alliance, isUndiscovered = false } },
+    [1436] = { { name = "Sentinel Hill, Westfall", faction = F.Alliance, isUndiscovered = true } },
+    [1413] = { { name = "Crossroads, The Barrens", faction = F.Horde, isUndiscovered = false },
+               { name = "Ratchet, The Barrens", faction = F.Neutral, isUndiscovered = false } },
+  }
+  local ok, err = pcall(function()
+    UnitFactionGroup = function() return "Alliance" end
+    C_TaxiMap = { GetTaxiNodesForMap = function(m) return nodes[m] or {} end }
+    ns.State.knownTaxi = {}
+    assertEquals(2, ns.State.ScanTaxi())
+    assertTrue(ns.State.knownTaxi["Stormwind, Elwynn"] and ns.State.knownTaxi["Ratchet, The Barrens"], "a discovered path of yours or a neutral one")
+    assertTrue(not ns.State.knownTaxi["Sentinel Hill, Westfall"], "an undiscovered path counted as known")
+    assertTrue(not ns.State.knownTaxi["Crossroads, The Barrens"], "the other faction's path counted as yours")
+    assertTrue(ns.char.knownTaxi == ns.State.knownTaxi, "not saved with the character")
+    assertEquals(0, ns.State.ScanTaxi(), "nothing new the second time")
+    -- a client that marks nothing undiscovered among many nodes says nothing
+    local many = {}
+    for i = 1, 12 do many[i] = { name = "Node " .. i, faction = F.Alliance, isUndiscovered = false } end
+    C_TaxiMap = { GetTaxiNodesForMap = function(m) return m == 1414 and many or {} end }
+    ns.State.knownTaxi = {}
+    assertEquals(0, ns.State.ScanTaxi())
+    assertTrue(next(ns.State.knownTaxi) == nil, "an all-discovered list was trusted")
+    -- no such API: nothing happens
+    C_TaxiMap = nil
+    assertEquals(0, ns.State.ScanTaxi())
+  end)
+  C_TaxiMap, ns.State.knownTaxi, ns.char.knownTaxi, UnitFactionGroup = sv.api, sv.known, sv.charKnown, sv.fac
+  if not ok then error(err, 0) end
 end)

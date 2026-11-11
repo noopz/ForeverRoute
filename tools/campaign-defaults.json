@@ -35,6 +35,10 @@
   "lookaheadLegs": 3,
   "revisitPenalty": 0.8,
   "xpRuns": false,
+  "grind": true,
+  "grindOverShortLeg": true,
+  "_grindOverShortLeg": "A zone with fewer than minTurnins hand-ins is only worth the trip when it beats grinding the level (priced at grindSecPerKill): without it a 1-60 plan made 132 such hops and hit the 200-leg cap at 58.",
+  "_grind": "Where the quests run out at your level (Horde 26-28, Alliance around 33: the next zones' quests need a level or two more), grind a level on mobs that fit instead of stopping or hopping zones for one hand-in; the step says a dungeon run does it too. Dungeons are never routed in.",
   "_xpRuns": "Dungeon runs for their XP alone (no quests of yours inside): off - a dungeon takes a group and an hour or two; set true to have the planner consider them.",
   "_dungeonMinutes": "A full run with a levelled group, by dungeon area id (QuestieDB support/Forever/Zones/dungeons.lua) - for XP runs and dungeon legs; dungeonRunMin (50) for any other.",
   "dungeonMinutes": {

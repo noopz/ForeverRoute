@@ -88,7 +88,11 @@ function grindLeg(S, evals, cands) {
   const W = require('./world');
   if (LEARNED) W.setLearned(LEARNED);
   const L = S.level;
-  for (const z of [...evals.map((e) => e.z), ...cands]) {
+  // the quickest level among the zones you can reach: the trip counts, and a zone you can't reach safely (hop = NO_WAY)
+  // is no option (an orc at 46 was sent to grind in the Blasted Lands, "~617 min", 600 of it the no-way trip)
+  let pick = null;
+  for (const z of new Set([...evals.map((e) => e.z), ...cands])) {
+    if (hop(S, z) >= NO_WAY) continue;
     const pts = [];
     for (const n of Object.values(db.npcs)) {
       if (!n || n.friendly === 'A' || n.friendly === 'AH' || n.friendly === 'H' || !(n.minLevel <= L + 1 && n.maxLevel >= L - 1) || n.rank === 1) continue;
@@ -99,15 +103,18 @@ function grindLeg(S, evals, cands) {
     for (const p of pts) { let k = 0; for (const q of pts) if (Math.abs(p.x - q.x) < 6 && Math.abs(p.y - q.y) < 6) k++; if (k > bestN) { best = p; bestN = k; } }
     const perKill = W.killXp(L, L) || 1;
     const kills = Math.ceil((XP_TO_LEVEL[L] - (S.xp || 0)) / perKill);
-    const sec = (LEARNED && LEARNED.secPerKill) || cfg.secPerKill || 22;
+    // a grind is kill after kill, with the rest and the looking for the next mob a quest's few kills don't add up to:
+    // cfg.grindSecPerKill (33 s, half again a quest kill's 22) - at 22 a grind priced above most quest legs
+    const sec = cfg.grindSecPerKill || 1.5 * ((LEARNED && LEARNED.secPerKill) || cfg.secPerKill || 22);
     const minutes = Math.round((kills * sec) / 60 + hop(S, z));
+    if (pick && pick.state.minutes <= minutes) continue;
     const nm = zoneName[z];
     const step = { k: 'grind', text: 'Grind mobs around your level until ' + (L + 1), level: L + 1, xp: 0, m: uiMap[z], x: +(best.x / 100).toFixed(4), y: +(best.y / 100).toFixed(4), zone: nm, r: 60, sec: 1, lvl: L,
       note: `No quests worth the trip at level ${L}: about ${kills} kills here gets you to ${L + 1}, where more open up. A dungeon run does it too.` };
     const leg = { title: nm + ' ' + L + '+ (grind)', sections: [{ title: 'Grind in ' + nm }], steps: [step] };
-    return { zone: z, leg, state: { level: L + 1, xp: 0, minutes, pos: { zone: z, x: best.x, y: best.y }, completed: S.completed, active: S.active }, options: [], levelBefore: L, grind: true, here: true }; // here: not a "where next?" choice
+    pick = { zone: z, leg, state: { level: L + 1, xp: 0, minutes, pos: { zone: z, x: best.x, y: best.y }, completed: S.completed, active: S.active }, options: [], levelBefore: L, grind: true, here: true }; // here: not a "where next?" choice
   }
-  return null;
+  return pick;
 }
 // ---------- regions ----------
 // A leg is a zone plus the neighbours its quests reach into: where a chain goes on or came from, where the objectives
@@ -628,6 +635,13 @@ async function beamSearch() {
     // nothing with enough hand-ins: a short leg that's still worth the trip beats stopping (the level-30 gap: few
     // quests at your level everywhere, the rest a few levels up)
     if (!best) { best = evals.find((e) => e.score > 0 && e.turnins >= 1) || null; if (best) console.log(`  no zone has ${cfg.minTurnins || 5}+ hand-ins at this level: a short leg in ${zoneName[best.z]}`); }
+    // a short leg that pays less than grinding the level is a zone hop for scraps (an Alliance plan at 33 hopped six
+    // zones for a hand-in each, then stopped): grind instead, and the quests a level up open
+    if (best && cfg.grind && cfg.grindOverShortLeg && best.turnins < (cfg.minTurnins || 5)) {
+      const g = grindLeg(state, evals, cands);
+      const gRate = g && g.state.minutes > 0 ? (XP_TO_LEVEL[state.level] - (state.xp || 0)) / g.state.minutes : 0;
+      if (gRate > best.score) { console.log(`  grinding pays more (${Math.round(gRate * 60)} xp/h) than the short leg in ${zoneName[best.z]}`); best = null; }
+    }
     // where quests run thin (the 30s), a dungeon run for its XP can beat a short leg - dungeon kills pay +50% since
     // Blizzard's Nov 8 2026 hotfix "so it feels better to go back in for more runs". Scored on XP per minute like a leg;
     // in game it is a Run step you can skip (the route goes on, you're just lower)

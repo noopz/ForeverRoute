@@ -230,9 +230,9 @@ ns.On("ADDON_LOADED", function(name)
   ns.Fire("FR_LOADED")
 end)
 -- the name wasn't known yet when the addon loaded: look again now, and show the plan if it's found
--- maps the planner has no world bounds for (Forever's new ones: Zephras Isle 2521 and its second map 2665): the client
+-- maps the planner has no world bounds for (Forever's new ones: Zephras Isle 2521 and its second map 2665, Riverglades 2548, Shen'dralas 2652, Mount Hyjal 2482): the client
 -- knows them for any map, wherever you are - recorded at login for the planner (tools/learn.js -> map-extras.json)
-ns.MAPS_TO_MEASURE = { 2521, 2665 }
+ns.MAPS_TO_MEASURE = { 2521, 2665, 2548, 2652, 2482 }
 function ns.RecordMapBounds()
   if not (C_Map and C_Map.GetWorldPosFromMapPos and CreateVector2D) or not ForeverRouteDB then return 0 end
   ForeverRouteDB.mapBounds = type(ForeverRouteDB.mapBounds) == "table" and ForeverRouteDB.mapBounds or {}

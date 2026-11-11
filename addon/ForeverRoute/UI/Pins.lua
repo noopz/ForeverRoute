@@ -209,6 +209,8 @@ local function trimLine()
     local j = 1
     for k = top, 1, -1 do
       local x, y; x, y, j = pointAt(P, k * line.step, j)
+      -- a dot already at this spot is replaced, never left behind: an orphan stays on the map and walking never takes it away
+      if line.world[k] then freeDot(line.world[k]) end
       local d = dot("world", line.color)
       HBDP:AddWorldMapIconWorld(dots, d, P.inst, x, y, HBD_PINS_WORLDMAP_SHOW_PARENT or 1)
       line.world[k] = d
@@ -370,7 +372,9 @@ ns.On("FR_ARRIVED", function(i, arrived)
   if i ~= ns.Engine.Shown() then return end
   arrivedAt = arrived and i or nil
   if line then
-    if arrived then local keep = line; clearDots(); line = keep else line.laid = nil; trimLine() end
+    -- 'not there' also comes each time the arrow takes a fresh aim at the same step: the line is only laid again when
+    -- arriving took it away
+    if arrived then local keep = line; clearDots(); line = keep elseif not line.laid then trimLine() end
   else planned() end
 end)
 

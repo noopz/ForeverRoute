@@ -7,8 +7,58 @@
       "target_name": "Zephras Isle",
       "map_id": 2521000,
       "estimated": true,
-      "target_bounds": { "left": 1750, "right": -1750, "top": 1166.5, "bottom": -1166.5 },
+      "target_bounds": {
+        "left": 1750,
+        "right": -1750,
+        "top": 1166.5,
+        "bottom": -1166.5
+      },
       "exit": "The skyship from Valanaar's south-east dock (64.9, 80.9) to Dalaran, then the Skyborne portal in the Violet Citadel to the Stormwind Mage Tower."
+    },
+    {
+      "ui_map_id": 2548,
+      "area_id": 16591,
+      "target_name": "Riverglades",
+      "map_id": 0,
+      "estimated": false,
+      "target_bounds": {
+        "left": -1891.67,
+        "right": -6741.67,
+        "top": -6466.67,
+        "bottom": -9700
+      },
+      "exit": "Eastern Kingdoms, east of Redridge and Burning Steppes, south of the Badlands, north of the Swamp of Sorrows (warcraft.wiki.gg Riverglades). On foot from Redridge (Blackrock Pass at its north edge; a guard post at Redridge ~97,21). Ship Steamwheedle Port (Tanaris, Wharfmaster Steamfizzle 67.56,23.1) <-> Powderfuse Port (Wharfmaster Whizzbuzz 79.34,52.75), both factions. Flights: Gretchen Mayberry (Alliance, Farholde Keep 60.62,81.53) to Lakeshire, Thelsamar, Morgan's Vigil; Grakna (Horde, Rog'mar 59.58,45.13) to Stonard, Kargath, Flame Crest, Hammerfall (wowforever.be, metabot.gg). No flight master at Powderfuse.",
+      "measured": "client UiMapAssignment table, build 1.60.1.70862 (wago.tools db2/UiMapAssignment); checked: Nerlokh at Shen'dralas 21.2,23.2 converts to Desolace 58.8,89.0, Wowhead Forever 58.5,88.5"
+    },
+    {
+      "ui_map_id": 2652,
+      "area_id": 16651,
+      "target_name": "Shen'dralas",
+      "map_id": 1,
+      "estimated": false,
+      "target_bounds": {
+        "left": 2025,
+        "right": -25,
+        "top": -1900,
+        "bottom": -3266.67
+      },
+      "exit": "Kalimdor, south-east of Desolace. On foot through the Valley of Bones at Desolace's south end (~58-65,84-89). No flight master; nearest Nijel's Point (A), Shadowprey (H), Camp Mojache (H).",
+      "measured": "client UiMapAssignment table, build 1.60.1.70862 (wago.tools db2/UiMapAssignment); checked: Nerlokh at Shen'dralas 21.2,23.2 converts to Desolace 58.8,89.0, Wowhead Forever 58.5,88.5"
+    },
+    {
+      "ui_map_id": 2482,
+      "area_id": 616,
+      "target_name": "Mount Hyjal",
+      "map_id": 1,
+      "estimated": false,
+      "target_bounds": {
+        "left": -922.92,
+        "right": -4395.83,
+        "top": 6304.17,
+        "bottom": 3989.58
+      },
+      "exit": "Kalimdor, south-west of Winterspring, on foot east through Darkwhisper Gorge. Flights Everlook <-> Tainted Foothills (Bluebell 54.57,83.19) <-> Summit of Eternity (Fayran Elthas 68.84,43.99), both factions.",
+      "measured": "client UiMapAssignment table, build 1.60.1.70862 (wago.tools db2/UiMapAssignment); checked: Nerlokh at Shen'dralas 21.2,23.2 converts to Desolace 58.8,89.0, Wowhead Forever 58.5,88.5"
     }
   ]
 }

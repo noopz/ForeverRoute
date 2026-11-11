@@ -330,6 +330,22 @@
         "valanaarWest": "At Skywatcher Plateau, take the skycutter to Zephras Isle (Valanaar)"
       },
       "source": "Placed at the launch-week portal to Valanaar (QuestieDB 1.0.14 object 716304, Mulgore 34.2, 25.4; Wowhead Forever verified), which Blizzard spawned near this dock: no dock NPC is in the data. Boats.lua learns the real pier in game"
+    },
+    "steamwheedle": {
+      "m": 1446,
+      "x": 0.6756,
+      "y": 0.231,
+      "name": "Steamwheedle Port",
+      "town": "Steamwheedle Port",
+      "zone": "Tanaris"
+    },
+    "powderfuse": {
+      "m": 2548,
+      "x": 0.7934,
+      "y": 0.5275,
+      "name": "Powderfuse Port",
+      "town": "Powderfuse Port",
+      "zone": "Riverglades"
     }
   },
   "ZONE_MIN": {
@@ -376,7 +392,10 @@
     "1453": 1,
     "1455": 1,
     "1457": 1,
-    "2521": 1
+    "2482": 54,
+    "2521": 1,
+    "2548": 36,
+    "2652": 35
   },
   "_ZONE_MIN_HORDE": "A Horde player's zone levels where they differ from ZONE_MIN (which keeps the Alliance out of Horde land at 60): their own start zones and Silverpine (Classic levels).",
   "ZONE_MIN_HORDE": {
@@ -526,6 +545,10 @@
       "skyship",
       null,
       "horde"
+    ],
+    [
+      "steamwheedle",
+      "powderfuse"
     ]
   ],
   "GATES": [
@@ -653,5 +676,7 @@
     }
   ],
   "_BOATS_portals": "No dock portals: QuestieDB 1.0.14 has 'Portal To ...' objects at most docks and zeppelin towers, but they were Blizzard's temporary launch-week fix while boats and zeppelins got lost (blue post, Aggrend, 2026-11-05: https://us.forums.blizzard.com/en/wow/t/zeppelins-broken/2401777; reported gone 2026-11-06). Routes use the boats and zeppelins.",
-  "_BOATS_loop": "The Menethil ship is a one-way loop: Menethil -> Southshore -> Auberdine -> Menethil (Method, All Travel Routes in WoW Forever, 2026-10-14: https://www.method.gg/wow-forever/all-travel-routes-in-wow-forever-boats-zeppelins). Its three legs carry the 7th entry true (one way)."
+  "_BOATS_loop": "The Menethil ship is a one-way loop: Menethil -> Southshore -> Auberdine -> Menethil (Method, All Travel Routes in WoW Forever, 2026-10-14: https://www.method.gg/wow-forever/all-travel-routes-in-wow-forever-boats-zeppelins). Its three legs carry the 7th entry true (one way).",
+  "_BOATS_powderfuse": "Steamwheedle Port (Tanaris) <-> Powderfuse Port (Riverglades), both factions: warcraft.wiki.gg Riverglades, wowforever.be flight-paths guide, classicwowforever.com zones. Docks at the wharfmasters (Steamfizzle 67.56,23.1; Whizzbuzz 79.34,52.75; QuestieDB, Wowhead Forever agrees); the pier itself is not published. No Booty Bay ship (wowforever.be lists only Ratchet).",
+  "_ZONE_MIN_new": "Riverglades 36 (quests require 36; Wowhead zone tooltip 36-44), Shen'dralas 35 (quests 38-43, most require 30, some 35), Mount Hyjal 54 (quests 56-60 require 54): QuestieDB."
 }

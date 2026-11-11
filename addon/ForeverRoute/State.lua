@@ -195,6 +195,45 @@ ns.On("TAXIMAP_OPENED", function()
   ns.Fire("FR_STATE")
 end)
 
+-- The flight paths you know without opening a flight master's map: the world map's own flight points
+-- (C_TaxiMap.GetTaxiNodesForMap, every node of a map with isUndiscovered) - a level 32 trying the addon for the first
+-- time already knows a dozen, and until a flight map was opened the plan walked them everywhere.
+-- A client that marks nothing undiscovered among many nodes is not telling: nothing is taken from it then.
+State.TAXI_SCAN_MAPS = { 1414, 1415 } -- Kalimdor, the Eastern Kingdoms; the zones of FlightMasters.lua and TravelData join them
+function State.ScanTaxi()
+  if not (C_TaxiMap and C_TaxiMap.GetTaxiNodesForMap) then return 0 end
+  local okF, fac = pcall(UnitFactionGroup, "player")
+  local mine = Enum and Enum.FlightPathFaction and (okF and fac == "Horde" and Enum.FlightPathFaction.Horde or Enum.FlightPathFaction.Alliance)
+  local neutral = Enum and Enum.FlightPathFaction and Enum.FlightPathFaction.Neutral or 0
+  local maps, seen = {}, {}
+  local function add(m) if m and not seen[m] then seen[m] = true; maps[#maps + 1] = m end end
+  for _, m in ipairs(State.TAXI_SCAN_MAPS) do add(m) end
+  for _, side in pairs(ns.FLIGHT_BY or {}) do for m in pairs(side) do add(m) end end
+  for m in pairs((ns.TravelData and ns.TravelData.BOUNDS) or {}) do add(m) end
+  local found, total, undiscovered = {}, 0, 0
+  for _, m in ipairs(maps) do
+    local ok, nodes = pcall(C_TaxiMap.GetTaxiNodesForMap, m)
+    for _, n in ipairs(ok and type(nodes) == "table" and nodes or {}) do
+      if n.name and (n.faction == mine or n.faction == neutral) then
+        total = total + 1
+        if n.isUndiscovered then undiscovered = undiscovered + 1 else found[n.name] = true end
+      end
+    end
+  end
+  if total >= 10 and undiscovered == 0 then
+    if ns.Why then ns.Why("taxi", "world map lists " .. total .. " flight points, none undiscovered: not trusted (open a flight master's map)") end
+    return 0
+  end
+  local added = 0
+  for name in pairs(found) do if not State.knownTaxi[name] then State.knownTaxi[name] = true; added = added + 1 end end
+  ns.char.knownTaxi = State.knownTaxi
+  if added > 0 then
+    if ns.Why then ns.Why("taxi", added .. " flight path(s) you know, from the world map") end
+    ns.Fire("FR_STATE")
+  end
+  return added
+end
+
 local pending
 local function refreshSoon()
   wipe(cache)
@@ -204,7 +243,8 @@ local function refreshSoon()
 end
 State.Invalidate = refreshSoon
 
-ns.On("FR_LOADED", function() State.knownTaxi = ns.char.knownTaxi or {} end)
+ns.On("FR_LOADED", function() State.knownTaxi = ns.char.knownTaxi or {}; C_Timer.After(3, ns.Guard("taxi", State.ScanTaxi)) end)
+ns.On("TAXI_NODE_STATUS_CHANGED", function() C_Timer.After(0.5, ns.Guard("taxi", State.ScanTaxi)) end)
 ns.On("PLAYER_LOGIN", function() State.RefreshCompleted(); refreshSoon(); C_Timer.After(8, function() State.Snapshot("login") end); C_Timer.NewTicker(300, function() State.Snapshot("periodic") end) end)
 ns.On("QUEST_LOG_UPDATE", refreshSoon)
 ns.On("UNIT_QUEST_LOG_CHANGED", function(unit) if unit == "player" then refreshSoon() end end)
