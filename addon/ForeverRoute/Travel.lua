@@ -410,7 +410,7 @@ function Travel.Plan(from, to, opts)
     elseif c.how == "spell" then
       -- nothing to point at either: cast it (Teleport: Moonglade)
       legs[#legs + 1] = { sm = n.m, sx = n.x, sy = n.y, how = "spell", text = (n.spellSay or "Cast your teleport") .. " (to " .. (n.zone or mapName(n.m)) .. ")" }
-    elseif c.how == "fly" then legs[#legs + 1] = { sm = f.m, sx = f.x, sy = f.y, how = "fly", m = f.m, x = f.x, y = f.y, text = "Fly to " .. mapName(n.m) .. (f.name and (" (flight master " .. f.name .. ")") or "") }
+    elseif c.how == "fly" then legs[#legs + 1] = { sm = f.m, sx = f.x, sy = f.y, how = "fly", m = f.m, x = f.x, y = f.y, toTaxi = n.name and taxiNames()[n.m .. ":" .. n.name] or nil, text = "Fly to " .. mapName(n.m) .. (f.name and (" (flight master " .. f.name .. ")") or "") }
     elseif c.how == "boat" then
       -- what you actually do: which town and zone you sail to; in a town with two piers, which one
       local prevLeg = legs[#legs]

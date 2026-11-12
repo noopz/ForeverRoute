@@ -63,5 +63,6 @@
     "2557": 50
   },
   "dungeonsInPath": false,
-  "_dungeonsInPath": "Dungeon runs inside your path: off - a dungeon needs a group, which can be hard to find, so it is never a step you're routed into. Each dungeon worth doing is offered as a side trip instead (the Side trips window). true: the planner may put a run with your quests inside into a leg."
+  "_dungeonsInPath": "Dungeon runs inside your path: off - a dungeon needs a group, which can be hard to find, so it is never a step you're routed into. Each dungeon worth doing is offered as a side trip instead (the Side trips window). true: the planner may put a run with your quests inside into a leg.",
+  "awayHubShare": 1
 }

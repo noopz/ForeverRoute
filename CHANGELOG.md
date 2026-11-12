@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.2 - 2026-11-12
+- New option: take the flight your route needs when you talk to a flight master (Options, off by default; hold Shift to choose yourself).
+- What to do next is now worked out from where you are: the plan's next steps in the order that makes the whole way shortest, and finished quests whose hand-in is close by ("while you're here"). Back in town to sell or to group up, the town's hand-ins come first; a hand-in across the world is left for when the route passes it. The card says why when it leaves the plan's order. (Options: "Choose the next step from where I am".)
+- Bags nearly full (or gear wearing out): the vendor visit is fitted into your way where it costs least, and the errand line says which vendor and when. A quest below you stays on your route while its chain leads to quests still worth XP.
+- The hub hand-in run: out in the field, a finished quest waits for the town the route returns to (unless its chain goes on right there), so you quest a good while and then hand in a pile at once - and the card names the run: "Hand-in run here: 6 quests, about 8,400 XP". Plans hold at most 30 quests, leaving 10 slots of your log for dungeon quests and anything else you pick up.
+- Long quest chains are valued as a whole when plans are made, so their first parts aren't cut; a trip to a capital has to be worth it.
+- Joining the built-in plan partway: quests right next to you that still give XP are offered instead of being skipped as "behind you", and a quest worth XP close by comes before a grind step.
+- Quests count as gray by the game's own line (5 levels below you early on, more later): a level 7 is no longer sent to a level 1 quest.
+- A quest its giver turns down at two different levels stays off your route; once, it's tried again a level on (Forever asks more than the quest data for some). No more "your path was switched" message when you've just finished a zone.
+- Every built-in plan rebuilt with the planner fixes below, and each one played from 1 to 60 by simulated players.
+- NPCs Forever renamed are found by their Forever names (Corma Villard, Velarok Windblade, and two more): the Target key and the quest checks missed them.
+- Steps say what the quest asks: The Missing Diplomat's fight with Tapoke Jahn said "Speak with", and some kill quests read "Speak with Mottled Boar". The escort tips are only on real escorts.
+- Quests handed in at a chest or object in town (The Lost Ingots chain in Menethil) are on the route.
+- Quests for Forever's new dungeons stay in the dungeon: Horrors in the Highland (Excavation Site: Wetlands) was a step outside, as if its boss were in Menethil.
+- No more "hand it in" right after picking up a quest whose work the quest data doesn't describe (Brewer's Trade in Southshore, and about 90 others): one that leads to a follow-up stays on your route with a "do the work" step that says to follow your quest log, and An Alarming Request is handed in near Dalaran, not in Southshore.
+
 ## 1.4.1 - 2026-11-11
 - The arrow points the way instead of herding you onto the dotted line: step off it and the line is redrawn from where you are, it looks further ahead along straight stretches, and roads only win when they're nearly on the way.
 - Forever Route Targeting now really marks the NPC with a star (it was blocked by the game).

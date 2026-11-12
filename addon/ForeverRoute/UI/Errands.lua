@@ -158,6 +158,11 @@ function Errands.Current()
   if ns.char.errandDismissed == key then return nil end
   local v, d = Errands.Nearest(needRepair)
   local where = v and string.format(": %s (%s), %s", v[3], v[4], ns.Style.Distance(d)) or " at the next vendor"
+  -- the live solver fitted a vendor into your way (Next.lua): that one, and when
+  local nv = ns.Next and ns.Next.Enabled() and ns.Next.vendor
+  if nv and nv.v and (not needRepair or nv.v[5]) then
+    where = string.format(": %s (%s), %s", nv.v[3], nv.v[4], nv.before == 0 and "now - it's on your way" or ("after the next " .. nv.before .. (nv.before == 1 and " stop" or " stops")))
+  end
   local what
   if needSell and needRepair then what = string.format("Bags %d free, gear at %d%% - sell and repair", free, math.floor(dur * 100))
   elseif needRepair then what = string.format("Gear at %d%% - repair", math.floor(dur * 100))

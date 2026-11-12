@@ -771,7 +771,6 @@ function Nav.Want(t)
     return
   end
   if live and live.key == t.key and abs(live.wx - t.wx) < 1 and abs(live.wy - t.wy) < 1 and live.inst == t.inst then return end
-  local had = live and live.path
   local oldKey = live and live.key
   live = { key = t.key, wx = t.wx, wy = t.wy, inst = t.inst, z = t.z, m = t.m }
   -- a new target: what is on the map for the old one goes now - its line, or the planned path drawn while there

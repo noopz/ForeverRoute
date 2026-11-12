@@ -3,6 +3,17 @@ local ns = ForeverRoute
 
 local KINDS = { accept = 1, turnin = 1, obj = 1, ["goto"] = 1, fly = 1, fp = 1, hearth = 1, bind = 1, train = 1, grind = 1, note = 1, bonus = 1 }
 local withState, withWorld = ForeverRouteTest.withState, ForeverRouteTest.withWorld
+-- the old reordering (the live solver off, Options: "Choose the next step from where I am"): its own tests, run in that
+-- mode - the solver's answers for the same places are in next_test.lua
+local function planOrderTest(name, fn)
+  test(name .. " [plan-order mode]", function()
+    local was = ns.db.smartNext
+    ns.db.smartNext = false
+    local ok, err = pcall(fn)
+    ns.db.smartNext = was
+    if not ok then error(err, 0) end
+  end)
+end
 
 
 local function miniRoute()
@@ -374,6 +385,52 @@ test("/fr options opens its window on screen", function()
   assertTrue(host:GetNumPoints() > 0, "the window has no position (it went nowhere)")
   assertEquals("DIALOG", host:GetFrameStrata())
   host:Hide()
+end)
+
+test("finishing a zone isn't announced as a path switch: the same path with that zone dropped off the front is quiet", function()
+  local saved = ns.char.routeLegs
+  ns.char.routeLegs = "Westfall > Redridge Mountains > Duskwood > Wetlands"
+  local function legs(s) return { meta = { legs = s } } end
+  local ok, err = pcall(function()
+    assertEquals(nil, ns.PathSwitchNote("old", legs("Redridge Mountains > Duskwood > Wetlands > Ashenvale")), "Westfall done: not a switch")
+    assertEquals(nil, ns.PathSwitchNote("old", legs("Duskwood > Wetlands > Ashenvale")), "Westfall and Redridge done: not a switch")
+    assertTrue(ns.PathSwitchNote("old", legs("Ashenvale > Darkshore > Stonetalon Mountains")) ~= nil, "a different path: said")
+  end)
+  ns.char.routeLegs = saved
+  if not ok then error(err, 0) end
+end)
+
+test("auto-fly: at a flight master it takes the flight the card's trip needs - only when on, never with Shift, only a path you have", function()
+  local sv = { trip = ns.Engine.lastTrip, step = ns.Engine.lastTripStep, shown = ns.Engine.Shown, data = ForeverRouteData, on = ns.db.autoFly,
+    num = NumTaxiNodes, name = TaxiNodeName, typ = TaxiNodeGetType, take = TakeTaxiNode, shift = IsShiftKeyDown, after = C_Timer.After }
+  local took
+  local ok, err = pcall(function()
+    local step = { k = "turnin", q = 1, name = "Q", m = 1424, x = 0.5, y = 0.5 }
+    ForeverRouteData = { steps = { step } }
+    ns.Engine.Shown = function() return 1 end
+    ns.Engine.lastTrip, ns.Engine.lastTripStep = { { how = "ride" }, { how = "fly", toTaxi = "Southshore, Hillsbrad" } }, step
+    local nodes = { { "Stormwind, Elwynn", "CURRENT" }, { "Southshore, Hillsbrad", "REACHABLE" }, { "Refuge Pointe, Arathi", "REACHABLE" } }
+    NumTaxiNodes = function() return #nodes end
+    TaxiNodeName = function(i) return nodes[i][1] end
+    TaxiNodeGetType = function(i) return nodes[i][2] end
+    TakeTaxiNode = function(i) took = i end
+    C_Timer.After = function(_, f) f() end
+    IsShiftKeyDown = function() return false end
+    ns.db.autoFly = false
+    ns.Fire("TAXIMAP_OPENED"); assertEquals(nil, took, "off: it flew")
+    ns.db.autoFly = true
+    IsShiftKeyDown = function() return true end
+    ns.Fire("TAXIMAP_OPENED"); assertEquals(nil, took, "Shift held: it flew")
+    IsShiftKeyDown = function() return false end
+    ns.Fire("TAXIMAP_OPENED"); assertEquals(2, took, "it didn't take the trip's flight")
+    took = nil; nodes[2][2] = "DISTANT"
+    ns.Fire("TAXIMAP_OPENED"); assertEquals(nil, took, "a flight path you don't have")
+    took = nil; nodes[2][2] = "REACHABLE"; ns.Engine.lastTripStep = {}
+    ns.Fire("TAXIMAP_OPENED"); assertEquals(nil, took, "a trip for another step than the card's")
+  end)
+  ns.Engine.lastTrip, ns.Engine.lastTripStep, ns.Engine.Shown, ForeverRouteData, ns.db.autoFly = sv.trip, sv.step, sv.shown, sv.data, sv.on
+  NumTaxiNodes, TaxiNodeName, TaxiNodeGetType, TakeTaxiNode, IsShiftKeyDown, C_Timer.After = sv.num, sv.name, sv.typ, sv.take, sv.shift, sv.after
+  if not ok then error(err, 0) end
 end)
 
 test("options sliders don't fire settings on open", function()
@@ -1096,7 +1153,7 @@ test("live reordering: a kill step takes over when your kills count for it (not 
   end)
 end)
 
-test("live reordering: a finished quest whose hand-in is right here is handed in now, however late the plan has it", function()
+planOrderTest("live reordering: a finished quest whose hand-in is right here is handed in now, however late the plan has it", function()
   local HBD = LibStub("HereBeDragons-2.0")
   local realConv = HBD.GetWorldCoordinatesFromZone
   local ok, err = pcall(withState, {}, function()
@@ -1142,7 +1199,7 @@ test("live reordering: a finished quest whose hand-in is right here is handed in
   if not ok then error(err, 0) end
 end)
 
-test("live reordering: farming the planned loot step, a later step whose circle you wander into does not take over", function()
+planOrderTest("live reordering: farming the planned loot step, a later step whose circle you wander into does not take over", function()
   -- the player's Wetlands report: on the Pristine Crimson Scales (crocs roam), the card jumped to the Dragonmaw War
   -- Banners, whose circle is 100 yd off and overlaps
   local HBD = LibStub("HereBeDragons-2.0")
@@ -1188,7 +1245,7 @@ test("live reordering: farming the planned loot step, a later step whose circle 
   if not ok then error(err, 0) end
 end)
 
-test("live reordering: a step your kills count for stays shown while you farm far from its marker, until the kills stop", function()
+planOrderTest("live reordering: a step your kills count for stays shown while you farm far from its marker, until the kills stop", function()
   local HBD = LibStub("HereBeDragons-2.0")
   local realConv, realTime = HBD.GetWorldCoordinatesFromZone, GetTime
   local now = 1000
@@ -1874,7 +1931,7 @@ test("flight paths: opening the flight map elsewhere doesn't tick the next zone'
   if not ok then error(err, 0) end
 end)
 
-test("live reorder: standing in a town, its flight path and pick-ups come before a step across the zone", function()
+planOrderTest("live reorder: standing in a town, its flight path and pick-ups come before a step across the zone", function()
   local HBD = LibStub("HereBeDragons-2.0")
   local sv = { conv = HBD.GetWorldCoordinatesFromZone, data = ForeverRouteData, cur = ns.Engine.current, focus = ns.Engine.focus, view = ns.Engine.view, taxi = ns.State.knownTaxi }
   HBD.GetWorldCoordinatesFromZone = function(_, x, y, m) return x * 1500, y * 1000, 0 end
@@ -1896,7 +1953,7 @@ test("live reorder: standing in a town, its flight path and pick-ups come before
   if not ok then error(err, 0) end
 end)
 
-test("live reorder: never jumps to a pick-up whose earlier chain quest isn't handed in (Chef Grual)", function()
+planOrderTest("live reorder: never jumps to a pick-up whose earlier chain quest isn't handed in (Chef Grual)", function()
   local HBD = LibStub("HereBeDragons-2.0")
   local sv = { conv = HBD.GetWorldCoordinatesFromZone, data = ForeverRouteData, cur = ns.Engine.current, focus = ns.Engine.focus, view = ns.Engine.view, unl = ForeverRouteUnlocks, done = ns.State.IsCompleted }
   HBD.GetWorldCoordinatesFromZone = function(_, x, y, m) return x * 1500, y * 1000, 0 end
@@ -2908,10 +2965,10 @@ test("standing at the step: no minimap pin on top of you (the world map keeps it
   end, { anyTarget = true })
 end)
 
-test("a quest refused above the level it needs stays off at later levels; one waiting on an earlier quest comes back with it", function()
+test("a quest turned down at two levels stays off after that; once, it's tried again a level on; one waiting on an earlier quest comes back with it", function()
   local sv = { avail = ForeverRouteChar.avail, gossip = C_GossipInfo.GetAvailableQuests, un = UnitName, lvl = UnitLevel, unl = ForeverRouteUnlocks, done = ns.State.IsCompleted }
   ForeverRouteChar.avail = nil
-  local level, done = 29, {}
+  local level, done = 28, {}
   local ok, err = pcall(withState, {}, function()
     UnitLevel = function() return level end
     UnitName = function(u, ...) if u == "npc" then return "Captain Stoutfist" end return sv.un(u, ...) end
@@ -2925,8 +2982,12 @@ test("a quest refused above the level it needs stays off at later levels; one wa
     C_GossipInfo.GetAvailableQuests = function() return {} end
     ns.Avail.OnGiver("GOSSIP_SHOW")
     assertTrue(ns.Avail.Unavailable(98230) and ns.Avail.Unavailable(98240))
+    -- once (at 28, though the data says it needs 22): a level on, it's worth another look - Forever asks more for some
+    level = 29
+    assertTrue(not ns.Avail.Unavailable(98230), "turned down once: tried again a level on")
+    ns.Avail.OnGiver("GOSSIP_SHOW")
     level = 32
-    assertTrue(ns.Avail.Unavailable(98230), "refused at 29 (needs 22): a level up isn't a reason to send you back")
+    assertTrue(ns.Avail.Unavailable(98230), "turned down at 28 and 29: a level up isn't a reason to send you back")
     assertTrue(ns.Avail.Unavailable(98240), "still waiting on Crocs of the Sky")
     done[98072] = true
     assertTrue(not ns.Avail.Unavailable(98240), "Crocs of the Sky handed in: worth another look")
@@ -3624,7 +3685,7 @@ test("won't-do quests are listed and can be brought back; the route list can hid
   if not ok then error(err, 0) end
 end)
 
-test("live reordering: at an NPC with a finished quest to hand in, that hand-in shows - however far down the plan, over a held one", function()
+planOrderTest("live reordering: at an NPC with a finished quest to hand in, that hand-in shows - however far down the plan, over a held one", function()
   local HBD = LibStub("HereBeDragons-2.0")
   local realConv = HBD.GetWorldCoordinatesFromZone
   local ok, err = pcall(withState, {}, function()

@@ -7,6 +7,9 @@ local ns = ForeverRoute
 local function withState(fake, fn)
   local saved = { Quest = ns.State.Quest, IsCompleted = ns.State.IsCompleted, OnQuest = ns.State.OnQuest, QuestReady = ns.State.QuestReady, data = ForeverRouteData, char = ns.char }
   ns.char = { skipped = {}, manualDone = {}, history = {}, progress = {} }
+  -- (the position the once-a-second check measured, and the solver's memory: a test starts where it says it is, not
+  -- where the last test left the player)
+  ns.Engine.pos = nil
   ns.State.Quest = function(id) local q = fake[id]; if not q then return { on = false, objectives = {} } end; return q end
   ns.State.IsCompleted = function(id) return fake[id] and fake[id].done or false end
   local ok, err = pcall(fn)
@@ -91,13 +94,14 @@ local function withWorld(route, fn, opts)
   -- any error the addon logs while this world runs fails the test (guards keep errors from reaching the test
   -- otherwise): a replayed save that hit an error in game keeps failing until it's fixed
   local function errors() local n, last = 0, nil; for _, e in ipairs((ForeverRouteDB and ForeverRouteDB.log) or {}) do n = n + (e.count or 0); if not last or (e.last or 0) >= (last.last or 0) then last = e end end; return n, last end
-  local errs0 = errors()
+  -- (w.errs0: a simulated player resumed from a checkpoint puts back the count its run started from)
+  w.errs0 = errors()
   local ok, err = pcall(withState, w.quests, function()
     ForeverRouteData = route
     ns.Engine.Refresh(); agree("at the start")
     fn(w)
     local n, last = errors()
-    if n > errs0 then error("the addon logged an error: " .. tostring(last and last.where) .. ": " .. tostring(last and last.msg), 0) end
+    if n > w.errs0 then error("the addon logged an error: " .. tostring(last and last.where) .. ": " .. tostring(last and last.msg), 0) end
     -- the checks must have run, not been skipped because the arrow or pins had nothing (a replayed save may sit on a
     -- step with nothing to point at: opts.anyTarget)
     if not (opts and opts.anyTarget) then

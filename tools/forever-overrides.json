@@ -417,5 +417,11 @@
       ],
       "_why": "Wowhead (https://www.wowhead.com/forever/quest=98824): needs 95810 first - the quest data did not say"
     }
+  },
+  "npcNames": {
+    "5683": "Corma Villard",
+    "5858": "Searing Lava Spider",
+    "8479": "Velarok Windblade",
+    "11560": "Centaur Spectre"
   }
 }

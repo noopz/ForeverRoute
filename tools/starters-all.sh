@@ -4,6 +4,8 @@
 # (tools/simplay.js, personas below). One line per plan in reports/starters.md; the full output per plan in
 # reports/starters/<race>-<class>.txt. Skyborne starts on Zephras Isle.
 # usage: tools/starters-all.sh [combo ...]   (default: all)   FR_PERSONAS=clean,skip,nodungeon FR_SIM_PAR=n FR_SIM_CACHE=0
+#        FR_SIM_CKPT=0: each simulated player plays from level 1 (by default it resumes at the last leg of the plan that
+#        is unchanged since its last run: tools/simckpt.js)
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -12,7 +14,7 @@ cd "$ROOT"
 LOCK="$ROOT/reports/starters.lock${FR_BATCH_SLOT:-}"
 if ! mkdir "$LOCK" 2>/dev/null; then echo "another batch is running ($LOCK; remove it if not)"; exit 3; fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT
-COMBOS=${*:-"human-warrior human-paladin human-rogue human-priest human-mage human-warlock human-hunter dwarf-warrior dwarf-paladin dwarf-hunter dwarf-rogue dwarf-priest dwarf-shaman nightelf-warrior nightelf-hunter nightelf-rogue nightelf-priest nightelf-druid gnome-warrior gnome-rogue gnome-mage gnome-warlock gnome-priest skyborne-hunter skyborne-druid skyborne-mage skyborne-rogue skyborne-warrior"}
+COMBOS=${*:-"human-warrior human-paladin human-rogue human-priest human-mage human-warlock human-hunter dwarf-warrior dwarf-paladin dwarf-hunter dwarf-rogue dwarf-priest dwarf-shaman nightelf-warrior nightelf-hunter nightelf-rogue nightelf-priest nightelf-druid gnome-warrior gnome-rogue gnome-mage gnome-warlock gnome-priest skyborne-hunter skyborne-druid skyborne-mage skyborne-rogue skyborne-warrior orc-hunter orc-mage orc-rogue orc-shaman orc-warlock orc-warrior tauren-druid tauren-hunter tauren-shaman tauren-warrior troll-hunter troll-mage troll-priest troll-rogue troll-shaman troll-warlock troll-warrior undead-mage undead-paladin undead-priest undead-rogue undead-warlock undead-warrior"}
 PERSONAS=${FR_PERSONAS:-clean,skip,nodungeon}
 # the simulated players run side by side (tools/simplay.js waits for free memory before each one starts): two per batch
 # when several batches run at once, three for one alone. A plan whose route didn't change reuses its passing run.

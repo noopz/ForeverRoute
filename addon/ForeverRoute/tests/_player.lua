@@ -11,19 +11,35 @@
 -- in dungeons). Random choices come from a seeded generator, so a run is repeatable.
 -- usage: ForeverRoutePlayer.play(route, { persona = "clean", seed = 1, from = 1, to = nil, startLevel = 1 })
 --        -> { played, actions, findings = { { kind, step, k, text } }, counts = { kind = n } }
+--        opts.ckpt = { bounds = { plan step that starts leg 2, ... }, nsteps, look, dir, resume = file }: checkpoints at
+--        leg boundaries, and a run resumed from one (tools/simckpt.js); out.ckpt says what happened
 local ns = ForeverRoute
 
-local function rng(seed)
-  local s = seed or 1
-  return function(n) s = (s * 1103515245 + 12345) % 2147483648; return n and (s % n) + 1 or s / 2147483648 end
+-- (st.s is the generator's state: a checkpoint keeps it)
+local function rng(seed, st)
+  st.s = seed or 1
+  return function(n) st.s = (st.s * 1103515245 + 12345) % 2147483648; return n and (st.s % n) + 1 or st.s / 2147483648 end
 end
+local function deepcopy(v, seen)
+  if type(v) ~= "table" then return v end
+  seen = seen or {}
+  if seen[v] then return seen[v] end
+  local c = {}; seen[v] = c
+  for k, x in pairs(v) do c[deepcopy(k, seen)] = deepcopy(x, seen) end
+  return c
+end
+-- engine fields a checkpoint keeps (focusAt and pos[4] are GetTime() stamps: kept as ages)
+local ENGINE_FIELDS = { "current", "planned", "focus", "focusWhy", "focusAt", "view", "pos", "here", "noPlace", "placeReady", "logLevels", "lastInsertCost" }
+-- ...and the ones that are only a memo of a step table (cleared: the steps are new tables after a checkpoint)
+local ENGINE_MEMOS = { "lastTripStep", "lastTrip" }
 
 -- profiling: the addon's heavy functions, timed while the player plays (calls, total and worst ms), and the slowest
 -- steps - the sim is where performance problems show before they reach the game (a hostile-town check on every road of
 -- every trip once made the card 4x slower)
 local clock = (os and os.clock and function() return os.clock() * 1000 end) or debugprofilestop
 local PROFILED = { { "Engine", "Refresh" }, { "Engine", "Compute" }, { "Engine", "TravelFor" }, { "Engine", "UpdateFocus" }, { "Travel", "Plan" },
-  { "Card", "Fill" }, { "Card", "Layout" }, { "Arrow", "SetTarget" }, { "Pins", "Update" }, { "Learn", "ZoneTick" } }
+  { "Card", "Fill" }, { "Card", "Layout" }, { "Arrow", "SetTarget" }, { "Pins", "Update" }, { "Learn", "ZoneTick" },
+  { "Next", "Pick" }, { "Travel", "Shortcut" }, { "Engine", "InsertStop" }, { "Engine", "WatchShortcut" } }
 local function profileOn(prof)
   local saved = {}
   for _, p in ipairs(PROFILED) do
@@ -33,7 +49,15 @@ local function profileOn(prof)
       local name = p[1] .. "." .. p[2]
       saved[#saved + 1] = { mod, p[2], f }
       local st = { n = 0, ms = 0, max = 0 }; prof.fn[name] = st
+      local isPlan = name == "Travel.Plan"
       mod[p[2]] = function(...)
+        -- (the trip planner: who asked - the profile names its callers, the dear part of a refresh when it's asked a lot)
+        if isPlan and debug and debug.getinfo then
+          local info = debug.getinfo(2, "Sl")
+          if info and info.what == "C" then info = debug.getinfo(3, "Sl") end
+          local who = info and ((info.short_src or "?"):match("([^/\\]+)$") or "?") .. ":" .. tostring(info.currentline) or "?"
+          prof.planBy[who] = (prof.planBy[who] or 0) + 1
+        end
         local t0 = clock()
         local a, b, c, d = f(...)
         local dt = clock() - t0
@@ -47,12 +71,17 @@ end
 
 local function play(route, opts)
   opts = opts or {}
-  local prof = { fn = {}, steps = {} }
+  local prof = { fn = {}, steps = {}, planBy = {} }
   local profileOff = profileOn(prof)
   local tStart = clock()
   local persona = opts.persona or "clean"
-  local rand = rng(opts.seed)
+  local rs = {}
+  local rand = rng(opts.seed, rs)
   local steps = route.steps
+  -- the plan's own steps, as loaded (a checkpoint tells them from the stops the engine inserts): origAt[j] is the
+  -- table now in the list for plan step j, origIdx the other way round
+  local origList, origIdx, origAt = {}, {}, {}
+  for j, s in ipairs(steps) do origList[j] = s; origIdx[s] = j; origAt[j] = s end
   local out = { played = 0, actions = 0, findings = {}, counts = {}, prof = prof }
   -- a progress log, one line per action, flushed as it goes (opts.logFile): when a run hangs, its last lines say where
   local logf = opts.logFile and io and io.open and io.open(opts.logFile, "w")
@@ -126,10 +155,17 @@ local function play(route, opts)
       end
     end
     local function atHub(wp) for _, h in ipairs(hubs) do if h[3] == wp[3] and math.sqrt((h[1] - wp[1]) ^ 2 + (h[2] - wp[2]) ^ 2) < HUB_YD then return true end end return false end
+    local function farHub(wp) for _, h in ipairs(hubs) do if h[3] == wp[3] and math.sqrt((h[1] - wp[1]) ^ 2 + (h[2] - wp[2]) ^ 2) > AWAY_YD then return true end end return false end
     out.back = { revisits = 0, thin = 0, wild = 0, excursions = 0 }
     local cells, lastWild, trip = {}, nil, nil -- cell -> { left = true once you were AWAY_YD away }
+    -- (with checkpoints: every question asked of the hubs, and its answer - hubs come from the whole plan, so a resumed
+    -- run asks them again of its plan and plays from level 1 if any answer differs)
+    local hq = opts.ckpt and {} or nil
     local function noteAction(i, s)
       local wp = wpos(w.m, w.x, w.y); if not wp then return end
+      -- (the place in hundredths of a yard: short to write; asked again from there, an answer could only differ right on a
+      -- hub's edge, and a differing answer means playing from level 1, never a wrong pass)
+      if hq then hq[#hq + 1] = { math.floor(wp[1] * 100 + 0.5), math.floor(wp[2] * 100 + 0.5), wp[3], atHub(wp) and 1 or 0, farHub(wp) and 1 or 0 } end
       if atHub(wp) then
         if trip and trip.n >= 1 then out.back.excursions = out.back.excursions + 1; if trip.n == 1 and trip.far then out.back.thin = out.back.thin + 1; find("thin", trip.step, "one thing out in the wild, then back") end end
         trip = { n = 0, far = false }
@@ -215,11 +251,219 @@ local function play(route, opts)
     end
     local guard, lastShown, sameCount = 0, nil, 0
     local shownCount = {}
+
+    -- Checkpoints (opts.ckpt; the design is in tools/simckpt.js). When the run first reaches past a leg boundary
+    -- (ck.bounds: the plan step that starts the next leg), the player's whole state is written out
+    -- (ck.dir/<leg>.lua) and then put back from what was written - in this run too, so a run resumed from the file and
+    -- this one go on from the same state. ck.resume: a file to start from instead of level 1.
+    local ck = opts.ckpt
+    local C = ck and ForeverRouteCkpt
+    local ckLeg, maxSeen, tRun0, wall0 = 0, 0, GetTime and GetTime() or 0, 0
+    if ck and (not C or #origList ~= ck.nsteps) then
+      out.ckpt = "checkpoints off: " .. (C and ("the plan has " .. #origList .. " steps, the planner's file " .. tostring(ck.nsteps)) or "no _ckpt.lua")
+      ck, C = nil, nil
+    end
+    -- the plan step at or after list position idx (an inserted stop counts as the plan step it stands before)
+    local function opos(idx)
+      if not idx then return nil end
+      for p = idx, #steps do local j = origIdx[steps[p]]; if j then return j end end
+      return #origList + 1
+    end
+    local function seen(idx) local j = opos(idx); if j and j > maxSeen then maxSeen = j end end
+    local function capture(L)
+      local E = ns.Engine
+      for _, f in ipairs({ "current", "planned", "focus", "view" }) do seen(E[f]) end
+      -- hi: the plan steps the run so far can have looked at (the furthest it reached, and the solver's look ahead)
+      local hi = math.min(#origList, maxSeen + (ck.look or 120))
+      local posOf = {}
+      for p, s in ipairs(steps) do posOf[s] = p end
+      local ins = {}
+      for p, s in ipairs(steps) do
+        if not origIdx[s] then
+          local j = opos(p); if j > hi then hi = math.min(#origList, j) end
+          ins[#ins + 1] = { pos = p, step = s }
+        end
+      end
+      local hiCur = posOf[origAt[hi]] or #steps
+      local quests, qs = {}, {}
+      local function addQ(q) if q and not qs[q] then qs[q] = true; quests[#quests + 1] = q end end
+      for q in pairs(Q) do addQ(q) end
+      for _, e in ipairs(ins) do addQ(e.step.q) end
+      table.sort(quests, function(a, b) return tostring(a) < tostring(b) end)
+      -- the quest log: an objective's step by its place in the list up to hi, past it as the n-th plan step of its quest
+      local Qd, bad = {}, nil
+      for q, e in pairs(Q) do
+        local c = {}
+        for k, v in pairs(e) do if k ~= "objectives" then c[k] = v end end
+        c.objectives = {}
+        for _, o in ipairs(e.objectives or {}) do
+          local p, a = posOf[o.step], nil
+          if p and p <= hiCur then a = { i = p }
+          elseif p and origIdx[o.step] then
+            local n = 0
+            for j = hi + 1, origIdx[o.step] do if origAt[j].q == o.step.q then n = n + 1 end end
+            a = { q = o.step.q, n = n }
+          else bad = "an objective of quest " .. tostring(q) .. " points at no step" end
+          c.objectives[#c.objectives + 1] = { text = o.text, finished = o.finished, a = a }
+        end
+        Qd[q] = c
+      end
+      local now = GetTime and GetTime() or 0
+      local eng = {}
+      for _, f in ipairs(ENGINE_FIELDS) do local v = E[f]; if type(v) ~= "function" then eng[f] = v end end
+      if type(eng.focusAt) == "number" then eng.focusAt = now - eng.focusAt end
+      if type(eng.pos) == "table" and type(eng.pos[4]) == "number" then eng.pos = deepcopy(eng.pos); eng.pos[4] = now - eng.pos[4] end
+      local top = {}
+      for _, x in ipairs(prof.steps) do top[#top + 1] = x end
+      table.sort(top, function(a, b) return a.ms > b.ms end)
+      for k = #top, 6, -1 do top[k] = nil end
+      local fn = {}
+      for name, st in pairs(prof.fn) do fn[name] = { n = st.n, ms = st.ms, max = st.max } end
+      local wall = wall0 + (now - tRun0)
+      local d = { v = 1, leg = L, hi = hi, char = ns.char, db = ForeverRouteDB, charIsGlobal = ForeverRouteChar == ns.char,
+        world = { m = w.m, x = w.x, y = w.y, level = w.level, t = w.t }, Q = Qd, ins = ins, eng = eng, errs0 = w.errs0,
+        gen = ForeverRoutePlan and ForeverRoutePlan.generated, pathId = route.id, legs = route.meta and route.meta.legs,
+        P = { level = level, bags = bags, inside = inside, bindName = bindName, bindAt = bindAt, secretOn = secretOn, rs = rs.s,
+          guard = guard, lastShown = lastShown, sameCount = sameCount, shownCount = shownCount, done = done, cells = cells,
+          lastWild = lastWild, trip = trip, hq = hq, maxSeen = maxSeen, wall = wall },
+        out = { played = out.played, actions = out.actions, findings = out.findings, counts = out.counts, travel = out.travel,
+          back = out.back, fn = fn, psteps = top, wallMs = clock() - tStart } }
+      local text, lost = C.encode(d)
+      local meta = { v = 1, leg = L, B = ck.bounds[L], hi = hi, quests = quests, nsteps = #origList, step = E.current,
+        shown = lastShown, level = level, wall = wall, played = out.played, guard = guard,
+        unsafe = (bad or lost[1]) and tostring(bad or lost[1]) or nil }
+      return text, meta
+    end
+    -- put a decoded checkpoint in place: prepare checks everything first and changes nothing; apply does it
+    local function prepare(d, resuming)
+      if type(d) ~= "table" or d.v ~= 1 then return nil, "not a checkpoint of this version" end
+      local hi = d.hi
+      if not (hi and hi <= #origList) then return nil, "it reaches past the plan's end" end
+      -- the hubs are the whole plan's: the run so far must get the same answers from this plan's (in the run that wrote
+      -- it they are the same hubs)
+      for k, e in ipairs(resuming and d.P.hq or {}) do
+        local wp = { e[1] / 100, e[2] / 100, e[3] }
+        if (atHub(wp) and 1 or 0) ~= e[4] or (farHub(wp) and 1 or 0) ~= e[5] then return nil, "the plan's hubs answer differently (action " .. k .. ")" end
+      end
+      local list, newIdx, newAt = {}, {}, {}
+      for j, s in ipairs(origList) do local c = deepcopy(s); list[j] = c; newIdx[c] = j; newAt[j] = c end
+      for _, e in ipairs(d.ins) do
+        if e.pos > #list + 1 then return nil, "an inserted stop falls past the list's end" end
+        table.insert(list, e.pos, e.step)
+      end
+      for p, s in ipairs(list) do s.id = p end
+      local function resolve(a)
+        if not a then return nil end
+        if a.i then return list[a.i] end
+        local n = 0
+        for j = hi + 1, #origList do if newAt[j].q == a.q then n = n + 1; if n == a.n then return newAt[j] end end end
+      end
+      local Qn = {}
+      for q, e in pairs(d.Q) do
+        for _, o in ipairs(e.objectives) do
+          o.step = resolve(o.a); o.a = nil
+          if not o.step then return nil, "an objective of quest " .. tostring(q) .. " has no step in this plan" end
+        end
+        Qn[q] = e
+      end
+      return { d = d, list = list, newIdx = newIdx, newAt = newAt, Q = Qn }
+    end
+    local function apply(r)
+      local d, E = r.d, ns.Engine
+      route.steps = r.list; steps = r.list; origIdx, origAt = r.newIdx, r.newAt
+      for k in pairs(Q) do Q[k] = nil end
+      for q, e in pairs(r.Q) do Q[q] = e end
+      for k in pairs(w.timers) do w.timers[k] = nil end
+      ns.char = d.char
+      if d.charIsGlobal then ForeverRouteChar = ns.char end
+      ns.State.knownTaxi = ns.char.knownTaxi or {}; ns.char.knownTaxi = ns.State.knownTaxi
+      ForeverRouteDB = d.db; ns.db = ForeverRouteDB
+      w.m, w.x, w.y, w.level, w.t = d.world.m, d.world.x, d.world.y, d.world.level, d.world.t
+      w.errs0 = d.errs0
+      local now = GetTime and GetTime() or 0
+      for _, f in ipairs(ENGINE_FIELDS) do E[f] = d.eng[f] end
+      for _, f in ipairs(ENGINE_MEMOS) do E[f] = nil end
+      if type(E.focusAt) == "number" then E.focusAt = now - E.focusAt end
+      if type(E.pos) == "table" and type(E.pos[4]) == "number" then E.pos[4] = now - E.pos[4] end
+      local P = d.P
+      level, bags, inside, bindName, bindAt, secretOn, rs.s = P.level, P.bags, P.inside, P.bindName, P.bindAt, P.secretOn, P.rs
+      guard, lastShown, sameCount, shownCount, done, cells = P.guard, P.lastShown, P.sameCount, P.shownCount, P.done, P.cells
+      lastWild, trip, hq, maxSeen, ckLeg = P.lastWild, P.trip, P.hq or {}, P.maxSeen, d.leg
+      wall0, tRun0 = P.wall, now
+      local o = d.out
+      out.played, out.actions, out.findings, out.counts, out.travel, out.back = o.played, o.actions, o.findings, o.counts, o.travel, o.back
+      for name, st in pairs(prof.fn) do local x = o.fn[name] or {}; st.n, st.ms, st.max = x.n or 0, x.ms or 0, x.max or 0 end
+      prof.steps = o.psteps
+      tStart = clock() - o.wallMs
+      w:wait(0) -- the engine looks again (and the card, arrow and pin must agree)
+    end
+    -- the checkpoint as written, read back: the one way a state is put back, here and in a resumed run
+    local function restoreText(text, map)
+      local d, err = C.decode(text)
+      if not d then return nil, "unreadable (" .. tostring(err) .. ")" end
+      if map then C.subst(d, map) end
+      local r, why = prepare(d, map ~= nil)
+      if not r then return nil, why end
+      apply(r)
+      return true
+    end
+    -- a leg is passed when the furthest step the run has reached (shown, current, planned or focus) is past it: the
+    -- engine's current step can stay back for long (a step it went round), the key covers what the run reached anyway
+    local function tick()
+      local E = ns.Engine
+      seen(E.Shown()); seen(E.current); seen(E.planned); seen(E.focus)
+      local L = ckLeg
+      while ck.bounds[L + 1] and ck.bounds[L + 1] <= maxSeen do L = L + 1 end
+      if L <= ckLeg then return end
+      -- between actions, nothing waiting: the addon's timers run out first (the virtual clock moves on)
+      for _ = 1, 10 do
+        if #w.timers == 0 then break end
+        local last = w.t
+        for _, tm in ipairs(w.timers) do if tm.at > last then last = tm.at end end
+        w:wait(last - w.t)
+      end
+      -- (what is still waiting then is set again by every look the engine takes - the card's placing after a layout,
+      -- the map library's tick - and is dropped: putting the state back makes the engine look again, which sets it)
+      local dropped = #w.timers
+      if w.onTaxi or ns.Arrow.aboard then return end -- (on the way: at the next action)
+      local text, meta = capture(L)
+      local file = ck.dir .. "/" .. (ck.prefix or "") .. string.format("%03d", L) .. ".lua"
+      if not C.write(file, meta, text) then out.ckpt = "could not write " .. file; ck, C = nil, nil; return end
+      ckLeg = L
+      if meta.unsafe then log("checkpoint leg %d not usable: %s", L, meta.unsafe); return end
+      local ok, why = restoreText(text)
+      if not ok then error("checkpoint leg " .. L .. " could not be put back: " .. tostring(why), 0) end
+      log("checkpoint leg %d at step %s (plan step %d, reached %d) | level %d | %d KB, %d timer(s) dropped", L, tostring(meta.step), ck.bounds[L], maxSeen, level, math.floor(#text / 1024), dropped)
+    end
+    if ck and ck.resume then
+      local _, body = C.read(ck.resume)
+      local ok, why = false, "the file is incomplete"
+      if body then
+        -- the plan's stamp, path id and legs are the new plan's (the saved data keeps them: ran dungeons, your path)
+        local map = {}
+        local d0 = C.decode(body)
+        if d0 then
+          local function m(a, b) if a ~= nil and b ~= nil and a ~= b then map[a] = b end end
+          m(d0.gen, ForeverRoutePlan and ForeverRoutePlan.generated); m(d0.pathId, route.id); m(d0.legs, route.meta and route.meta.legs)
+        end
+        ok, why = restoreText(body, map)
+      end
+      if ok then
+        out.ckpt = string.format("resumed from leg %d (plan step %d, level %d, %d steps played, %.0f s of play skipped)", ckLeg, ck.bounds[ckLeg] or 0, level, out.played, wall0)
+        log("resumed from checkpoint leg %d at step %s | level %d", ckLeg, tostring(ns.Engine.current), level)
+      else
+        out.ckpt = "checkpoint not used (" .. tostring(why) .. "): played from level 1"
+        log("checkpoint not used: %s", tostring(why))
+      end
+    end
+
     while true do
+      if ck then tick() end
       guard = guard + 1
       if guard > #steps * 4 + 50 then find("stuck", lastShown or 0, "gave up after " .. guard .. " actions"); break end
       local i = ns.Engine.Shown()
       if not i or (opts.to and i > opts.to) then break end
+      if ck then seen(i); seen(ns.Engine.current); seen(ns.Engine.planned); seen(ns.Engine.focus) end
       local s = steps[i]
       local tStep = clock()
       if done[i] then find("back", i) end
@@ -353,6 +597,9 @@ local function summary(r, name)
     local parts = {}
     for k = 1, math.min(8, #fns) do local f = fns[k]; parts[#parts + 1] = string.format("%s %dx %.0f ms (worst %.1f)", f[1], f[2].n, f[2].ms, f[2].max) end
     L[#L + 1] = "    time in: " .. table.concat(parts, "; ")
+    local by = {}; for who, n in pairs(P.planBy or {}) do by[#by + 1] = { who, n } end
+    table.sort(by, function(a, b) return a[2] > b[2] end)
+    if #by > 0 then local o = {}; for k = 1, math.min(6, #by) do o[k] = by[k][1] .. " " .. by[k][2] .. "x" end; L[#L + 1] = "    trip planner asked by: " .. table.concat(o, "; ") end
     table.sort(P.steps, function(a, b) return a.ms > b.ms end)
     local slow = {}
     for k = 1, math.min(5, #P.steps) do local s = P.steps[k]; slow[#slow + 1] = string.format("#%d %s %s %.0f ms", s.i, tostring(s.k), tostring(s.text):sub(1, 30), s.ms) end
@@ -364,7 +611,11 @@ local function summary(r, name)
     t.rideSec / 3600, t.flySec / 3600, t.flights, t.boats, t.learned, t.hostile) end
   local by = {}
   for _, f in ipairs(r.findings) do by[f.kind] = by[f.kind] or {}; if #by[f.kind] < 6 then table.insert(by[f.kind], "#" .. f.step .. " " .. tostring(f.k) .. " " .. f.text) end end
-  for kind, n in pairs(r.counts) do L[#L + 1] = string.format("  %s x%d: %s", kind, n, table.concat(by[kind] or {}, "; ")) end
+  -- (in a fixed order: a run resumed from a checkpoint has its counts table rebuilt, with another pairs order)
+  local kinds = {}
+  for kind in pairs(r.counts) do kinds[#kinds + 1] = kind end
+  table.sort(kinds)
+  for _, kind in ipairs(kinds) do L[#L + 1] = string.format("  %s x%d: %s", kind, r.counts[kind], table.concat(by[kind] or {}, "; ")) end
   return table.concat(L, "\n")
 end
 

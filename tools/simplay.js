@@ -10,6 +10,10 @@
 //             (that character's plan in the installed Route.lua, e.g. char:Testchar-Testrealm)
 //   personas  comma list (default clean,skip,fast,slow,die,reload,secret)
 //   steps     play at most this many steps (default all)
+// Checkpoints (built-in plans; tools/simckpt.js has the design): each persona's state is kept at every leg boundary
+// (reports/simplay-ckpt), and a later run resumes from the last leg whose plan steps (and the code, the simulator, the
+// persona) are unchanged; FR_SIM_CKPT=0 plays from level 1 as before, writing none. FR_SIM_PLAN=<Plan.lua>: play that
+// file instead of the built-in plan's own (a copy to try something on).
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -40,6 +44,35 @@ const load = kind === 'char'
      ForeverRouteByChar[ns.CharKey()] = ForeverRouteByChar[${lua(key)}] -- the sim's character plays as you (a /reload finds your plan)`
   : `ForeverRouteRoutes = nil; ForeverRouteData = nil
      assert(ForeverRouteStarter and ForeverRouteStarter[${lua(key)}], "no built-in plan ${key}")()`;
+const planFile = kind === 'starter' ? (process.env.FR_SIM_PLAN ? path.resolve(process.env.FR_SIM_PLAN) : path.join(ROOT, 'addon', 'ForeverRoute_Starter_' + key.replace(/-/g, '_'), 'Plan.lua')) : null;
+const work = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-play-'));
+// checkpoints: for each persona the stored one to resume from (the deepest whose key matches this plan), and where the
+// run writes its own (work/ckpt/<persona>, taken into the store after the run)
+const CK = require('./simckpt');
+const ck = { on: kind === 'starter' && process.env.FR_SIM_CKPT !== '0', notes: {}, per: {} };
+if (ck.on) {
+  try {
+    ck.plan = CK.parsePlan(fs.readFileSync(planFile, 'utf8'));
+    ck.bounds = CK.legs(ck.plan);
+    ck.code = CK.codeHash(ROOT, SIM);
+    personas.forEach((p, n) => {
+      const base = CK.baseOf(ck.code, { combo: key, race: simRace, cls: simClass, persona: p, seed: n + 1, to: stepsArg });
+      const dir = CK.storeDir(ROOT, key, p), stage = path.join(work, 'ckpt', p);
+      fs.mkdirSync(stage, { recursive: true });
+      const got = CK.pick(ck.plan, base, dir);
+      let resume = null;
+      if (got.file) { resume = path.join(work, 'ckpt', p + '.resume.lua'); CK.unpack(got.file, resume); }
+      ck.per[p] = { base, dir, stage, resume, meta: got.meta };
+      ck.notes[p] = got.file ? `checkpoint of leg ${got.meta.leg} matches (plan step ${got.meta.B}, level ${got.meta.level}, ${got.meta.played} steps played, ~${Math.round(got.meta.wall)} s of play)`
+        : got.of ? `none of ${got.of} stored checkpoint(s) matches this plan` : 'no checkpoints stored yet';
+    });
+  } catch (e) { ck.on = false; ck.off = 'checkpoints off: ' + e.message; }
+}
+const ckOpts = (p) => {
+  const c = ck.on && ck.per[p];
+  if (!c) return 'nil';
+  return `{ bounds = { ${ck.bounds.join(', ')} }, nsteps = ${ck.plan.steps.length}, look = ${CK.LOOK}, dir = ${lua(c.stage)}, resume = ${c.resume ? lua(c.resume) : 'nil'} }`;
+};
 const testOf = personas.map((p, n) => `
 test("simulated player (${p}) on ${plan}", function()
   local sv = { routes = ForeverRouteRoutes, data = ForeverRouteData, plan = ForeverRoutePlan }
@@ -47,30 +80,32 @@ test("simulated player (${p}) on ${plan}", function()
   local route
   for _, r in ipairs(ForeverRouteRoutes or {}) do if tostring(r.id):find("^path:") then route = r; break end end
   assert(route, "no path in the plan")
-  local res = ForeverRoutePlayer.play(route, { persona = ${lua(p)}, seed = ${n + 1}, to = ${stepsArg ? +stepsArg : 'nil'}, logFile = ${lua(logOf(p))} })
+  local res = ForeverRoutePlayer.play(route, { persona = ${lua(p)}, seed = ${n + 1}, to = ${stepsArg ? +stepsArg : 'nil'}, logFile = ${lua(logOf(p))}, ckpt = ${ckOpts(p)} })
   ForeverRouteRoutes, ForeverRouteData, ForeverRoutePlan = sv.routes, sv.data, sv.plan
   -- the report goes out as this test's message (the simulator shows a failing test's message in full; print goes to chat)
   local lines = {}
   for line in (ForeverRoutePlayer.summary(res, ${lua(p)}) .. "\\n"):gmatch("(.-)\\n") do lines[#lines + 1] = "SIMPLAY " .. line end
+  if res.ckpt then lines[#lines + 1] = "SIMCKPT ${p}: " .. res.ckpt end
   error("SIMPLAY-REPORT\\n" .. table.concat(lines, "\\n"), 0)
 end)`);
 
-const work = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-play-'));
 // FR_SIM_CACHE=1: a run that already passed is reused - keyed on exactly what it tests (the plan file, every addon file
 // the sim loads, the bot, the personas). After a QuestieDB update only the plans that changed are played again.
 const SIMCACHE = path.join(ROOT, 'reports', 'simplay-cache');
 const simKey = (() => {
-  if (!process.env.FR_SIM_CACHE || kind !== 'starter') return null;
+  // (FR_SIM_CACHE=0 is off too - only a set, non-zero value turns it on)
+  if (!process.env.FR_SIM_CACHE || process.env.FR_SIM_CACHE === '0' || kind !== 'starter') return null;
   const h = require('crypto').createHash('sha1');
   const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (/\.(lua|toc|xml)$/.test(e.name)) { h.update(e.name); h.update(fs.readFileSync(p)); } } };
   walk(src);
-  h.update(fs.readFileSync(path.join(ROOT, 'addon', 'ForeverRoute_Starter_' + key.replace(/-/g, '_'), 'Plan.lua')));
+  h.update(fs.readFileSync(planFile));
   h.update(personaArg + '|' + (stepsArg || ''));
   return h.digest('hex').slice(0, 24);
 })();
 if (simKey && fs.existsSync(path.join(SIMCACHE, simKey + '.md'))) {
   const prev = fs.readFileSync(path.join(SIMCACHE, simKey + '.md'), 'utf8');
   console.log(prev.replace(/^(# Simulated player on .*)$/m, '$1\n\n(reused: the same plan and addon already passed this run)'));
+  fs.rmSync(work, { recursive: true, force: true });
   process.exit(0);
 }
 (async () => {
@@ -79,9 +114,9 @@ if (simKey && fs.existsSync(path.join(SIMCACHE, simKey + '.md'))) {
     fs.cpSync(src, dest, { recursive: true, filter: (p) => !/[\\/]tests([\\/]|$)/.test(path.relative(src, p) ? '/' + path.relative(src, p) : '') });
     if (kind === 'char') fs.copyFileSync(path.join(require('./game-dir').addonDir(), 'Route.lua'), path.join(dest, 'Route.lua'));
     fs.mkdirSync(path.join(dest, 'tests'), { recursive: true });
-    for (const f of ['_harness.lua', '_player.lua']) fs.copyFileSync(path.join(src, 'tests', f), path.join(dest, 'tests', f));
+    for (const f of ['_ckpt.lua', '_harness.lua', '_player.lua']) fs.copyFileSync(path.join(src, 'tests', f), path.join(dest, 'tests', f));
     // a built-in plan lives in its own load-on-demand addon: hand the sim its file directly
-    if (kind === 'starter') fs.copyFileSync(path.join(ROOT, 'addon', 'ForeverRoute_Starter_' + key.replace(/-/g, '_'), 'Plan.lua'), path.join(dest, 'tests', '_plan.lua'));
+    if (kind === 'starter') fs.copyFileSync(planFile, path.join(dest, 'tests', '_plan.lua'));
     fs.mkdirSync(path.join(work, 'wtf'), { recursive: true });
     for (const p of personas) { try { fs.unlinkSync(logOf(p)); } catch (e) {} }
     const t0 = Date.now();
@@ -130,14 +165,31 @@ if (simKey && fs.existsSync(path.join(SIMCACHE, simKey + '.md'))) {
     const failed = []; for (let i = 0; i < lines.length; i++) if (/✗/.test(lines[i]) && !(lines[i + 1] || '').includes('SIMPLAY-REPORT')) failed.push(lines[i].trim() + (lines[i + 1] ? '\n    ' + lines[i + 1].trim() : ''));
     const tail = (p) => { let t = ''; try { t = fs.readFileSync(logOf(p), 'utf8'); } catch (e) {} const L = t.trim().split('\n'); return t && L[L.length - 1] !== 'end' ? [p + ':', ...L.slice(-12).map((l) => '  ' + l)] : []; };
     const sum = `${personas.length} persona(s) played, ${failed.length} broke a check` + (hung ? `, HUNG (stopped after ${hung} s)` : '') + (/\d+ tests, \d+ passed/.test(out) || hung ? '' : ' (the simulator gave no result)');
-    const report = [`# Simulated player on ${plan}`, '', `${new Date().toISOString().slice(0, 16)}, ${Math.round((Date.now() - t0) / 1000)} s. ${sum}`, '',
-      ...(hung ? [`## Hung: no progress for ${STALL_SEC} s. Last lines of each unfinished log (reports/simplay-logs):`, '', '```', ...personas.flatMap(tail), '```', ''] : []),
+    // checkpoints: what each persona resumed from (its own SIMCKPT line), and the ones this run wrote into the store
+    const ckSaid = lines.filter((l) => l.includes('SIMCKPT ')).map((l) => l.slice(l.indexOf('SIMCKPT ') + 8).trim());
+    const ckLines = ck.off ? [ck.off] : [];
+    if (ck.on) {
+      for (const p of personas) {
+        const c = ck.per[p];
+        const said = ckSaid.find((l) => l.startsWith(p + ': '));
+        let stored = '';
+        try {
+          const r = CK.ingest(c.stage, ck.plan, c.base, c.dir);
+          stored = `${r.added} written, ${r.kept} kept for this plan` + (r.dropped ? `, ${r.dropped} old dropped` : '') + (r.unusable.length ? `; not usable: ${r.unusable.join('; ')}` : '');
+        } catch (e) { stored = 'not stored: ' + e.message; }
+        ckLines.push(`${p}: ${ck.notes[p]}; ${said ? said.slice(p.length + 2) : c.resume ? 'no word from the run (it broke a check or stopped)' : 'played from level 1'}; ${stored}`);
+      }
+      try { CK.cap(ROOT); } catch (e) {}
+    }
+    const body = [...(hung ? [`## Hung: no progress for ${STALL_SEC} s. Last lines of each unfinished log (reports/simplay-logs):`, '', '```', ...personas.flatMap(tail), '```', ''] : []),
       '## What the player ran into', '', '```', ...(found.length ? found : ['(no findings printed)']), '```', '',
-      ...(failed.length ? ['## Runs that failed (a check broke: card/arrow/pin disagree, or the addon logged an error)', '', '```', ...failed, '```', ''] : [])].join('\n');
+      ...(failed.length ? ['## Runs that failed (a check broke: card/arrow/pin disagree, or the addon logged an error)', '', '```', ...failed, '```', ''] : [])];
+    const head = [`# Simulated player on ${plan}`, '', `${new Date().toISOString().slice(0, 16)}, ${Math.round((Date.now() - t0) / 1000)} s. ${sum}`, ''];
+    const report = [...head, ...body, ...(ckLines.length ? ['## Checkpoints (tools/simckpt.js; FR_SIM_CKPT=0 plays from level 1)', '', '```', ...ckLines, '```', ''] : [])].join('\n');
     fs.writeFileSync(path.join(ROOT, 'reports', 'simplay.md'), report);
     console.log(report);
     process.exitCode = hung || failed.length || !found.length ? 1 : 0;
-    // only a clean pass is kept for reuse
-    if (simKey && !process.exitCode) { fs.mkdirSync(SIMCACHE, { recursive: true }); fs.writeFileSync(path.join(SIMCACHE, simKey + '.md'), report); }
+    // only a clean pass is kept for reuse (without the checkpoint notes: they are this run's)
+    if (simKey && !process.exitCode) { fs.mkdirSync(SIMCACHE, { recursive: true }); fs.writeFileSync(path.join(SIMCACHE, simKey + '.md'), [...head, ...body].join('\n')); }
   } finally { if (process.env.FR_KEEP) console.log('kept ' + work); else fs.rmSync(work, { recursive: true, force: true }); }
 })();

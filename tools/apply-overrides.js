@@ -25,10 +25,12 @@ function apply(db) {
   const renamed = {};
   for (const [id, name] of Object.entries(o.npcNames || {})) {
     const n = db.npcs && db.npcs[id];
-    if (n && n.name !== name) { done.push(`npc ${id}: ${n.name} -> ${name}`); n.name = name; }
-    if (n) renamed[id] = name;
+    // (an NPC the data no longer has: said, so a renumbered NPC doesn't quietly go back to its old name)
+    if (!n) { if (db.npcs) done.push(`npc ${id}: NOT IN THE DATA - rename to ${name} not applied (check tools/npc-names.js)`); continue; }
+    if (n.name !== name) { done.push(`npc ${id}: ${n.name} -> ${name}`); n.name = name; }
+    renamed[id] = name;
   }
-  if (Object.keys(renamed).length) for (const q of Object.values(db.quests)) for (const e of [...q.starters, ...q.finishers]) {
+  if (Object.keys(renamed).length) for (const q of Object.values(db.quests)) for (const e of [...(q.starters || []), ...(q.finishers || [])]) {
     if (e.type === 'npc' && renamed[e.id] && e.name !== renamed[e.id]) e.name = renamed[e.id];
   }
   for (const [id, fields] of Object.entries(o.quests || {})) {

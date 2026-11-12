@@ -14,7 +14,9 @@ const [dbPath, cfgPath, outPath] = process.argv.slice(2);
 const readJsonCached = (p) => { const C = global.__FR_JSON; if (!C) return JSON.parse(fs.readFileSync(p, 'utf8')); const k = p + ':' + fs.statSync(p).mtimeMs; return C[k] || (C[k] = JSON.parse(fs.readFileSync(p, 'utf8'))); };
 const { quests: Q, npcs: N, objects: O } = readJsonCached(dbPath);
 const cfg = Object.assign({
-  maxAbove: LEVEL_ABOVE + 1, maxLog: QUEST_LOG_MAX, // the shared level gate (world.js): quests up to LEVEL_ABOVE above you
+  // the shared level gate (world.js): quests up to LEVEL_ABOVE above you. The plan holds at most QUEST_LOG_MAX - 10
+  // quests (30 of Forever's 40): the rest of the log is yours - a dungeon's quests, stragglers, whatever you picked up
+  maxAbove: LEVEL_ABOVE + 1, maxLog: QUEST_LOG_MAX - 10,
   maxMobAbove: LEVEL_ABOVE + 1, secPerKill: 22, secPerObject: 12, dropRate: 0.5, mergeYards: 60,
   hubYards: 160, detourYards: 250, maxKills: 45, faction: 'alliance', minHubNpcs: 2, maxTripMin: 30, hearthCooldownMin: 60, minXpPerMin: 0,
   trainLevels: [], trainerTripMin: 7, backgroundMinStops: 3, finishOpen: true,
@@ -245,16 +247,41 @@ const finishedInLog = (id) => { const a = (cfg.active || {})[id]; return !!(a &&
 // a quest with work to do that the data describes none of (see the task loop; the rule is shared: world.js)
 const { unknownWork, unknownWorkLabel, leadsOn } = require('./world');
 module.exports.unknownWork = unknownWork;
+// A chain's worth beyond its next quest: what the quests it opens pay, a level of the chain deeper counting for less
+// (cfg.chainDiscount per step: further off, and more can go wrong). Valued one quest at a time, a chain's first part in
+// a zone you're leaving looked like one mediocre quest, and the whole chain - often with the best reward at its end, in
+// another zone - was cut (a quest is only worth what it leads to: the precedence-constrained knapsack). Quests of the
+// chain you've done, or can't take (another race or class, out of level), count nothing.
+const FOLLOWERS = {};
+for (const o of Object.values(Q)) for (const p of new Set([...(o.preSingle || []), ...(o.preGroup || [])])) (FOLLOWERS[p] = FOLLOWERS[p] || []).push(o.id);
+const CHAIN_DISCOUNT = cfg.chainDiscount ?? 0.6;
+const COMPLETED0 = new Set(cfg.completed || []);
+function chainTail(q, L, done, depth = 1, seen = new Set()) {
+  if (depth > 8) return 0;
+  let v = 0;
+  for (const f of FOLLOWERS[q.id] || []) {
+    if (seen.has(f) || (done && done.has(f))) continue;
+    seen.add(f);
+    const fq = Q[f];
+    if (!fq || (fq.races && !raceOk(fq.races, cfg.race)) || (fq.classes && !(fq.classes & classBit)) || fq.reqLevel > L + 10 || fq.level < L - 6) continue;
+    v += Math.pow(CHAIN_DISCOUNT, depth) * require('./world').questXp(baseXp(fq), fq.level, L) + chainTail(fq, L, done, depth + 1, seen);
+  }
+  return v;
+}
 // what kill credit on a "friendly" NPC really asks: { kind: 'talk' } (Speak with Tirion Fordring), 'kill' (Subdue
 // Tapoke Jahn, Kill 12 Small Crag Boars) or 'do' with the quest's first sentence as the label (Free 6 Webbed Victims)
 const TALK_RX = /\b(speak|talk|listen|ask|question|hear)\b/i;
 const FIGHT_RX = /\b(kill|slay|slain|defeat|subdue|destroy|dispatch|hunt|cull|vanquish|eliminate|bounty|thin|wipe|exterminate|put down|murder|assassinate|execute)\b/i;
 function killCreditLabel(q, o) {
   if (o.text && TALK_RX.test(o.text)) return { kind: 'talk' };
-  const first = (((q.text || [])[0] || '').split(/(?<=[.!])\s/)[0] || '').replace(/[.!]\s*$/, '').trim();
-  if (/^(speak|talk|listen|ask)\b/i.test(first)) return { kind: 'talk' };
-  if (FIGHT_RX.test(first)) return { kind: 'kill' };
-  if (first && first.length <= 60) return { kind: 'do', label: first };
+  // the first sentence speaks for this objective only when it is the quest's one objective (with several, it can be
+  // about another: "Bring 5 Linen Cloth..." would label a kill-credit step)
+  if (q.objectives.length === 1) {
+    const first = (((q.text || [])[0] || '').split(/(?<=[.!])\s/)[0] || '').replace(/[.!]\s*$/, '').trim();
+    if (/^(speak|talk|listen|ask)\b/i.test(first)) return { kind: 'talk' };
+    if (FIGHT_RX.test(first)) return { kind: 'kill' };
+    if (first && first.length <= 60) return { kind: 'do', label: first };
+  }
   const all = (o.text || '') + ' ' + (q.text || []).join(' ');
   if (FIGHT_RX.test(all)) return { kind: 'kill' };
   if (TALK_RX.test(all)) return { kind: 'talk' };
@@ -421,7 +448,9 @@ for (const q of Object.values(Q)) {
     t.qual = QUALITY(q, cfg.level);
     if (CURATED_FRUSTRATING[q.id]) { t.qual.frustration += 0.6; t.qual.reasons.push(CURATED_FRUSTRATING[q.id]); }
     const keepForReward = t.qual.rewardValue >= (cfg.keepRewardValue || 1200);
-    if (t.qual.frustration >= (cfg.maxFrustration ?? 0.55) && !keepForReward && !(cfg.bonusQuests || []).includes(q.id) && !(cfg.keep || []).includes(q.id) && !finishedInLog(q.id)) {
+    // ...or for its chain: a mildly annoying first part that opens a chain worth more than itself stays
+    const keepForChain = chainTail(q, cfg.level, COMPLETED0) >= baseXp(q) * (cfg.keepChainShare ?? 1.5);
+    if (t.qual.frustration >= (cfg.maxFrustration ?? 0.55) && !keepForReward && !keepForChain && !(cfg.bonusQuests || []).includes(q.id) && !(cfg.keep || []).includes(q.id) && !finishedInLog(q.id)) {
       skipped.push([q, 'frustrating: ' + t.qual.reasons.join(', ')]); continue;
     }
   }
@@ -616,10 +645,24 @@ function workLoners() {
 // the hub was not built from. The hub counts it as its own (inHub: within cfg.hubYards of one of its NPCs), so neither
 // the field loops nor the lone-NPC visits go there - and the hub visit only walked its NPCs: Lightforge Iron was picked
 // up and never handed in, and its whole chain (The Lost Ingots, Blessed Arm) fell out of every path
+// the tasks with a pick-up or hand-in spot in each zone (built once: the spots don't move), so a hub visit only looks
+// at its own zone's tasks - every task, for every hub visit and pass, was a lot of build time over 51 plans
+let TASKS_BY_ZONE = null;
+function tasksInZone(z) {
+  if (!TASKS_BY_ZONE) {
+    TASKS_BY_ZONE = new Map();
+    for (const t of Object.values(tasks)) {
+      const zs = new Set([t.accept.at && t.accept.at.zone, ...(t.turnin.spawns || []).map((sp) => sp.zone)].filter((x) => x != null));
+      for (const zz of zs) { if (!TASKS_BY_ZONE.has(zz)) TASKS_BY_ZONE.set(zz, []); TASKS_BY_ZONE.get(zz).push(t); }
+    }
+  }
+  return (TASKS_BY_ZONE.get(z) || []).filter((t) => tasks[t.q.id] === t);
+}
 function hubExtras(h) {
   const out = [];
   const add = (sp) => { if (sp && inHub(h, sp) && !h.pts.some((q) => dist(q, sp) < 15) && !out.some((q) => dist(q, sp) < 15)) out.push(sp); };
-  for (const t of Object.values(tasks)) {
+  const zones = new Set(h.pts.map((p) => p.zone));
+  for (const t of [...zones].flatMap(tasksInZone)) {
     if (accepted.has(t.q.id) && ready(t)) for (const sp of t.turnin.spawns || []) add(sp);
     if (canAccept(t)) add(t.accept.at);
   }
@@ -754,8 +797,9 @@ function bestHub() {
     if (deadHubs.has(h.name + ':' + level)) continue;
     let v = 0;
     for (const t of Object.values(tasks)) {
-      if (accepted.has(t.q.id) && ready(t) && t.turnin.spawns.some((s) => inHub(h, s))) v += questXpAt(t.q, level);
-      if (!logFull && canAccept(t) && inHub(h, t.accept.at)) v += (questXpAt(t.q, level) + extraValue(t.q)) * 0.5;
+      // (a hand-in or pick-up also counts what its chain leads to: The Twilight Threat in Stormwind opens more)
+      if (accepted.has(t.q.id) && ready(t) && t.turnin.spawns.some((s) => inHub(h, s))) v += questXpAt(t.q, level) + chainTail(t.q, level, turned);
+      if (!logFull && canAccept(t) && inHub(h, t.accept.at)) v += (questXpAt(t.q, level) + extraValue(t.q) + chainTail(t.q, level, turned)) * 0.5;
     }
     let sec = travelSec(pos, h) + 30;
     if (v / sec > anyV) { anyV = v / sec; anyBest = h; }
@@ -909,7 +953,8 @@ if (cfg.stateOut) {
   // carry which objectives are done, so a later visit to the zone does not plan them again
   for (const id of accepted) { const t = tasks[id]; active[id] = t ? { complete: !!ready(t), objectives: t.objs.map((o, i) => ({ done: odone(id, i), text: o.label })) } : ((cfg.active || {})[id] || { complete: false, objectives: [] }); } // a quest from another zone: pass its progress through untouched
   const gained = out.filter((s2) => s2.type === 'turnin').reduce((a, s2) => a + s2.xp, 0);
-  const rewardValue = out.filter((s2) => s2.type === 'turnin').reduce((a, s2) => a + extraValue(s2.q), 0);
+  // (and what the chains handed in here lead to, past this leg: a leg that moves a chain on is worth that much more)
+  const rewardValue = out.filter((s2) => s2.type === 'turnin').reduce((a, s2) => a + extraValue(s2.q) + chainTail(s2.q, level, turned), 0);
   const dungeonsRun = [...new Set([...(cfg.dungeonsRun || []), ...out.filter((s2) => s2.type === 'dungeon').map((s2) => s2.dungeon)])].sort((a, b) => a - b);
   fs.writeFileSync(cfg.stateOut, JSON.stringify({ trainedAt, hearthCdLeft: Math.max(0, Math.round(hearthReadyAt - clock)), dungeonsRun, rewardValue, level, xp, completed: [...turned], active, pos, minutes: Math.round(clock / 60), questXp: gained, turnins: out.filter((s2) => s2.type === 'turnin').length }));
 }

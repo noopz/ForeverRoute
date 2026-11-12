@@ -192,7 +192,7 @@ local ns = ForeverRoute
 local E = ns.Engine
 local HBD = LibStub("HereBeDragons-2.0")
 local ZONES = __ZONES__
-local STARTER, NAME, NEXT = __STARTER__, __NAME__, __NEXT__
+local STARTER, NAME, NEXT, PLANKEY = __STARTER__, __NAME__, __NEXT__, __PLANKEY__
 -- real zone names (the simulator has "Map 1453"): flight-path matching and every travel line go by name
 do
   local orig = C_Map.GetMapInfo
@@ -305,7 +305,12 @@ function ReplayRun(S)
   ForeverRouteChar = char
   ForeverRouteRoutes, ForeverRouteData, ForeverRoutePlan, ForeverRouteEnders, ForeverRouteUnlocks = nil, nil, nil, nil, nil
   if STARTER then ForeverRouteByChar = nil end
+  -- (a built-in plan of a race the simulator has no such character for - Skyborne, played as another race: the plan
+  -- is named outright for the load, as the folder says)
+  local svKey = ns.StarterKey
+  if PLANKEY then ns.StarterKey = function() return PLANKEY end end
   local okPlan, loaded = pcall(ns.LoadMyPlan)
+  ns.StarterKey = svKey
   ns.hasPlan = okPlan and loaded
   UnitName = sv.un
   if not (okPlan and loaded and ns.Routes()[1]) then restore(); error("@@REPLAY" .. J({ id = S.id, fatal = "no plan loaded: " .. tostring(loaded) }) .. "@@END", 0) end
@@ -402,7 +407,18 @@ function ReplayRun(S)
     local cut = { n = 0 }
     for j = 1, (i or 1) - 1 do
       local s = list[j]
-      if s.k == "accept" and s.m == m and (s.level or 0) >= S.level - 5 and E.Status(j) == "done" and reason(j) == "behind-you" then
+      -- (by the value rule: all of its work in this zone, and worth its XP at your rate after that work - the same
+      -- formula the live pick uses, ns.Next.BehindPrize; a quest whose objectives are elsewhere is not work left here)
+      local allHere = true
+      for _, t in ipairs(list) do if t.q == s.q and t.m and t.m ~= m then allHere = false; break end end
+      -- (worth more than the way there: the value rule - its XP at your rate after its work, less the walk or ride)
+      local spd = (ns.Travel and ns.Travel.Speed and ns.Travel.Speed()) or 7
+      local yd0 = yards(j)
+      local worth = not (ns.Next and ns.Next.BehindPrize) or ns.Next.BehindPrize(list, s, S.level) - ((yd0 and yd0 >= 0) and yd0 * 1.25 / spd or 0) > 0
+      -- (and one you could take: a pick-up whose earlier chain quest isn't handed in isn't work left here)
+      -- (and room in your log to take it: with the log full, nothing here is work you could take now)
+      local room = ns.State.LogCount() < ns.State.MaxLog()
+      if room and s.k == "accept" and s.m == m and allHere and worth and (not E.Available or E.Available(j)) and (s.level or 0) >= S.level - 5 and E.Status(j) == "done" and reason(j) == "behind-you" then
         cut.n = cut.n + 1
         local d = yards(j); if d and d >= 0 and (not cut.yd or d < cut.yd) then cut.yd, cut.name, cut.i, cut.ql, cut.lvl = d, s.name, j, s.level, s.lvl end
       end
@@ -420,7 +436,8 @@ end
 
 function testFile(scns) {
   const head = RUNTIME.replace('__ZONES__', '{' + Object.entries(ZONES).map(([k, v]) => `[${k}]=${JSON.stringify(v)}`).join(',') + '}')
-    .replace('__STARTER__', String(starter)).replace('__NAME__', JSON.stringify(who.name)).replace('__NEXT__', String(NEXT));
+    .replace('__STARTER__', String(starter)).replace('__NAME__', JSON.stringify(who.name)).replace('__NEXT__', String(NEXT))
+    .replace('__PLANKEY__', starter ? JSON.stringify(path.basename(planPath).replace(/^ForeverRoute_Starter_/, '').replace('_', '-')) : 'nil');
   const tests = scns.map((s, n) => `test(${JSON.stringify('replay ' + s.id)}, function() ReplayRun(${toLua({ ...s, n: n + 1 })}) end)`);
   return head + '\n' + tests.join('\n') + '\n';
 }
@@ -466,7 +483,9 @@ function flags(r, s) {
   const q = st.q && (s.log[st.q] ? 'log' : s.history.includes(st.q) ? 'done' : null);
   if (st.k === 'accept' && q) hard('ALREADY: pick up a quest you ' + (q === 'log' ? 'have' : 'did'));
   if ((st.k === 'turnin' || st.k === 'obj') && q === 'done') hard('ALREADY: a step of a quest you handed in');
-  if (st.st !== 'todo') hard('CANT-DO: the step shown is "' + st.st + '"');
+  // (a hand-in not finished yet is shown with what it still needs - "Not finished" and its objective bars: a note)
+  if (st.st === 'notready') note('NOT-READY: a hand-in not finished yet (the card shows what it still needs)');
+  else if (st.st !== 'todo') hard('CANT-DO: the step shown is "' + st.st + '"');
   if (st.dead) hard('DEAD-END: the step shown can never be done - ' + st.dead);
   const gray = lv - (lv < 6 ? lv : lv < 40 ? Math.floor(lv / 10) + 5 : Math.floor(lv / 5) + 1); // the game's gray line
   if (st.ql && st.ql > 0 && st.ql <= gray) hard(`GRAY: a level ${st.ql} quest at level ${lv} (no XP)`);

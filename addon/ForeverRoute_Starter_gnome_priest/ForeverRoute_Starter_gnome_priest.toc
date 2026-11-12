@@ -2,8 +2,9 @@
 ## Title: Forever Route - built-in plan: gnome priest
 ## Notes: Loaded by Forever Route only for a gnome priest with no plan of its own.
 ## Dependencies: ForeverRoute
+## Group: ForeverRoute
 ## LoadOnDemand: 1
 ## Version: plans 2026-11-12
-## X-Plans: plans 2026-11-12 · QuestieDB 1.0.15 · planner 7559346
+## X-Plans: plans 2026-11-12 · QuestieDB 1.0.15 · planner 24206eb
 
 Plan.lua

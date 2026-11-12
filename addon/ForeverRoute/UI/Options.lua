@@ -44,7 +44,7 @@ end
 
 local function build()
   panel = CreateFrame("Frame", "ForeverRouteOptions", UIParent)
-  panel:SetSize(420, 672)
+  panel:SetSize(420, 724)
   panel.name = "Forever Route"
   panel:Hide()
   local title = Style.Text(panel, 16, C.gold, "OUTLINE"); title:SetPoint("TOPLEFT", 16, -16); title:SetText("Forever Route")
@@ -59,9 +59,11 @@ local function build()
   check(panel, "Record where I walk (improves the planner's walking paths)", "trails", -226)
   check(panel, "Targeting the step's NPC also marks it with a star", "markTarget", -252)
   check(panel, "Accept and hand in quests automatically", "autoQuest", -278, "Accepts the quests your route picks up and hands in finished ones. Never when there's a reward to choose. Hold Shift while talking to an NPC to do it yourself.")
+  check(panel, "Choose the next step from where I am", "smartNext", -330, "Picks what to do next from where you are: the plan's next steps in the order that makes the whole way shortest, and finished quests whose hand-in is close by (\"while you're here\"). Off: the plan's order.")
+  check(panel, "Take the flight my route needs", "autoFly", -304, "At a flight master, takes the flight the card's trip needs, if you have that flight path. Hold Shift while talking to the flight master to choose yourself.")
   -- one scale for everything of ours (card, arrow, route list, every window), on top of the game's UI scale; the
   -- card and the arrow keep their own as a fine adjustment. The line under it says what it comes to on this screen
-  local all = slider(panel, "Forever Route scale (everything)", "uiScale", Style.SCALE_MIN, Style.SCALE_MAX, 0.05, -324, nil, 1)
+  local all = slider(panel, "Forever Route scale (everything)", "uiScale", Style.SCALE_MIN, Style.SCALE_MAX, 0.05, -376, nil, 1)
   local px = Style.Text(panel, 10, C.sub); px:SetPoint("LEFT", all, "RIGHT", 12, 0); px:SetWidth(130); px:SetJustifyV("MIDDLE")
   local function pxText()
     local sug = Style.SuggestScale()
@@ -69,17 +71,17 @@ local function build()
   end
   all:HookScript("OnShow", pxText); ns.On("FR_SETTINGS", pxText)
   panel.scaleSlider, panel.scaleNote = all, px
-  slider(panel, "Card scale", "scale", 0.7, 2.0, 0.05, -366)
-  slider(panel, "Card width", "cardWidth", 280, 520, 10, -408, "%d")
-  slider(panel, "Arrow scale", "arrowScale", 0.6, 2.5, 0.05, -450)
-  slider(panel, "Upcoming steps shown", "showNext", 0, 5, 1, -492, "%d")
-  slider(panel, "Steps pinned on the maps", "pinCount", 1, 8, 1, -534, "%d")
+  slider(panel, "Card scale", "scale", 0.7, 2.0, 0.05, -418)
+  slider(panel, "Card width", "cardWidth", 280, 520, 10, -460, "%d")
+  slider(panel, "Arrow scale", "arrowScale", 0.6, 2.5, 0.05, -502)
+  slider(panel, "Upcoming steps shown", "showNext", 0, 5, 1, -544, "%d")
+  slider(panel, "Steps pinned on the maps", "pinCount", 1, 8, 1, -586, "%d")
   local reset = Style.Button(panel, "Clear all skips / ticks", 160, 20, function() ns.char.skipped, ns.char.manualDone, ns.char.history = {}, {}, {}; ns.Engine.Refresh() end)
-  reset:SetPoint("TOPLEFT", 16, -572)
-  local hint = Style.Text(panel, 10, C.dim); hint:SetPoint("TOPLEFT", 16, -604); hint:SetWidth(390)
+  reset:SetPoint("TOPLEFT", 16, -624)
+  local hint = Style.Text(panel, 10, C.dim); hint:SetPoint("TOPLEFT", 16, -656); hint:SetWidth(390)
   hint:SetText("Keys: Options > Keybindings, under AddOns: Forever Route Targeting (targets and marks the step's NPC), Skip, Back, Undo, Show / hide the card, Show the whole route.")
   -- the attribution the license asks every copy and adaptation to keep (NOTICE)
-  local credit = Style.Text(panel, 10, C.sub); credit:SetPoint("TOPLEFT", 16, -638); credit:SetWidth(390)
+  local credit = Style.Text(panel, 10, C.sub); credit:SetPoint("TOPLEFT", 16, -690); credit:SetWidth(390)
   credit:SetText("Forever Route by noopz  ·  github.com/noopz/ForeverRoute  ·  CC BY-NC-SA 4.0, not for sale")
   if Settings and Settings.RegisterCanvasLayoutCategory then
     local cat = Settings.RegisterCanvasLayoutCategory(panel, "Forever Route")
@@ -97,7 +99,7 @@ local host
 local function openStandalone()
   if not host then
     host = CreateFrame("Frame", "ForeverRouteOptionsWindow", UIParent)
-    host:SetSize(440, 690) -- the panel is 672 tall: at 620 the credit line fell below the window
+    host:SetSize(440, 742) -- the panel is 724 tall: at 620 the credit line fell below the window
     host:SetPoint("CENTER"); host:SetFrameStrata("DIALOG")
     host:SetClampedToScreen(true); host:SetMovable(true); host:EnableMouse(true); host:RegisterForDrag("LeftButton")
     host:SetScript("OnDragStart", host.StartMoving); host:SetScript("OnDragStop", host.StopMovingOrSizing)

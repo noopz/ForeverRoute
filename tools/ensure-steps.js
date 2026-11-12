@@ -128,7 +128,9 @@ function makeEnsure(db, conv) {
       // the quest's words say escort. (The scripted-event flag, special & 2, is on escorts, fights and explorations
       // alike: The Missing Diplomat's fight with Tapoke Jahn got "keep them alive", and so did The Master's Glaive)
       const words = ((q && q.text) || []).join(" ") + " " + ((q && q.objectives) || []).map((o) => o.text || "").join(" ");
-      const escort = q && /\b(escort|protect|accompany|safely)\b|keep .{0,30}\balive|show .{0,30}\bthe way/i.test(words);
+      // "protect" / "accompany" only as the instruction that opens a sentence ("Protect Kinelory until..."): in the
+      // middle of one it was a kill quest's ("...any Horde filth that may attempt to protect him")
+      const escort = q && /\bescort|(^|[.!?]\s+)(protect|accompany)\b|keep .{0,30}\balive|show .{0,30}\bthe way|safely through/i.test(words.trim());
       if (!escort) continue;
       if (s.k === "accept") {
         const who = s.npc || (q.starters[0] && q.starters[0].name) || "the NPC";

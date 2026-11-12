@@ -115,7 +115,7 @@ local function build()
   -- two-line title, the detail line and the first bar's count - it is three times as wide as the room kept there)
   -- "not offered": the giver has nothing for you (no window opens, so the addon can't tell by itself - James Halloran,
   -- Argos Nightwhisper). Off your route until you level up, like a giver who lists other quests but not this one
-  cur.notOffered = Style.Button(cur, "giver doesn't offer it", 112, 14, function() ns.Engine.NotOffered() end, "The quest giver has nothing for you: this quest leaves your route until your next level (a level or a quest you haven't done can be the reason), then it's tried again. Its chain stays.")
+  cur.notOffered = Style.Button(cur, "giver doesn't offer it", 112, 14, function() ns.Engine.NotOffered() end, "The quest giver has nothing for you: this quest leaves your route until your next level (a level or a quest you haven't done can be the reason), then it's tried again. Turned down a second time, it stays off until the game offers it. Its chain stays.")
   cur.notOffered.label:SetFontObject(Style.Font(10)); cur.notOffered.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3])
   cur.notOffered:SetScript("OnLeave", function(self) self.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3]); GameTooltip:Hide() end)
   cur.bars = {}
@@ -619,9 +619,16 @@ function Card.Fill()
     end
     -- live reordering picked this step because you are at it: that is exactly when its warnings and the full-log
     -- alert matter, so they stay, and the plan's own next step is a dim line under them
+    -- a hand-in run here: say it - the moment the questing was for
+    local run = ns.Next and ns.Next.Batch and ns.Next.Batch(i)
+    if run then
+      local rl = string.format("|cffffd100Hand-in run here: %d quests, about %s XP|r", run.n, BreakUpLargeNumbers and BreakUpLargeNumbers(run.xp) or tostring(run.xp))
+      text = (text and text ~= "") and (rl .. "\n" .. text) or rl
+    end
     local planned = ns.Engine.planned
     if planned and i ~= planned and steps()[planned] then
-      local pn = "|cff8e99adPicked up from where you are  ·  planned next: " .. Card.Plain((Card.Describe(steps()[planned]))) .. "|r"
+      local why = ns.Next and ns.Next.Enabled() and ns.Next.Reason(i) or ""
+      local pn = "|cff8e99ad" .. (why ~= "" and (why:sub(1, 1):upper() .. why:sub(2)) or "Picked up from where you are") .. "  ·  planned next: " .. Card.Plain((Card.Describe(steps()[planned]))) .. "|r"
       text = (text and text ~= "") and (text .. "\n" .. pn) or pn
     end
     setNote(text, color)

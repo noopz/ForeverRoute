@@ -90,3 +90,33 @@ ns.On("QUEST_PROGRESS", ns.Guard("auto", Auto.Progress))
 ns.On("QUEST_COMPLETE", ns.Guard("auto", Auto.Complete))
 ns.On("GOSSIP_SHOW", ns.Guard("auto", Auto.Gossip))
 ns.On("QUEST_GREETING", ns.Guard("auto", Auto.Greeting))
+
+-- Auto-fly, on its own toggle (ns.db.autoFly, off by default; Options: "Take the flight my route needs"): open a flight
+-- master's map while the card's trip flies from here, and it takes that flight. Only a flight path you have (the map
+-- lists it as reachable), only the trip of the step the card shows, and Shift held opens the map for you to choose.
+function Auto.FlightFor()
+  local E = ns.Engine
+  local legs, step = E and E.lastTrip, E and E.lastTripStep
+  local shown = E and E.Shown and E.Shown()
+  local list = ForeverRouteData and ForeverRouteData.steps
+  if not (legs and step and shown and list and list[shown] == step) then return nil end
+  for _, leg in ipairs(legs) do
+    if leg.how == "fly" then return leg.toTaxi end
+    if leg.how ~= "ride" then return nil end -- (a boat or a hearth first: this flight is not the one from here)
+  end
+end
+ns.On("TAXIMAP_OPENED", function()
+  if not (ns.db and ns.db.autoFly == true) or (IsShiftKeyDown and IsShiftKeyDown()) then return end
+  C_Timer.After(0.1, ns.Guard("autofly", function()
+    local want = Auto.FlightFor()
+    if not (want and NumTaxiNodes and TaxiNodeName and TakeTaxiNode) then return end
+    for i = 1, NumTaxiNodes() do
+      if TaxiNodeName(i) == want and (not TaxiNodeGetType or TaxiNodeGetType(i) == "REACHABLE") then
+        if ns.Why then ns.Why("auto", "flying to " .. want .. " (auto-fly)") end
+        ns.Print("Flying to " .. want .. ". (Auto-fly: hold Shift when you talk to the flight master to choose yourself.)")
+        TakeTaxiNode(i)
+        return
+      end
+    end
+  end))
+end)

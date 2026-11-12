@@ -30,10 +30,11 @@ function Avail.Seen(q)
   if A.no[q] then A.no[q] = nil; if ns.Why then ns.Why("avail", "quest " .. q .. " is offered after all: back on your route") end end
 end
 -- the game did not offer this quest at its giver (q: quest id, npc: who you talked to, step: the route's pick-up, if
--- known). A level up brings it back only when a level could be the reason. Refused at or above the level it needs, with
--- every quest before it done, it stays off until the game offers it (a giver lists it, or the map's "!" shows it):
--- Captain Stoutfist turned down This Land Was Their Land (needs 22) at 29, and the card sent you back at 30, 31, 32.
--- Where the level it needs isn't known, a second refusal at a higher level says the same.
+-- known). The first time, a level up brings it back. Turned down again at a higher level, with every quest before it
+-- done, a level clearly isn't the reason: it stays off until the game offers it (a giver lists it, or the map's "!"
+-- shows it) - Captain Stoutfist turned down This Land Was Their Land at 28 and 29, and the card sent you back at 30,
+-- 31, 32. (Not after one refusal, even at the level the data says it needs: Forever asks more for some - the City of
+-- Dalaran quests need 30 where the data says 24.)
 function Avail.NotOffered(q, npc, name, step)
   local A = store()
   local old, lvl = A.no[q], level()
@@ -44,7 +45,7 @@ function Avail.NotOffered(q, npc, name, step)
   end
   local req = step and step.minLevel
   local tries = ((old and (old.tries or 1)) or 0) + 1
-  local stay = (#waits == 0 and ((req and lvl >= req) or tries >= 2)) or nil
+  local stay = (#waits == 0 and tries >= 2) or nil
   A.no[q] = { t = time(), lvl = lvl, npc = npc, tries = tries, stay = stay, req = req, waits = #waits > 0 and waits or nil }
   local what = stay and "left off your route until the game offers it" or "left off your route until you level up"
   if ns.Why then ns.Why("avail", (name or ("quest " .. q)) .. ": " .. tostring(npc) .. " doesn't offer it to you - " .. what) end

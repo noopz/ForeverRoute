@@ -16,6 +16,8 @@ ns.DEFAULTS = {
   locked = false,
   rewardHint = true,     -- highlight the best quest reward
   combatFade = false,    -- fade the card while in combat (off: testers disliked it)
+  smartNext = true,      -- the live solver picks what to do next from where you are (Next.lua); off: the plan order and the old reordering
+  autoFly = false,       -- at a flight master, take the flight the card's trip needs
   autoQuest = false,     -- accept route quests and hand in finished ones (no reward choice) by themselves
   markTarget = true,     -- the Target button (and its key) also puts a star on the NPC
 }
@@ -419,9 +421,13 @@ end
 function ns.PathSwitchNote(title, pick)
   if not (pick and ns.char and ns.char.routeLegs and pick.meta and pick.meta.legs) then return nil end
   local old, now = zoneOrder(ns.char.routeLegs), zoneOrder(pick.meta.legs)
-  local same = true
-  for k = 1, 3 do if old[k] ~= now[k] then same = false end end
-  if same then return nil end
+  -- the same path, or the same path with the zones you've finished dropped off the front (Westfall > Redridge >
+  -- Duskwood, Westfall done: Redridge > Duskwood > Wetlands) - not a switch, nothing to say
+  for s = 0, 2 do
+    local same = true
+    for k = 1, 3 do if now[k] ~= nil and now[k] ~= old[k + s] and not (old[k + s] == nil and k > 1) then same = false end end
+    if same then return nil end
+  end
   local function head(t) local o = {}; for k = 1, math.min(3, #t) do o[k] = t[k] end; return table.concat(o, " > ") end
   return "The new plan does not have the path you were on (" .. head(old) .. "). You are now on the closest one: " .. head(now) .. ". The Paths window (/fr paths) has the others."
 end

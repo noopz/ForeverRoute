@@ -13,6 +13,7 @@ Libs\HereBeDragons\HereBeDragons-2.0.lua
 Libs\HereBeDragons\HereBeDragons-Pins-2.0.lua
 
 Core.lua
+Horizon.lua
 Why.lua
 Storage.lua
 State.lua
@@ -39,6 +40,7 @@ FunCandidates.lua
 QuestData.lua
 Learn.lua
 Availability.lua
+Next.lua
 UI\Style.lua
 UI\Card.lua
 UI\Arrow.lua
