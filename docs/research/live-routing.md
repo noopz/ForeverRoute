@@ -113,15 +113,34 @@ The "sent to Stormwind for one hand-in" reports had several causes:
   - 0 scenarios flagged, against 1 before.
 - Replays of the built-in plan: no new problems flagged. The remaining flags are the known "leaves work" metric.
 
+## Measured quality
+
+- **Search optimality.** On 150 random windows (two quests with pick-up, objective and hand-in, plus 1-2 optional prizes, random log load), the beam's answer was the true optimum in **150 of 150**. The true optimum comes from exhaustive search over every valid order of every subset of optional stops, under the same objective. This is a test (`tests/horizon_test.lua`): it fails below 95% exact or above a 1% worst gap.
+- **Approximations don't change routing.** The dwarf warrior, `clean` simulated player, with exact trip-planner costs everywhere against the fast estimates:
+
+  | | Exact costs | Fast estimates |
+  |---|---|---|
+  | Steps played | 2,255 | 2,255 |
+  | Riding / flying | 31.5 h / 8.8 h | 31.2 h / 8.7 h |
+  | Flights | 143 | 143 |
+  | Revisits | 62 | 62 |
+  | Thin trips | 109 | 111 |
+
+  Simulation is 4.7x faster.
+- **Real saves** (`tools/replay.js --matrix`):
+  - logging in in Stormwind or Ironforge shows that city's finished hand-in instead of a trip back to the plan's zone;
+  - a full log shows a hand-in, not an impossible pick-up;
+  - flags: 0 of 15 scenarios, against 1 with the old engine.
+- **Random realistic characters** (`tools/fuzz-replay.js`): one fixed batch went from 25 of 60 flagged to 6 across the fix rounds. Fresh batches: 3 of 60 and 7 of 60. Those left are edge cases or deliberate, each written up in the fix commits.
+- **Every built-in plan** is played 1 to 60 by three simulated players before it ships.
+
 ## Next (in order of value)
 
-1. **Chain commitment live.** Add a started chain's remaining value as soft commitment so the live rules can't drop its next part.
-   - Precompute chain value per stage offline and ship it with the plan.
-   - Exempt in-progress chains from Outlevelled and BehindYou.
-2. **"Why not X?"** Re-score with X forced first: one solve, and show the difference in minutes. The solver already supports this (`first`).
-3. **The interrupt channel in the UI.** Show "while you're here" as its own dismissible line over the main target, as the research recommends, rather than replacing the card's step.
-4. **Offline search upgrade.** ALNS with chain-level moves (remove or insert a whole chain, truncate its tail) over the zone legs, plus a sliding-window pass across leg seams (POPMUSIC). Evaluate whole routes by simulation, since XP depends on the path.
-5. **Learned service times** (objective time and drop rates) from the community data channel, in place of the flat 90 s.
+1. **The interrupt channel in the UI (open).** Show "while you're here" as its own dismissible line over the main target, as the research recommends. Today it becomes the card's step, with its reason, and the plan's next step is named under it. That's simpler and works, but the main target is out of sight while you hand in.
+2. **Offline search (partly done).** `tools/optimize.js` is simulated annealing over pick-up, objective and hand-in events with precedence, level and log-size rules, on several workers, and quests are valued with their chains (`chainTail`). Open: chain-level moves (remove or insert a whole chain, truncate its tail) and a sliding-window pass across leg seams (POPMUSIC).
+3. **Learned service times (partly done).** Objective steps now carry the planner's expected work time (kills and drops at their rates), and the live solve uses it in place of the flat 90 s. Open: measured times and drop rates from the community data channel.
+4. **Chain commitment live (done).** A quest below you stays on the route while its chain leads to quests still worth XP (`Engine.LeadsToWorth`, used in Outlevelled and GrayHandIn).
+5. **"Why not X?" (done).** The route list's tooltip says what doing a step first would cost, from the last window solved again with it forced first (`Next.WhyNot`).
 
 ## Sources
 

@@ -1230,7 +1230,9 @@ function writeRoute(seq, locs) {
     // the work of a quest the data lists no objectives for (route2's unknownWork): the giver's spot is only its place in
     // the order - unknown = true, and the addon points nowhere for it; the card shows the quest log's own lines
     if (e.kind === 'obj' && oInfo && oInfo.unknown) steps.push({ k: 'obj', unknown: true, text: e.label, r: 40, note: 'Where to do this isn\'t in the quest data: follow your quest log and map.', ...base });
-    else if (e.kind === 'obj') steps.push({ rate: oInfo && oInfo.dropPct, k: 'obj', text: e.label, match: matchOf(e.label), target: targetOf(e.label, level), item: itemOf(q), loot: /^(Collect|Loot)/.test(e.label) || undefined, r: Math.max(40, Math.min(220, (e.area || 0) + 15)), note: e.shared ? 'Drops from the mobs you are already killing here.' : undefined, ...base });
+    // (work: the seconds the planner expects the objective to take - kills at your rate, drops at their rates - so the
+    // live solver weighs it as planned instead of a flat guess; 0 for one done alongside another on the same mobs)
+    else if (e.kind === 'obj') steps.push({ rate: oInfo && oInfo.dropPct, k: 'obj', text: e.label, match: matchOf(e.label), target: targetOf(e.label, level), item: itemOf(q), loot: /^(Collect|Loot)/.test(e.label) || undefined, r: Math.max(40, Math.min(220, (e.area || 0) + 15)), note: e.shared ? 'Drops from the mobs you are already killing here.' : undefined, work: Number.isFinite(e.work) ? Math.round(e.work) : undefined, ...base });
     if (e.kind === 'turnin') {
       steps.push({ k: 'turnin', npc: e.who, r: 6, note: tq && tq.rewardText ? 'Reward: ' + tq.rewardText : undefined, reward: (tq && tq.rewardItem) || undefined, ...base });
       levelUp(questXpAt(q, level));

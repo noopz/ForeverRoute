@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.3 - 2026-11-12
+- No more walking over the mountains from Dun Morogh into the Wetlands: the way there is through Loch Modan and Dun Algaz, and the arrow takes it.
+- The Dalaran portal to Stormwind is one way: trips no longer count on a portal from the Mage Tower to Dalaran.
+- Quest items in your bank (a rested-XP stash, or put there yourself): the card says to take them out, since the quest only counts what's in your bags.
+- Setting your hearthstone at the plan's inn is recognised, so the route stops asking you to do it again.
+- Hover a step in the list to see why it isn't the next one yet.
+
 ## 1.4.2 - 2026-11-12
 - New option: take the flight your route needs when you talk to a flight master (Options, off by default; hold Shift to choose yourself).
 - What to do next is now worked out from where you are: the plan's next steps in the order that makes the whole way shortest, and finished quests whose hand-in is close by ("while you're here"). Back in town to sell or to group up, the town's hand-ins come first; a hand-in across the world is left for when the route passes it. The card says why when it leaves the plan's order. (Options: "Choose the next step from where I am".)

@@ -557,6 +557,14 @@ function Card.Fill()
   end
   -- the step's own note: its status, a full quest log, its warnings, or how to get there
   local function stepNote()
+    -- the thing to collect is in your bank: the quest only counts what's in your bags (the bank, a rested-XP stash) -
+    -- take it out rather than farm it again
+    if s.k == "obj" and s.item and ns.GetItemCount then
+      local okA, all = pcall(ns.GetItemCount, s.item, true)
+      local okB, bags = pcall(ns.GetItemCount, s.item, false)
+      local banked = (okA and okB and tonumber(all) and tonumber(bags)) and (all - bags) or 0
+      if banked > 0 then return string.format("You have %d in your bank: take %s out - the quest only counts what's in your bags.", banked, banked == 1 and "it" or "them"), C.gold end
+    end
     if status == "blocked" then
       return "This quest isn't in your log. Accept it first, or skip - its later steps go too.", C.bad
     elseif status == "notready" then

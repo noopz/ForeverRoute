@@ -25,7 +25,7 @@ for (const [k, v] of Object.entries(facts)) { if (k.startsWith('_')) continue; L
 // edges { a, b, zone, yd } as compact arrays
 const netFile = path.join(__dirname, 'travel-net.json');
 if (fs.existsSync(netFile)) {
-  const net = JSON.parse(fs.readFileSync(netFile, 'utf8'));
+  const net = require('./net').load(facts);
   L.push('  NET = {', '    nodes = {');
   for (const n of net.nodes) L.push('      ' + lua({ id: n.id, kind: n.kind, m: n.m, x: n.x, y: n.y, name: n.name, dock: n.dock, m2: n.m2, x2: n.x2, y2: n.y2 }) + ',');
   L.push('    },', '    edges = {');

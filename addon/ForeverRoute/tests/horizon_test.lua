@@ -104,3 +104,80 @@ test("horizon: 24 stops, 6 deep - a solve stays quick", function()
   assertTrue(r.first ~= nil)
   assertTrue(ms < 250, string.format("a solve took %.0f ms", ms))
 end)
+
+-- How good is the beam? Against exhaustive search, on random windows. The exhaustive search below tries every order
+-- of every subset of the optional stops (all planned ones must be done), with the same rules (pick-up first, log room)
+-- and the same objective the solver uses: prizes taken - time - the stability charge for planned stops passed over
+-- (scaled by how far the leg goes) - the way on to the anchor. The solver's own whole-window order is scored the same
+-- way, and the two compared.
+local function evaluate(P, order)
+  local stab, near0 = P.stability or H.STABILITY, P.stableNear or H.STABLE_NEAR
+  local at, worth, load, done = P.start, 0, P.load or 0, {}
+  local planned = {}
+  for _, s in ipairs(P.stops) do if s.plan then planned[#planned + 1] = s end end
+  for _, s in ipairs(order) do
+    for _, n in ipairs(s.needs or {}) do if not done[n] then return nil end end
+    load = load + (s.load or 0); if load > (P.cap or 25) then return nil end
+    local t = P.travel(at, s)
+    local passed = 0
+    if s.plan then for _, p in ipairs(planned) do if p.plan < s.plan and not done[p.id] then passed = passed + 1 end end end
+    worth = worth + (s.prize or 0) - t - (s.service or 0) - stab * math.min(1, t / near0) * passed
+    done[s.id] = true; at = s
+  end
+  for _, p in ipairs(planned) do if not done[p.id] then return nil end end
+  return worth - (P.anchor and P.travel(at, P.anchor) or 0)
+end
+local function exhaustive(P)
+  local best = -math.huge
+  local n = #P.stops
+  local order, used = {}, {}
+  local function rec()
+    local v = evaluate(P, order)
+    if v and v > best then best = v end
+    for i = 1, n do
+      if not used[i] then
+        used[i] = true; order[#order + 1] = P.stops[i]
+        rec()
+        order[#order] = nil; used[i] = false
+      end
+    end
+  end
+  rec()
+  return best
+end
+local function randomWindow(seed)
+  local r = seed
+  local function rnd() r = (r * 1103515245 + 12345) % 2147483648; return r / 2147483648 end
+  local stops = {}
+  -- two planned quests (pick-up, objective, hand-in at the giver) and a lone planned stop
+  local q = 0
+  for k = 1, 2 do
+    q = q + 1
+    local gx, gy = rnd() * 600, rnd() * 600
+    stops[#stops + 1] = { id = "a" .. k, x = gx, y = gy, service = 8, load = 1, plan = #stops + 1 }
+    stops[#stops + 1] = { id = "o" .. k, x = rnd() * 600, y = rnd() * 600, service = 60 + rnd() * 120, plan = #stops + 1, needs = { "a" .. k } }
+    stops[#stops + 1] = { id = "t" .. k, x = gx, y = gy, service = 10, load = -1, plan = #stops + 1, needs = { "o" .. k } }
+  end
+  -- one or two optional prizes (a finished quest's hand-in, worth the trip back it saves)
+  for k = 1, 1 + math.floor(rnd() * 2) do stops[#stops + 1] = { id = "p" .. k, x = rnd() * 600, y = rnd() * 600, service = 10, load = -1, prize = 20 + rnd() * 200 } end
+  return { start = { x = rnd() * 600, y = rnd() * 600 }, stops = stops, travel = walk, load = math.floor(rnd() * 3), cap = 25, anchor = { x = rnd() * 600, y = rnd() * 600 }, K = #stops, B = 60 }
+end
+
+test("horizon: the beam finds the best window - against exhaustive search on 150 random windows", function()
+  local worst, sum, exact, n = 0, 0, 0, 150
+  for seed = 1, n do
+    local P = randomWindow(seed)
+    local res = H.Solve(P)
+    local got = evaluate(P, res.seq)
+    assertTrue(got ~= nil, "seed " .. seed .. ": the solver's order breaks a rule")
+    local best = exhaustive(P)
+    local gap = (best - got) / math.max(1, math.abs(best))
+    if gap < 1e-9 then exact = exact + 1 end
+    if gap > worst then worst = gap end
+    sum = sum + gap
+  end
+  print(string.format("horizon vs exhaustive: %d of %d optimal, mean gap %.2f%%, worst %.2f%%", exact, n, 100 * sum / n, 100 * worst))
+  -- (measured: optimal in 150 of 150 - held to that: at least 95% exactly optimal, and never more than 1% off)
+  assertTrue(exact >= 0.95 * n, string.format("optimal in only %d of %d", exact, n))
+  assertTrue(worst < 0.01, string.format("worst gap %.2f%%", 100 * worst))
+end)

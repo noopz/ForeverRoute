@@ -1246,6 +1246,18 @@ ns.On("HEARTHSTONE_BOUND", function()
   -- remember where you bound (the map you were on and the name the game gives it); every hearth step on that map
   -- counts as done while you stay bound there
   local m = ns.State.Position()
+  -- (bound at one of the plan's bind stops - its innkeeper within 100 yd: that stop's own map, so the bind step and
+  -- every hearth to it match whatever map id the game hands out indoors. A tester's bind went unnoticed)
+  local HBDx = LibStub("HereBeDragons-2.0")
+  local px, py, pinst = HBDx:GetPlayerWorldPosition()
+  if px then
+    for _, t in ipairs(steps()) do
+      if t.k == "bind" and t.m and t.x then
+        local x, y, inst = HBDx:GetWorldCoordinatesFromZone(t.x, t.y, t.m)
+        if x and inst == pinst and (x - px) ^ 2 + (y - py) ^ 2 <= 100 * 100 then m = t.m; break end
+      end
+    end
+  end
   ns.char.boundAt = { m = m, name = GetBindLocation and GetBindLocation() or nil }
   C_Timer.After(0.5, function() ns.char.boundAt.name = GetBindLocation and GetBindLocation() or ns.char.boundAt.name; Engine.Refresh() end)
   Engine.Refresh()

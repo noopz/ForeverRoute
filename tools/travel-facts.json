@@ -484,7 +484,8 @@
       [
         "skyborne"
       ],
-      "alliance"
+      "alliance",
+      true
     ],
     [
       "darnassusPortal",
@@ -678,5 +679,13 @@
   "_BOATS_portals": "No dock portals: QuestieDB 1.0.14 has 'Portal To ...' objects at most docks and zeppelin towers, but they were Blizzard's temporary launch-week fix while boats and zeppelins got lost (blue post, Aggrend, 2026-11-05: https://us.forums.blizzard.com/en/wow/t/zeppelins-broken/2401777; reported gone 2026-11-06). Routes use the boats and zeppelins.",
   "_BOATS_loop": "The Menethil ship is a one-way loop: Menethil -> Southshore -> Auberdine -> Menethil (Method, All Travel Routes in WoW Forever, 2026-10-14: https://www.method.gg/wow-forever/all-travel-routes-in-wow-forever-boats-zeppelins). Its three legs carry the 7th entry true (one way).",
   "_BOATS_powderfuse": "Steamwheedle Port (Tanaris) <-> Powderfuse Port (Riverglades), both factions: warcraft.wiki.gg Riverglades, wowforever.be flight-paths guide, classicwowforever.com zones. Docks at the wharfmasters (Steamfizzle 67.56,23.1; Whizzbuzz 79.34,52.75; QuestieDB, Wowhead Forever agrees); the pier itself is not published. No Booty Bay ship (wowforever.be lists only Ratchet).",
-  "_ZONE_MIN_new": "Riverglades 36 (quests require 36; Wowhead zone tooltip 36-44), Shen'dralas 35 (quests 38-43, most require 30, some 35), Mount Hyjal 54 (quests 56-60 require 54): QuestieDB."
+  "_ZONE_MIN_new": "Riverglades 36 (quests require 36; Wowhead zone tooltip 36-44), Shen'dralas 35 (quests 38-43, most require 30, some 35), Mount Hyjal 54 (quests 56-60 require 54): QuestieDB.",
+  "_BOATS_oneway_dalaran": "The Dalaran-Stormwind portal is one way: from the Violet Citadel to the Mage Tower, none back (a Skyborne tester, Nov 2026).",
+  "_NO_CROSS": "Zone borders the walk-map scan joins but the game does not let you walk over (pairs of UI map ids). Dun Morogh/Wetlands: mountains - the way is through Loch Modan and Dun Algaz.",
+  "NO_CROSS": [
+    [
+      1426,
+      1437
+    ]
+  ]
 }

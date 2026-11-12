@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const F = JSON.parse(fs.readFileSync(path.join(__dirname, 'travel-facts.json'), 'utf8'));
 const NET_FILE = path.join(__dirname, 'travel-net.json');
-const NET = fs.existsSync(NET_FILE) ? JSON.parse(fs.readFileSync(NET_FILE, 'utf8')) : null;
+const NET = require('./net').load(F); void NET_FILE;
 const OFFNET = 1.25; // straight-line yards to the network's key points count this much longer (roads bend)
 
 let bounds = null, uiOfArea = null, areaOfUi = null, FLIGHT = null;

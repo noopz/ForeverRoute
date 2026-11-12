@@ -271,3 +271,20 @@ test("next: a hand-in run at a hub is named on the card - how many and about how
     assertTrue(run ~= nil and run.n == 4 and run.xp > 0, "no hand-in run named")
   end)
 end)
+
+test("next: why not that step? - the route list says what doing it first would cost", function()
+  inWorld(function()
+    ForeverRouteData = { id = "w1", title = "w1", sections = { { title = "x" } }, steps = {
+      { id = 1, k = "accept", q = 1, name = "Here", m = 1437, x = 0.50, y = 0.50, r = 6, sec = 1 },
+      { id = 2, k = "accept", q = 2, name = "Far", m = 1437, x = 0.90, y = 0.90, r = 6, sec = 1 },
+      { id = 3, k = "accept", q = 3, name = "Here too", m = 1437, x = 0.51, y = 0.50, r = 6, sec = 1 },
+    } }
+    quests({}, {})
+    at(0.50, 0.50, 2)
+    local best = ns.Engine.current
+    assertTrue(ns.Next.WhyNot(best):find("best next step", 1, true) ~= nil)
+    local far = ns.Next.WhyNot(2)
+    assertTrue(far and far:find("min longer", 1, true) ~= nil, tostring(far))
+    assertNil(ns.Next.WhyNot(99))
+  end)
+end)

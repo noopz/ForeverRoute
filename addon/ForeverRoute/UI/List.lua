@@ -91,7 +91,14 @@ local function build()
     local hover = r:CreateTexture(nil, "HIGHLIGHT"); hover:SetTexture(Style.WHITE); hover:SetAllPoints(); hover:SetVertexColor(1, 1, 1, 0.05)
     r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     r:SetScript("OnClick", function(self, btn) if not self.index then return end if btn == "RightButton" then ns.ShowOnMap(self.index) return end if IsShiftKeyDown() then ns.Engine.Jump(self.index) else ns.Engine.view = (self.index ~= ns.Engine.current) and self.index or nil; ns.Fire("FR_STEP", ns.Engine.Shown()) end end)
-    r:SetScript("OnEnter", function(self) if self.index then GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetText("Click to look · Right-click: map · Shift-click to jump here", 1, 1, 1); GameTooltip:Show() end end)
+    r:SetScript("OnEnter", function(self)
+      if not self.index then return end
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetText("Click to look · Right-click: map · Shift-click to jump here", 1, 1, 1)
+      -- why not this one next? what the live solver says doing it first would cost
+      local why = ns.Next and ns.Next.WhyNot and ns.Next.WhyNot(self.index)
+      if why then GameTooltip:AddLine(why, 0.56, 0.6, 0.68, true) end
+      GameTooltip:Show()
+    end)
     r:SetScript("OnLeave", GameTooltip_Hide)
     rows[k] = r
   end

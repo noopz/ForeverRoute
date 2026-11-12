@@ -20,6 +20,7 @@ check('Stormwind -> Crossroads at 21: a boat, never a ride out of Theramore', T.
 // Mor'shan Rampart: Ashenvale -> Barrens only through the breach
 check("Astranaar -> Crossroads: never past Mor'shan Rampart", T.plan({ m: 1440, x: 0.36, y: 0.50 }, XROADS, { level: 21, knownFP: KNOWN_FP }), (r) => r && !nodesOf(r).some(atRampart));
 // no straight line over the mountains: Ironforge -> Menethil goes through Loch Modan
+check('east Dun Morogh -> south Wetlands on foot: no crossing over the mountains (Loch Modan, Dun Algaz)', T.plan({ m: 1426, x: 0.86, y: 0.40 }, { m: 1437, x: 0.50, y: 0.75 }, { level: 22, knownFP: new Set() }), (r) => r && !nodesOf(r).some((n) => (n.m === 1426 && n.m2 === 1437) || (n.m === 1437 && n.m2 === 1426)) && nodesOf(r).some((n) => n.m === 1432 || n.m2 === 1432));
 check('Ironforge -> Menethil on foot: through Loch Modan', T.plan({ m: 1455, x: 0.55, y: 0.48 }, { m: 1437, x: 0.10, y: 0.60 }, { level: 21, knownFP: new Set() }), (r) => r && nodesOf(r).some((n) => n.m === 1432 || n.m2 === 1432));
 // "to get back i should be told to take the FP": Stormwind -> Darkshire with the flight path known
 check('Stormwind -> Darkshire: fly', T.plan(SW, { m: 1431, x: 0.75, y: 0.45 }, { level: 21, knownFP: KNOWN_FP }), (r) => r && hows(r).includes('fly') && !hows(r).includes('boat'));

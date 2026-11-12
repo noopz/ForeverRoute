@@ -193,7 +193,10 @@ function Next.Pick(planned)
   local function add(j, extra)
     local s = list[j]
     local w = wpos(s)
-    local stop = { id = j, step = j, st = s, w = w, m = s.m, x = s.x, y = s.y, service = Next.SERVICE[s.k] or 15,
+    -- (an objective takes what the planner expects it to - s.work, its kills and drops at their rates; the flat guess
+    -- only for a plan made before steps carried it)
+    local service = (s.k == "obj" and tonumber(s.work)) or Next.SERVICE[s.k] or 15
+    local stop = { id = j, step = j, st = s, w = w, m = s.m, x = s.x, y = s.y, service = service,
       load = (s.k == "accept" and 1) or (s.k == "turnin" and -1) or 0 }
     for k, v in pairs(extra or {}) do stop[k] = v end
     stops[#stops + 1] = stop; byStep[j] = stop
@@ -338,6 +341,7 @@ function Next.Pick(planned)
   local P = { start = start, stops = stops, anchor = anchor, travel = travelSecs, load = load,
     cap = (C_QuestLog and C_QuestLog.GetMaxNumQuestsCanAccept and C_QuestLog.GetMaxNumQuestsCanAccept()) or 25 }
   P.cap = cap
+  Next.lastP, Next.lastBy, Next.whyNotMemo = P, byStep, {} -- (for Next.WhyNot: "why not that step?")
   local res = ns.Horizon.Solve(P)
   -- (a vendor isn't a step of the plan: the card shows the plan's next step and its errand line says the vendor - now,
   -- or after the stops before it)
@@ -428,4 +432,26 @@ function Next.Batch(i)
   end
   if n < 3 then return nil end
   return { n = n, xp = math.floor(xp / 50 + 0.5) * 50 }
+end
+
+-- "Why not that step next?" - contrastive, the way people ask: the last solve's window scored again with that step
+-- forced first, against the best. -> a line for the route list's tooltip, or nil (not in the window the solve looked at)
+function Next.WhyNot(i)
+  local P, by, res = Next.lastP, Next.lastBy, Next.res
+  if not (P and by and res and by[i] and ns.Horizon) then return nil end
+  if res.first and res.first.step == i then return "The best next step from where you are." end
+  local memo = Next.whyNotMemo or {}
+  local v = memo[i]
+  if v == nil then
+    local was = P.first
+    P.first = i
+    local forced = ns.Horizon.Solve(P)
+    P.first = was
+    v = (forced.first and forced.score > -math.huge) and math.max(0, res.score - forced.score) or false
+    memo[i] = v
+  end
+  if v == false then return "Can't come next: something before it has to be done first (or your log is full)." end
+  local min = math.floor(v / 60 + 0.5)
+  if min < 1 then return "Next instead: about the same - less than a minute in it." end
+  return string.format("Next instead: about %d min longer on the way from here.", min)
 end

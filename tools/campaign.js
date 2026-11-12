@@ -138,7 +138,7 @@ const starterZone = (q) => (q && q.starters && q.starters[0] ? mainZone(q.starte
 const areaOfUi = Object.fromEntries(conv.map((t) => [t.ui_map_id, t.area_id]));
 const neighbours = {};
 try {
-  for (const n of JSON.parse(fs.readFileSync(path.join(__dirname, 'travel-net.json'), 'utf8')).nodes || []) {
+  for (const n of (require('./net').load() || {}).nodes || []) {
     if (n.kind !== 'cross' || !n.m2) continue;
     const a = areaOfUi[n.m], b = areaOfUi[n.m2]; if (!a || !b) continue;
     (neighbours[a] = neighbours[a] || new Set()).add(b); (neighbours[b] = neighbours[b] || new Set()).add(a);
