@@ -58,6 +58,8 @@ fs.writeFileSync(path.join(dir, folder + '.toc'), [
   '## Title: Forever Route - built-in plan: ' + race + ' ' + cls,
   '## Notes: Loaded by Forever Route only for a ' + race + ' ' + cls + ' with no plan of its own.',
   '## Dependencies: ForeverRoute',
+  // nested under Forever Route in the game's addon list (51 plans listed one by one filled it)
+  '## Group: ForeverRoute',
   '## LoadOnDemand: 1',
   '## Version: plans ' + built,
   '## X-Plans: ' + stamp,

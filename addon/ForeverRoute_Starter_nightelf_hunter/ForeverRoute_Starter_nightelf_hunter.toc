@@ -2,6 +2,7 @@
 ## Title: Forever Route - built-in plan: nightelf hunter
 ## Notes: Loaded by Forever Route only for a nightelf hunter with no plan of its own.
 ## Dependencies: ForeverRoute
+## Group: ForeverRoute
 ## LoadOnDemand: 1
 
 Plan.lua

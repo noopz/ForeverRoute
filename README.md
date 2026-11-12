@@ -44,6 +44,7 @@ character of any level. Flight paths you already know are picked up at login.
 | `/fr why` | Why the addon did what it just did |
 | `/fr report` | Copy a bug report to paste to us (anonymous) |
 | `/fr news` | What changed in recent versions |
+| `/fr storage` | How much the addon keeps in your saved files |
 | `/fr options` | Settings |
 
 **Optional: the Windows companion** replans your route from your own save every time you `/reload`, with several

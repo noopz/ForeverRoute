@@ -83,7 +83,7 @@ local function build()
   f.dist = Style.Text(f, 15, C.text, "OUTLINE"); f.dist:SetPoint("TOP", f.arrow, "BOTTOM", 0, -4); f.dist:SetJustifyH("CENTER")
   f.label = Style.Text(f, 10, C.sub, "OUTLINE"); f.label:SetPoint("TOP", f.dist, "BOTTOM", 0, -2); f.label:SetJustifyH("CENTER"); f.label:SetWidth(220); f.label:SetWordWrap(false)
   if ns.db.arrowPos then local p = ns.db.arrowPos; f:ClearAllPoints(); f:SetPoint(p[1], UIParent, p[2], p[3], p[4]) end
-  f:SetScale(ns.db.arrowScale or 1)
+  Style.Scaled(f, "arrowScale") -- the Forever Route scale x the arrow's own
   f:Hide()
 
   -- driver: always running while there's a target
@@ -332,5 +332,5 @@ local flying = false
 local function retarget() if f then Arrow.SetTarget(ns.Engine.Shown(), true); ns.Fire("FR_STEP", ns.Engine.Shown()) end end
 ns.On("PLAYER_CONTROL_LOST", function() C_Timer.After(1, function() if ns.Is(UnitOnTaxi, "player") then flying = true; retarget() end end) end)
 ns.On("PLAYER_CONTROL_GAINED", function() C_Timer.After(1, function() if flying then flying = false; retarget() end end) end)
-ns.On("FR_SETTINGS", function() if f then f:SetScale(ns.db.arrowScale or 1); Arrow.SetTarget(ns.Engine.Shown(), true) end end)
+ns.On("FR_SETTINGS", function() if f then Style.ApplyScale(); Arrow.SetTarget(ns.Engine.Shown(), true) end end)
 ns.On("ZONE_CHANGED_NEW_AREA", function() C_Timer.After(1.5, function() if f and not (target and target.index and ForeverRouteData.steps[target.index] and ForeverRouteData.steps[target.index].x) then Arrow.SetTarget(ns.Engine.Shown(), true) end end) end)

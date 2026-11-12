@@ -15,7 +15,8 @@ ns.DEFAULTS = {
   trails = true,         -- record where you walk in the capital cities (improves city paths)
   locked = false,
   rewardHint = true,     -- highlight the best quest reward
-  combatFade = true,     -- fade the card while in combat
+  combatFade = false,    -- fade the card while in combat (off: testers disliked it)
+  autoQuest = false,     -- accept route quests and hand in finished ones (no reward choice) by themselves
   markTarget = true,     -- the Target button (and its key) also puts a star on the NPC
 }
 
@@ -155,6 +156,9 @@ function ns.FindMyPlan(key)
 end
 -- the built-in plan for your race and class (Starter.lua, made by tools/starter.js): followed when there is no plan of
 -- your own (an addon-only install, or before the companion has planned for a new character)
+-- does this install have the companion? It writes the plan file (Route.lua: ForeverRouteByChar); an addon-site install
+-- never has one. What only the companion reads (walking trails, learning) is recorded only then.
+function ns.HasCompanion() return type(ForeverRouteByChar) == "table" and next(ForeverRouteByChar) ~= nil end
 function ns.StarterKey()
   local okR, _, race = pcall(UnitRace, "player")
   local okC, _, class = pcall(UnitClass, "player")
@@ -218,7 +222,8 @@ ns.On("ADDON_LOADED", function(name)
   ForeverRouteChar = ForeverRouteChar or {}
   copyDefaults(ForeverRouteDB, ns.DEFAULTS)
   ns.db = ForeverRouteDB
-  ns.db.autoQuest = nil -- automation was removed; drop the old setting
+  -- combat fade was on by default and testers disliked it: off once for everyone (anyone can turn it back on)
+  if not ns.db.combatFadeReset then ns.db.combatFade = false; ns.db.combatFadeReset = true end
   ns.char = ForeverRouteChar
   -- stay on the path you were on; nothing switches unless you choose (the zone you asked for is the one exception)
   ns.SelectRoute(ns.char.routeTitle, true)
@@ -474,6 +479,8 @@ SlashCmdList.FOREVERROUTE = function(msg)
   elseif msg == "save" then if ns.Card and ns.Card.Save then ns.Card.Save() else ReloadUI() end
   elseif msg == "dungeons" or msg == "dungeon" or msg == "trips" or msg == "bag" then ns.Fire("FR_TOGGLE_DUNGEONS")
   elseif msg == "target reset" then ns.db.targetPos = nil; if ns.Card and ns.Card.PlaceSecure then ns.Card.PlaceSecure() end; ns.Print("Target button back on the card.")
+  elseif msg == "storage" then ns.Storage.Print()
+  elseif msg == "scale" or msg:find("^scale ") then ns.Style.SlashScale(msg:sub(7))
   elseif msg == "news" then ns.Fire("FR_NEWS")
   elseif msg == "report" then ns.Fire("FR_REPORT", false)
   elseif msg == "report full" then ns.Fire("FR_REPORT", true)
@@ -531,7 +538,7 @@ local function perfSample()
   wipe(ns.stats)
   ns.char.perfLog = ns.char.perfLog or {}
   table.insert(ns.char.perfLog, e)
-  while #ns.char.perfLog > 60 do table.remove(ns.char.perfLog, 1) end
+  while #ns.char.perfLog > 20 do table.remove(ns.char.perfLog, 1) end
 end
 -- failures go to the error log (they used to be swallowed, which hid a broken logger)
 local guardedSample = ns.Guard("perf", perfSample)

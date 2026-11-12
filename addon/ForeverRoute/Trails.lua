@@ -34,6 +34,24 @@ local function flush()
   local cap = CITIES[cur.map] and MAX_POINTS or MAX_ZONE_POINTS
   while total > cap and #list > 1 do local s = table.remove(list, 1); total = total - (select(2, s:gsub(";", ";")) + 1) end
   cur = nil
+  Trails.Trim()
+end
+
+-- all trails together stay under TOTAL_BYTES of save file (about 1.5 MB): past it, the oldest trail of the map holding
+-- the most goes first. Per-map caps alone allowed ~8 MB over months of play across every zone.
+Trails.TOTAL_BYTES = 1500000
+function Trails.Trim()
+  local t = store()
+  local bytes, per = 0, {}
+  for m, list in pairs(t) do local b = 0; for _, s in ipairs(list) do b = b + #s end; per[m] = b; bytes = bytes + b end
+  while bytes > Trails.TOTAL_BYTES do
+    local big; for m, b in pairs(per) do if not big or b > per[big] then big = m end end
+    local list = big and t[big]
+    if not (list and #list > 0) then break end
+    local s = table.remove(list, 1); per[big] = per[big] - #s; bytes = bytes - #s
+    if #list == 0 then t[big] = nil; per[big] = nil end
+  end
+  return bytes
 end
 
 local function height()
@@ -43,7 +61,7 @@ local function height()
 end
 
 local function tick()
-  if ns.db and ns.db.trails == false then if cur then flush() end return end
+  if (ns.db and ns.db.trails == false) or not ns.HasCompanion() then if cur then flush() end return end
   local m, x, y = ns.State.Position()
   local onFoot = not ns.Is(UnitOnTaxi, "player") and not ns.Is(IsFlying) and not ns.Is(UnitIsDeadOrGhost, "player")
   -- fine detail in capitals and indoors (inns, caves, towers, mines), coarser out in the zones; going in or out of a

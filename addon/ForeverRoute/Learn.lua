@@ -23,7 +23,8 @@ local function store()
   return L
 end
 local function plain(v) return v ~= nil and not (issecretvalue and issecretvalue(v)) end
-local function guard(fn) return function(...) local ok, err = pcall(fn, ...); if not ok and ns.LogError then pcall(ns.LogError, "learn", err) end end end
+-- (only with the companion: it is the only reader - ns.HasCompanion)
+local function guard(fn) return function(...) if not ns.HasCompanion() then return end; local ok, err = pcall(fn, ...); if not ok and ns.LogError then pcall(ns.LogError, "learn", err) end end end
 
 -- ---------- XP per kill ----------
 -- mob levels by name, from what you target, mouse over or see on nameplates (the XP message only names the mob)

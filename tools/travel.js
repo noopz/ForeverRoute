@@ -28,7 +28,8 @@ function init(conversionPath) {
   for (const line of lua.split('\n')) {
     if (/^\s*Horde = \{/.test(line)) side = 'horde'; else if (/^\s*Alliance = \{/.test(line)) side = 'alliance';
     const m = line.match(/\[(\d+)\] = \{ (.*) \},/);
-    if (m) FLIGHTS[side][+m[1]] = [...m[2].matchAll(/\{ ([\d.]+), ([\d.]+), "([^"]*)" \}/g)].map((x) => [+x[1], +x[2], x[3]]);
+    // each one { x, y, "flight master", "flight point name" } (the name is what the flight map calls it: the addon's)
+    if (m) FLIGHTS[side][+m[1]] = [...m[2].matchAll(/\{ ([\d.]+), ([\d.]+), "([^"]*)"(?:, "[^"]*")? \}/g)].map((x) => [+x[1], +x[2], x[3]]);
   }
   FLIGHT = FLIGHTS.alliance;
 }

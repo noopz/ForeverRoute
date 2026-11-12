@@ -1001,9 +1001,12 @@ function Engine.TravelPlan(s)
   return plan
 end
 
--- any step in another zone than you: how to get there.
--- -> nil (same zone, or unknown), or { how = "fly" | "via" | "ride", m, x, y = where the arrow points now,
---    text = what to do, fm = flight master name when the arrow points at one }
+-- any step: how to get there, when it is more than a walk.
+-- -> nil (a walk in the zone you are in, or unknown), or { how = "fly" | "via" | "ride", m, x, y = where the arrow
+--    points now, text = what to do, fm = flight master name when the arrow points at one }
+-- One trip planner for every trip (ns.Travel): another zone or continent is always planned; a step in your own zone
+-- is planned too when the walk is long, and comes back as a trip only when a flight you know is clearly quicker
+-- (ns.Travel.Shortcut - shortcut = true on the trip: Darkshire to the west end of Duskwood by way of Sentinel Hill).
 -- the same trip is asked for by the card, the arrow and the pins on every refresh: worked out once for the same step and
 -- the same situation (where you are to a few yards, your level, the flight paths you know, flying or sailing, your
 -- hearthstone, the trip you're on). A trip took ~15 ms; three of them made up most of a refresh on a long plan.
@@ -1071,9 +1074,15 @@ function Engine.TravelForUncached(s)
         local l = { how = "aboard", text = "In " .. ((info and info.name) or "here") .. ": the way on is planned when you come out" }
         return { how = "aboard", text = l.text, legs = { l } }
       end
-      -- any other zone (or continent): the trip planner weighs riding, your flight paths and boats together
-      if a1 and b1 and (ai ~= bi or pm ~= tm) then
-        local legs = ns.Travel.Plan({ m = pm, x = px, y = py }, { m = tm, x = tx, y = ty, name = tname })
+      -- any other zone (or continent): the trip planner weighs riding, your flight paths and boats together.
+      -- Your own zone: the same planner, asked only whether something beats the walk by a margin (nil: walk)
+      if a1 and b1 then
+        local legs
+        local shortcut = ai == bi and pm == tm
+        if not shortcut then legs = ns.Travel.Plan({ m = pm, x = px, y = py }, { m = tm, x = tx, y = ty, name = tname })
+        elseif s.k ~= "fly" and ns.Travel.Shortcut then
+          legs = ns.Travel.Shortcut({ m = pm, x = px, y = py }, { m = tm, x = tx, y = ty, name = s.npc or tname })
+        end
         if legs and legs[1] then
           -- already on the boat of the first leg: that leg is done, sit tight
           if legs[1].how == "boat" and ns.Arrow and ns.Arrow.aboard then
@@ -1085,7 +1094,7 @@ function Engine.TravelForUncached(s)
           Engine.lastTrip, Engine.lastTripStep = legs, s
           local text = ns.Travel.Describe(legs)
           if ns.Why then ns.Why("travel", "to " .. (tname or "another continent") .. ": " .. text) end
-          return { how = legs[1].how, m = legs[1].m, x = legs[1].x, y = legs[1].y, text = text, legs = legs }
+          return { how = legs[1].how, m = legs[1].m, x = legs[1].x, y = legs[1].y, text = text, legs = legs, shortcut = shortcut or nil }
         end
       end
     end
@@ -1286,7 +1295,27 @@ function Engine.NotYet(i)
   end
   return nil
 end
+-- the way to the shown step can change while the step stays the same: a flight that beats the walk from Darkshire
+-- stops doing so once you have walked half the way (and starts to, when you wander back to the flight master). The
+-- arrow only re-targets when the step or the zone changes, so this is watched here, once a second with the focus: the
+-- card and the arrow are told, and keep saying the same thing. (Only a step in the zone you are in is asked about: a
+-- trip to another zone is planned when the card or the arrow need it, not once a second here.)
+local shortcutSeen
+function Engine.WatchShortcut()
+  local i = Engine.Shown()
+  local s = i and steps()[i]
+  State = State or ns.State
+  local t = s and s.k ~= "fly" and s.m and s.x and s.m == (State.Position()) and Engine.TravelFor(s)
+  local sig = (i or 0) .. ":" .. ((t and t.shortcut) and (tostring(t.how) .. ":" .. tostring(t.m) .. ":" .. tostring(t.x) .. ":" .. tostring(t.y)) or "-")
+  local was = shortcutSeen
+  shortcutSeen = sig
+  if was == nil or was == sig or was:match("^(%d+):") ~= tostring(i or 0) then return false end
+  if ns.Arrow and ns.Arrow.SetTarget then ns.Arrow.SetTarget(i, true) end
+  ns.Fire("FR_STEP", i)
+  return true
+end
 function Engine.UpdateFocus(px, py, pinst)
+  Engine.WatchShortcut()
   if Engine.view or not px then return end
   local planned = Engine.planned or Engine.current
   if not planned then return end

@@ -1,0 +1,10 @@
+{
+  "_about": "Our corrections to the flight points tools/flightmasters.js takes from the client's TaxiNodes / TaxiPath tables and QuestieDB. Keys are TaxiNodes ids. Every entry says where it comes from.",
+  "_skip": "skip: a flight point to leave out although the client tables call it live. { \"<TaxiNodes id>\": \"why, with the source\" }",
+  "skip": {
+    "59": "Dun Baldar, Alterac Valley: a battleground (TaxiNodes ContinentID 30), not a flight point of the world. TaxiPath joins it to Ironforge both ways (314 there, 312 back), but no flight master stands there (QuestieDB has none). Client tables TaxiNodes / TaxiPath, build 1.60.1.70862.",
+    "60": "Frostwolf Keep, Alterac Valley: as Dun Baldar (TaxiPath 383 Undercity -> Frostwolf Keep, 313 back). Client tables TaxiNodes / TaxiPath, build 1.60.1.70862."
+  },
+  "_npc": "npc: the flight master of a live flight point QuestieDB has nobody at (the generator stops and asks for it). { \"<TaxiNodes id>\": { \"name\": \"...\", \"m\": <uiMapID>, \"x\": 0-1, \"y\": 0-1 (left out: the flight point's own spot), \"source\": \"...\" } }",
+  "npc": {}
+}

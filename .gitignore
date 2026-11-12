@@ -31,3 +31,4 @@ addon/ForeverRoute/tests/save_incident_*_test.lua
 qdb/questiedb/
 reports/simplay-cache/
 sim-wtf/
+companion/node.txt

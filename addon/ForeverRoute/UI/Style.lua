@@ -13,8 +13,10 @@ Style.C = {
   edge = { 1, 1, 1, 0.07 },
   gold = { 1.0, 0.82, 0.36 },
   text = { 0.95, 0.95, 0.97 },
-  sub = { 0.62, 0.66, 0.74 },
-  dim = { 0.42, 0.45, 0.52 },
+  -- secondary text. On the panel fill (bg) sub is about 10:1 and dim about 7:1; dim used to be 0.42/0.45/0.52,
+  -- about 4:1, which is under the 4.5:1 that small text needs and vanished first on small or dense screens
+  sub = { 0.72, 0.76, 0.84 },
+  dim = { 0.56, 0.60, 0.68 },
   good = { 0.36, 0.86, 0.48 },
   warn = { 1.0, 0.55, 0.30 },
   bad = { 1.0, 0.36, 0.36 },
@@ -49,7 +51,11 @@ end
 
 local fontPath = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local fonts = {}
-function Style.Font(size, flags)
+-- no text of ours under MIN_FONT (9 was the smallest: 9 px tall on a screen whose UI scale is one pixel per unit).
+-- tiny = true skips the floor: the numbers inside the small map pins
+Style.MIN_FONT = 10
+function Style.Font(size, flags, tiny)
+  if not tiny and size < Style.MIN_FONT then size = Style.MIN_FONT end
   local key = size .. (flags or "")
   if not fonts[key] then
     local f = CreateFont("ForeverRouteFont" .. key:gsub("%W", ""))
@@ -68,6 +74,74 @@ function Style.Text(parent, size, color, flags, layer)
   fs:SetWordWrap(true)
   return fs
 end
+
+-- One scale for everything of ours ("Forever Route scale", ns.db.uiScale; nil = never chosen = 1). Our frames are
+-- children of UIParent, so they follow the game's UI scale (and ElvUI's, which sets UIParent's); this multiplies on
+-- top of it, for the card, the arrow, the route list and every window alike. The card and the arrow keep their own
+-- sliders as a fine adjustment (their scale = this x theirs).
+Style.SCALE_MIN, Style.SCALE_MAX = 0.6, 2.5
+Style.SMALL_PX, Style.GOAL_PX = 1.2, 1.4 -- screen pixels per UI unit: under SMALL we offer to grow to GOAL
+local scaled = {}
+function Style.UIScale() return math.max(Style.SCALE_MIN, math.min(Style.SCALE_MAX, tonumber(ns.db and ns.db.uiScale) or 1)) end
+-- screen pixels per UI unit for a frame (UIParent when none): 1.875 at 2560x1440 and 1.41 at 1920x1080 with the
+-- default UI scale, 1.0 with a "pixel perfect" UI scale (768 / screen height) - text of size 10 is then 10 px tall
+function Style.PxPerUnit(frame)
+  local _, h = GetPhysicalScreenSize()
+  if not h or h <= 0 then h = 768 end
+  return (frame or UIParent):GetEffectiveScale() * h / 768
+end
+-- the scale that brings our text back to a readable size on this screen, or nil when it already is
+function Style.SuggestScale()
+  local px = Style.PxPerUnit()
+  if px <= 0 or px >= Style.SMALL_PX then return nil end
+  local s = math.floor(Style.GOAL_PX / px / 0.05 + 0.5) * 0.05
+  return math.max(1.05, math.min(Style.SCALE_MAX, s))
+end
+local function applyScale(frame, o)
+  local s = Style.UIScale() * (o.key and tonumber(ns.db[o.key]) or 1)
+  -- a window never grows past the screen (a big scale on a small screen)
+  if o.fit then
+    local pw, ph, w, h = UIParent:GetWidth() or 0, UIParent:GetHeight() or 0, frame:GetWidth() or 0, frame:GetHeight() or 0
+    if h > 0 and ph > 0 then s = math.min(s, ph * 0.96 / h) end
+    if w > 0 and pw > 0 then s = math.min(s, pw * 0.96 / w) end
+  end
+  s = math.max(0.3, s)
+  if math.abs((frame:GetScale() or 1) - s) > 0.0005 then frame:SetScale(s) end
+end
+-- Style.Scaled(frame, key, fit): frame follows the Forever Route scale. key = a setting that multiplies it (the
+-- card's and the arrow's own sliders); fit = keep it inside the screen (windows; checked again each time it opens)
+function Style.Scaled(frame, key, fit)
+  local o = { key = key, fit = fit }
+  scaled[frame] = o
+  applyScale(frame, o)
+  if fit then frame:HookScript("OnShow", function(self) applyScale(self, o) end) end
+  return frame
+end
+function Style.ApplyScale() for frame, o in pairs(scaled) do applyScale(frame, o) end end
+-- "/fr scale": what the screen and our scale come to; "/fr scale 1.3" sets it, "/fr scale auto" takes the suggestion
+function Style.ScaleInfo()
+  local pw, ph = GetPhysicalScreenSize()
+  local card = ForeverRouteCard
+  local sug = Style.SuggestScale()
+  return string.format("screen %sx%s px, %d units tall; game UI scale %.3f (%.2f px per unit); Forever Route scale %.2f%s, card x%.2f: card %.2f px per unit, size-11 text about %d px tall%s",
+    tostring(pw), tostring(ph), GetScreenHeight() or 0, UIParent:GetEffectiveScale(), Style.PxPerUnit(), Style.UIScale(), ns.db.uiScale and "" or " (never changed)",
+    tonumber(ns.db.scale) or 1, Style.PxPerUnit(card), math.floor(11 * Style.PxPerUnit(card) + 0.5), sug and string.format("; suggested for this screen: %.2f", sug) or "")
+end
+function Style.SetUIScale(v)
+  ns.db.uiScale = math.max(Style.SCALE_MIN, math.min(Style.SCALE_MAX, v))
+  ns.Fire("FR_SETTINGS")
+end
+function Style.SlashScale(arg)
+  arg = (arg or ""):gsub("^%s+", "")
+  if arg == "auto" then Style.SetUIScale(Style.SuggestScale() or 1)
+  elseif arg == "reset" then ns.db.uiScale = nil; ns.Fire("FR_SETTINGS")
+  elseif tonumber(arg) then Style.SetUIScale(tonumber(arg))
+  elseif arg ~= "" then ns.Print("/fr scale  (shows it)  -  /fr scale 1.3  -  /fr scale auto  -  /fr scale reset"); return end
+  ns.Print(Style.ScaleInfo())
+end
+ns.On("FR_SETTINGS", function() Style.ApplyScale() end)
+ns.On("UI_SCALE_CHANGED", function() Style.ApplyScale() end)
+ns.On("DISPLAY_SIZE_CHANGED", function() Style.ApplyScale() end)
 
 -- 9-slice from a 64px rounded-rect texture: corners keep their curve at any size
 function Style.Nine(frame, tex, layer, sub, corner, inset, r, g, b, a)
@@ -137,6 +211,39 @@ function Style.Button(parent, label, w, h, onClick, tip)
   b:SetScript("OnEnter", function(self) self.label:SetTextColor(1, 0.86, 0.5); if tip then GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText(tip, 1, 1, 1, 1, true); GameTooltip:Show() end end)
   b:SetScript("OnLeave", function(self) local c = Style.C.sub; self.label:SetTextColor(c[1], c[2], c[3]); GameTooltip:Hide() end)
   return b
+end
+
+-- A scrollbar you can use: a strip over the (thin, drawn) track that takes the mouse - drag the thumb, or click
+-- anywhere on the strip to jump there. The track and thumb stay plain textures the list draws; setFraction(0..1)
+-- scrolls the list. (The route list's and the quest log check's bars were drawings only: "this scroll bar isn't
+-- clickable".) Returns the strip.
+Style.GRIP_W = 14
+function Style.ScrollGrip(parent, track, thumb, setFraction)
+  local grip = CreateFrame("Button", nil, parent)
+  grip:SetWidth(Style.GRIP_W)
+  grip:SetPoint("TOP", track, "TOP"); grip:SetPoint("BOTTOM", track, "BOTTOM")
+  grip:SetFrameLevel(parent:GetFrameLevel() + 10)
+  grip:RegisterForClicks("LeftButtonDown", "LeftButtonUp")
+  local function cursorY() local _, y = GetCursorPosition(); return y / grip:GetEffectiveScale() end
+  -- the thumb's top, as a fraction of the room it moves in, for a cursor at y (grab: where on the thumb you took it)
+  local function fractionAt(y, grab)
+    local top, th, h = track:GetTop(), track:GetHeight(), thumb:GetHeight()
+    if not (top and th) or th - h <= 0 then return 0 end
+    return math.max(0, math.min(1, (top - y - grab) / (th - h)))
+  end
+  grip.FractionAt, grip.SetFraction = fractionAt, setFraction
+  grip:SetScript("OnMouseDown", function(self)
+    local y, tTop = cursorY(), thumb:GetTop()
+    local onThumb = thumb:IsShown() and tTop and y <= tTop and y >= tTop - thumb:GetHeight()
+    self.grab = onThumb and (tTop - y) or thumb:GetHeight() / 2 -- off the thumb: centre it where you clicked
+    setFraction(fractionAt(y, self.grab))
+    self.dragging = true
+  end)
+  grip:SetScript("OnMouseUp", function(self) self.dragging = false end)
+  grip:SetScript("OnUpdate", function(self) if self.dragging then if not IsMouseButtonDown("LeftButton") then self.dragging = false else setFraction(fractionAt(cursorY(), self.grab)) end end end)
+  grip:SetScript("OnEnter", function() thumb:SetAlpha(1) end)
+  grip:SetScript("OnLeave", function() thumb:SetAlpha(0.8) end)
+  return grip
 end
 
 -- progress bar with label

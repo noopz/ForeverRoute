@@ -483,14 +483,14 @@ test("arrow driver runs a frame without errors", function()
   ForeverRouteDB.log = saved
 end)
 
-test("never accepts or hands in quests by itself", function()
+test("never accepts or hands in quests by itself unless you turn it on (off by default)", function()
   local calls = 0
   local saved = { AcceptQuest = AcceptQuest, CompleteQuest = CompleteQuest, GetQuestReward = GetQuestReward }
   AcceptQuest = function() calls = calls + 1 end; CompleteQuest = AcceptQuest; GetQuestReward = AcceptQuest
   for _, ev in ipairs({ "GOSSIP_SHOW", "QUEST_GREETING", "QUEST_DETAIL", "QUEST_PROGRESS", "QUEST_COMPLETE" }) do ns.Fire(ev) end
   AcceptQuest, CompleteQuest, GetQuestReward = saved.AcceptQuest, saved.CompleteQuest, saved.GetQuestReward
   assertEquals(0, calls)
-  assertNil(ns.db.autoQuest)
+  assertTrue(ns.db.autoQuest ~= true, "automation is on by default")
 end)
 
 test("/fr options opens the options in its own window", function()
@@ -734,6 +734,7 @@ end)
 test("walking trails: every 3 yd in cities and indoors, every 12 yd outdoors, on foot", function()
   local saved = { pos = ns.State.Position, wp = LibStub("HereBeDragons-2.0").GetPlayerWorldPosition, t = GetTime, trails = ForeverRouteDB.trailData }
   ForeverRouteDB.trails = true -- the on/off setting must not get in the way of the data
+  local byChar = ForeverRouteByChar; ForeverRouteByChar = { ["Someone-Realm"] = function() end } -- (recorded only with the companion)
   local HBD = LibStub("HereBeDragons-2.0")
   ForeverRouteDB.trailData = {}
   local map, x, clock = 1453, 0.5, 100
@@ -763,7 +764,7 @@ test("walking trails: every 3 yd in cities and indoors, every 12 yd outdoors, on
     assertEquals(5, select(2, ForeverRouteDB.trailData[1436][2]:gsub(";", ";")) + 1)
   end)
   IsIndoors = saved.indoors
-  ns.State.Position, HBD.GetPlayerWorldPosition, GetTime, ForeverRouteDB.trailData = saved.pos, saved.wp, saved.t, saved.trails
+  ns.State.Position, HBD.GetPlayerWorldPosition, GetTime, ForeverRouteDB.trailData = saved.pos, saved.wp, saved.t, saved.trails; ForeverRouteByChar = byChar
   if not ok then error(err, 0) end
 end)
 
@@ -4550,4 +4551,485 @@ test("Target button: on the card's layer just above it (not over the character s
     end
   end, { anyTarget = true })
   ns.db.targetPos = sv.pos
+end)
+
+test("saved data stays small: no companion -> no walking trails or learning recorded, old ones cleared; trails capped overall", function()
+  local sv = { byChar = ForeverRouteByChar, trail = ForeverRouteDB.trailData, learn = ForeverRouteDB.learn, cap = ns.Trails.TOTAL_BYTES }
+  local ok, err = pcall(function()
+    -- with the companion's plan file: kept
+    ForeverRouteByChar = { ["Someone-Realm"] = function() end }
+    assertTrue(ns.HasCompanion())
+    ForeverRouteDB.trailData = { [1453] = { "0.1,0.1;0.2,0.2;0.3,0.3" } }; ForeverRouteDB.learn = { pace = { { k = "Kill", need = 5, sec = 60 } } }
+    assertEquals(0, ns.Storage.Clean()); assertNotNil(ForeverRouteDB.trailData)
+    -- an addon-site install: nothing to read them, so they go
+    ForeverRouteByChar = nil
+    assertTrue(not ns.HasCompanion())
+    assertTrue(ns.Storage.Clean() > 0)
+    assertNil(ForeverRouteDB.trailData, "trails kept without the companion"); assertNil(ForeverRouteDB.learn, "learning kept without the companion")
+    -- all trails together under the cap: the biggest map's oldest go first
+    ForeverRouteByChar = { ["Someone-Realm"] = function() end }
+    local long = string.rep("0.1234,0.5678;", 50)
+    ForeverRouteDB.trailData = { [1453] = { long, long, long, long }, [1429] = { long } }
+    ns.Trails.TOTAL_BYTES = #long * 3
+    local left = ns.Trails.Trim()
+    assertTrue(left <= ns.Trails.TOTAL_BYTES, "over the cap: " .. left)
+    assertEquals(2, #ForeverRouteDB.trailData[1453]); assertEquals(1, #ForeverRouteDB.trailData[1429])
+    -- sizes for /fr storage
+    assertTrue(#ns.Storage.Parts() > 0)
+  end)
+  ForeverRouteByChar, ForeverRouteDB.trailData, ForeverRouteDB.learn, ns.Trails.TOTAL_BYTES = sv.byChar, sv.trail, sv.learn, sv.cap
+  if not ok then error(err, 0) end
+end)
+
+-- ---- scale and readability (a tester at 3840x1600 with ElvUI's UI scale 0.48: one pixel per UI unit, so our size-9
+-- to 11 text was 9-11 px tall, and only the card and the arrow could be scaled) ----
+local function withScreen(physH, uiScale, fn)
+  local Style = ns.Style
+  local sv = { phys = GetPhysicalScreenSize, scale = UIParent:GetScale(), ui = ns.db.uiScale, card = ns.db.scale, arrow = ns.db.arrowScale, off = ns.db.hintScaleOff }
+  GetPhysicalScreenSize = function() return physH * 2, physH end
+  UIParent:SetScale(uiScale)
+  ns.db.uiScale, ns.db.scale, ns.db.arrowScale, ns.db.hintScaleOff = nil, 1, 1, nil
+  Style.ApplyScale()
+  local ok, err = pcall(fn, Style)
+  GetPhysicalScreenSize = sv.phys
+  UIParent:SetScale(sv.scale)
+  ns.db.uiScale, ns.db.scale, ns.db.arrowScale, ns.db.hintScaleOff = sv.ui, sv.card, sv.arrow, sv.off
+  ns.Fire("FR_SETTINGS")
+  if ForeverRouteScaleBar then ForeverRouteScaleBar:Hide() end
+  if not ok then error(err, 0) end
+end
+local function near(a, b, what) if math.abs(a - b) > 0.002 then error(what .. ": expected " .. tostring(b) .. ", got " .. tostring(a), 0) end end
+
+test("Scale: our frames follow the game's UI scale (children of UIParent, nothing ignores it), at any UI scale", function()
+  for _, ui in ipairs({ 1, 0.48, 0.65 }) do
+    withScreen(1600, ui, function()
+      for _, name in ipairs({ "ForeverRouteCard", "ForeverRouteList", "ForeverRoutePaths", "ForeverRouteTargetButton", "ForeverRouteItemButton" }) do
+        local fr = _G[name]
+        assertNotNil(fr, name .. " is missing")
+        if fr:GetParent() ~= UIParent then error(name .. " is not a child of UIParent", 0) end
+        if fr.IsIgnoringParentScale and fr:IsIgnoringParentScale() then error(name .. " ignores the game's UI scale", 0) end
+      end
+      near(ForeverRouteCard:GetEffectiveScale(), UIParent:GetEffectiveScale(), "the card's effective scale at UI scale " .. ui)
+      near(ForeverRouteList:GetEffectiveScale(), UIParent:GetEffectiveScale(), "the list's effective scale at UI scale " .. ui)
+    end)
+  end
+end)
+
+test("Scale: one Forever Route scale for the card, the arrow, the list and every window; card and arrow keep their own on top", function()
+  withScreen(1600, 0.48, function(Style)
+    ns.db.uiScale = 1.4; ns.db.scale = 1.5; ns.db.arrowScale = 2
+    ns.Fire("FR_SETTINGS")
+    near(ForeverRouteCard:GetScale(), 1.4 * 1.5, "the card (scale x card scale)")
+    if ForeverRouteArrow then near(ForeverRouteArrow:GetScale(), 1.4 * 2, "the arrow (scale x arrow scale)") end
+    local n = 0
+    for _, name in ipairs({ "ForeverRouteList", "ForeverRoutePaths", "ForeverRouteDungeons", "ForeverRouteLogCheck", "ForeverRouteReport", "ForeverRouteNews", "ForeverRouteOptionsWindow" }) do
+      local fr = _G[name]
+      if fr then n = n + 1; near(fr:GetScale(), 1.4, name) end
+    end
+    assertTrue(n >= 4, "only " .. n .. " of the windows exist to be checked")
+    -- the bars under the card are its children: they follow it
+    if ForeverRouteHintBar then near(ForeverRouteHintBar:GetEffectiveScale(), ForeverRouteCard:GetEffectiveScale(), "the hint bar") end
+    -- back to 1: everything as before
+    ns.db.uiScale = nil; ns.db.scale = 1; ns.Fire("FR_SETTINGS")
+    near(ForeverRouteCard:GetScale(), 1, "the card after going back"); near(ForeverRouteList:GetScale(), 1, "the list after going back")
+    -- out of range is clamped
+    ns.db.uiScale = 9; ns.Fire("FR_SETTINGS"); near(Style.UIScale(), Style.SCALE_MAX, "an absurd scale")
+  end)
+end)
+
+test("Scale: the Target and item buttons keep the card's size and place when the Forever Route scale changes", function()
+  local sv = { pos = ns.db.targetPos }
+  ForeverRouteTest.withWorld({ id = "sc", title = "sc", sections = { { title = "x" } }, steps = {
+    { k = "accept", q = 783, name = "A Threat Within", npc = "Deputy Willem", level = 1, m = 1429, x = 0.48, y = 0.43, sec = 1, lvl = 1 },
+  } }, function(w)
+    withScreen(1600, 0.48, function()
+      local t, card = ForeverRouteTargetButton, ForeverRouteCard
+      ns.db.targetPos = nil; ns.db.collapsed = nil; ns.Engine.view = nil
+      for _, s in ipairs({ 1, 1.4 }) do
+        ns.db.uiScale = s; ns.Fire("FR_SETTINGS")
+        card:Show(); ns.Card.Fill(); ns.Card.SetButtons(ForeverRouteData.steps[1]); ns.Card.Layout(); ns.Card.PlaceSecure()
+        near(t:GetEffectiveScale(), card:GetEffectiveScale(), "the Target button's effective scale at " .. s)
+        if t:IsShown() and t:GetLeft() and card.cur:GetLeft() then
+          -- in screen units: 50 card units right of the step's block, whatever the scale
+          local dx = (t:GetLeft() * t:GetEffectiveScale() - card.cur:GetLeft() * card:GetEffectiveScale()) / card:GetEffectiveScale()
+          if math.abs(dx - 50) > 1.5 then error("the Target button is " .. dx .. " card units from the step's left edge at scale " .. s .. " (50 expected)", 0) end
+        end
+      end
+    end)
+  end, { anyTarget = true })
+  ns.db.targetPos = sv.pos
+end)
+
+test("Scale: a window never grows past the screen", function()
+  withScreen(768, 1, function(Style) -- 768 units tall: the smallest screen there is
+    ns.db.uiScale = 2.5; ns.Fire("FR_SETTINGS")
+    local l = ForeverRouteList
+    l:Hide(); l:Show()
+    assertTrue(l:GetHeight() * l:GetScale() <= UIParent:GetHeight() + 0.5, "the route list is taller than the screen: " .. l:GetHeight() * l:GetScale() .. " of " .. UIParent:GetHeight())
+    assertTrue(l:GetWidth() * l:GetScale() <= UIParent:GetWidth() + 0.5, "the route list is wider than the screen")
+    l:Hide()
+  end)
+end)
+
+test("Scale: a bigger scale is suggested only where text is small, offered once in a bar, applied on a click, never by itself", function()
+  -- the default UI scale: 2560x1440 (1.875 px per unit) and 1920x1080 (1.41): nothing to suggest
+  withScreen(1440, 1, function(Style) assertNil(Style.SuggestScale(), "suggested at 1440p"); assertNil(ns.Hints.ScaleDue()); assertTrue(not ns.Hints.CheckScale(), "bar at 1440p") end)
+  withScreen(1080, 1, function(Style) assertNil(Style.SuggestScale(), "suggested at 1080p"); assertTrue(not ns.Hints.CheckScale(), "bar at 1080p") end)
+  -- the tester: 3840x1600, ElvUI's UI scale 0.48 = one pixel per unit
+  withScreen(1600, 0.48, function(Style)
+    near(Style.PxPerUnit(), 1.0, "pixels per unit at 1600 / 0.48")
+    near(Style.SuggestScale(), 1.4, "the suggestion at one pixel per unit")
+    near(ForeverRouteCard:GetScale(), 1, "the card was scaled without being asked")
+    assertTrue(ns.Hints.CheckScale(), "no bar on the tester's screen"); assertTrue(ForeverRouteScaleBar:IsShown())
+    assertNil(ns.db.uiScale, "showing the bar changed the scale")
+    -- the click
+    ForeverRouteScaleBar.go:GetScript("OnClick")(ForeverRouteScaleBar.go)
+    near(ns.db.uiScale, 1.4, "the scale after the click"); near(ForeverRouteCard:GetScale(), 1.4, "the card after the click"); near(ForeverRouteList:GetScale(), 1.4, "the list after the click")
+    assertTrue(not ForeverRouteScaleBar:IsShown(), "the bar stayed"); assertTrue(not ns.Hints.CheckScale(), "offered again after a scale was chosen")
+    near(Style.PxPerUnit(ForeverRouteCard), 1.4, "the card's pixels per unit after the click")
+  end)
+  -- dismissed: for good, and nothing changed
+  withScreen(1600, 0.48, function()
+    ns.db.hintScaleOff = true
+    assertTrue(not ns.Hints.CheckScale(), "dismissed, but shown again"); assertNil(ns.db.uiScale)
+  end)
+  -- the card already scaled up by hand (Card scale 1.5): no nagging
+  withScreen(1600, 0.48, function() ns.db.scale = 1.5; ns.Fire("FR_SETTINGS"); assertTrue(not ns.Hints.CheckScale(), "offered although the card is already 1.5x") end)
+  -- 4K with a pixel-perfect UI scale (ElvUI holds it at 0.4): suggested, inside the slider's range
+  withScreen(2160, 0.4, function(Style) local s = Style.SuggestScale(); assertNotNil(s); assertTrue(s >= 1.05 and s <= Style.SCALE_MAX, "suggestion out of range: " .. tostring(s)) end)
+end)
+
+test("Scale: /fr scale shows, sets, takes the suggestion and resets", function()
+  withScreen(1600, 0.48, function(Style)
+    local said = {}
+    local svp = ns.Print; ns.Print = function(m) said[#said + 1] = m end
+    local ok, err = pcall(function()
+      SlashCmdList["FOREVERROUTE"]("scale"); assertNil(ns.db.uiScale, "/fr scale alone changed it")
+      assertTrue(said[1] and said[1]:find("1600", 1, true) and said[1]:find("0.480", 1, true) and said[1]:find("suggested", 1, true), "/fr scale said: " .. tostring(said[1]))
+      SlashCmdList["FOREVERROUTE"]("scale 1.25"); near(ns.db.uiScale, 1.25, "/fr scale 1.25"); near(ForeverRouteList:GetScale(), 1.25, "the list after /fr scale 1.25")
+      SlashCmdList["FOREVERROUTE"]("scale auto"); near(ns.db.uiScale, 1.4, "/fr scale auto")
+      SlashCmdList["FOREVERROUTE"]("scale reset"); assertNil(ns.db.uiScale, "/fr scale reset")
+    end)
+    ns.Print = svp
+    if not ok then error(err, 0) end
+  end)
+end)
+
+test("Readable: no text of ours under size 10 (map pin numbers aside), secondary text has enough contrast", function()
+  local Style = ns.Style
+  local function size(font) local _, s = font:GetFont(); return s end
+  near(size(Style.Font(9)), 10, "Style.Font(9)"); near(size(Style.Font(8, "OUTLINE")), 10, "Style.Font(8, OUTLINE)"); near(size(Style.Font(11)), 11, "Style.Font(11)")
+  near(size(Style.Font(8, nil, true)), 8, "a map pin's number (tiny)")
+  -- every text on the card and in the route list
+  local seen, small = 0, nil
+  local function walk(fr, depth)
+    for _, r in ipairs({ fr:GetRegions() }) do
+      if r.GetFont and r.GetText then local _, s = r:GetFont(); if s then seen = seen + 1; if s < 9.99 then small = small or (tostring(r:GetText()) .. " at " .. s) end end end
+    end
+    if depth < 6 then for _, ch in ipairs({ fr:GetChildren() }) do walk(ch, depth + 1) end end
+  end
+  walk(ForeverRouteCard, 0); walk(ForeverRouteList, 0)
+  assertTrue(seen > 10, "found only " .. seen .. " texts to check")
+  if small then error("text under size 10: " .. small, 0) end
+  -- contrast against the panel fill (WCAG relative luminance): small text wants 4.5:1; dim was 4.2:1
+  local function lum(c) local function l(v) return v <= 0.03928 and v / 12.92 or ((v + 0.055) / 1.055) ^ 2.4 end return 0.2126 * l(c[1]) + 0.7152 * l(c[2]) + 0.0722 * l(c[3]) end
+  local function ratio(a, b) local x, y = lum(a) + 0.05, lum(b) + 0.05; return x > y and x / y or y / x end
+  local C = Style.C
+  for _, bg in ipairs({ C.bg, C.bg2 }) do
+    assertTrue(ratio(C.dim, bg) >= 6, "dim text contrast " .. ratio(C.dim, bg)); assertTrue(ratio(C.sub, bg) >= 9, "sub text contrast " .. ratio(C.sub, bg))
+    assertTrue(ratio(C.sub, bg) > ratio(C.dim, bg) + 2 and ratio(C.text, bg) > ratio(C.sub, bg) + 2, "text, sub and dim are no longer three distinct steps")
+  end
+  -- the dim written into lines of text is the same dim
+  assertEquals("|cff8e99ad", Style.Hex(C.dim))
+end)
+
+----------------------------------------------------------------------------------------------------------------
+-- A step in your own zone goes through the trip planner too: a flight you know that lands much nearer the spot is
+-- offered when it clearly beats the walk (reported from Darkshire with a hand-in at Sven's camp, the far west end of
+-- Duskwood: the card said walk; Sentinel Hill is a short walk from that border).
+----------------------------------------------------------------------------------------------------------------
+-- the real maps (the planner's zone bounds) and the real network, at a level that is safe in Duskwood
+local function shortcutWorld(fn)
+  local HBD = LibStub("HereBeDragons-2.0")
+  local B = ns.TravelData.BOUNDS
+  local sv = { conv = HBD.GetWorldCoordinatesFromZone, pos = ns.State.Position, taxi = ns.State.knownTaxi, info = C_Map.GetMapInfo, data = ForeverRouteData,
+    lvl = UnitLevel, inn = ns.Travel.HearthInn, onTaxi = UnitOnTaxi, flight = ns.FLIGHT, saves = ns.Travel.SHORTCUT_SAVES, share = ns.Travel.SHORTCUT_SHARE }
+  HBD.GetWorldCoordinatesFromZone = function(_, x, y, m) local b = B[m]; if not b then return nil end return b[1] + x * (b[2] - b[1]), b[3] + y * (b[4] - b[3]), b[5] end
+  local names = { [1431] = "Duskwood", [1436] = "Westfall", [1433] = "Redridge Mountains", [1429] = "Elwynn Forest", [1453] = "Stormwind City", [1444] = "Feralas" }
+  C_Map.GetMapInfo = function(m) return names[m] and { name = names[m] } or (sv.info and sv.info(m)) end
+  UnitLevel = function() return 28 end
+  UnitOnTaxi = function() return false end
+  ns.Travel.HearthInn = function() return nil end
+  ns.FLIGHT = ns.FLIGHT_BY.Alliance
+  local w = { at = { 1431, 0.7749, 0.4429 } } -- beside Felicia Maline, Darkshire's flight master
+  ns.State.Position = function() return w.at[1], w.at[2], w.at[3] end
+  local ok, err = pcall(fn, w)
+  HBD.GetWorldCoordinatesFromZone, ns.State.Position, ns.State.knownTaxi, C_Map.GetMapInfo, ForeverRouteData = sv.conv, sv.pos, sv.taxi, sv.info, sv.data
+  UnitLevel, ns.Travel.HearthInn, UnitOnTaxi, ns.FLIGHT, ns.Travel.SHORTCUT_SAVES, ns.Travel.SHORTCUT_SHARE = sv.lvl, sv.inn, sv.onTaxi, sv.flight, sv.saves, sv.share
+  if not ok then error(err, 0) end
+end
+local function sven() return { k = "turnin", q = 164, name = "Deliveries to Sven", npc = "Sven Yorgen", m = 1431, x = 0.0778, y = 0.3407, zone = "Duskwood", r = 6 } end
+
+test("same zone: Darkshire to Sven's camp flies to Sentinel Hill and walks back across the border", function()
+  shortcutWorld(function(w)
+    ns.State.knownTaxi = { ["Darkshire, Duskwood"] = true, ["Sentinel Hill, Westfall"] = true, ["Stormwind, Elwynn"] = true }
+    local s = sven()
+    ForeverRouteData = { id = "t", steps = { s } }
+    local t = ns.Engine.TravelFor(s)
+    assertNotNil(t, "no trip: the card would say walk")
+    assertTrue(t.shortcut == true)
+    assertEquals("fly", t.how)
+    -- the arrow goes to Darkshire's flight master first
+    assertEquals(1431, t.m); assertTrue(math.abs(t.x - 0.7749) < 0.001 and math.abs(t.y - 0.4429) < 0.001)
+    assertTrue(t.legs[1].text:find("Fly to Westfall", 1, true) ~= nil, t.legs[1].text)
+    assertTrue(t.legs[1].text:find("quicker than walking", 1, true) ~= nil, t.legs[1].text)
+    assertEquals("ride", t.legs[2].how)
+    assertTrue(t.legs[2].text:find("Sven Yorgen", 1, true) ~= nil, t.legs[2].text)
+    -- and it is a clear win, not a coin flip
+    local _, secs, walk = ns.Travel.Shortcut({ m = 1431, x = 0.7749, y = 0.4429 }, { m = 1431, x = 0.0778, y = 0.3407 })
+    assertTrue(secs <= walk - 45, "flight " .. tostring(secs) .. " s, walk " .. tostring(walk) .. " s")
+    assertTrue(secs <= walk * 0.85)
+  end)
+end)
+
+test("same zone: no flight when you lack the flight path, when the step is near, or once you have walked most of the way", function()
+  shortcutWorld(function(w)
+    -- Sentinel Hill not known: nothing lands nearer than you are
+    ns.State.knownTaxi = { ["Darkshire, Duskwood"] = true, ["Stormwind, Elwynn"] = true, ["Lakeshire, Redridge"] = true }
+    local s = sven(); ForeverRouteData = { id = "t", steps = { s } }
+    local t0 = ns.Engine.TravelFor(s)
+    if t0 then error("offered without the Sentinel Hill flight path: " .. tostring(t0.text), 0) end
+    ns.State.knownTaxi = { ["Darkshire, Duskwood"] = true, ["Sentinel Hill, Westfall"] = true }
+    -- a step in Darkshire, and one in the middle of the zone: a walk
+    local near = { k = "turnin", q = 66, name = "The Legend of Stalvan", npc = "Clerk Daltry", m = 1431, x = 0.7254, y = 0.4687, zone = "Duskwood" }
+    assertNil(ns.Engine.TravelFor(near))
+    local mid = { k = "obj", q = 95, text = "middle of Duskwood", m = 1431, x = 0.4985, y = 0.7771, zone = "Duskwood" }
+    assertNil(ns.Engine.TravelFor(mid))
+    -- Sven again, but you are already at Raven Hill: walking on is quicker than going back
+    w.at = { 1431, 0.20, 0.50 }
+    assertNil(ns.Engine.TravelFor(sven()))
+    -- a route's own "Fly to Duskwood" step is done on arrival, never a trip inside the zone
+    assertNil(ns.Engine.TravelFor({ k = "fly", to = 1431, dest = "Duskwood", text = "Duskwood" }))
+    -- your hearthstone is never spent on a walk inside one zone (bound in Darkshire, standing at Sven's camp)
+    w.at = { 1431, 0.0778, 0.3407 }
+    ns.State.knownTaxi = { ["Darkshire, Duskwood"] = true } -- (with Sentinel Hill too, the flight back east is offered: the same trip the other way)
+    ns.Travel.HearthInn = function() return { m = 1431, x = 0.7386, y = 0.4440, name = "Innkeeper Trelayne", bind = "Darkshire" } end
+    assertNil(ns.Engine.TravelFor({ k = "turnin", q = 66, name = "The Legend of Stalvan", npc = "Clerk Daltry", m = 1431, x = 0.7254, y = 0.4687, zone = "Duskwood" }))
+  end)
+end)
+
+test("same zone: the flight has to win by a margin, and the walk it is held against is the better of two guesses", function()
+  shortcutWorld(function(w)
+    ns.State.knownTaxi = { ["Darkshire, Duskwood"] = true, ["Sentinel Hill, Westfall"] = true }
+    local from, to = { m = 1431, x = 0.7749, y = 0.4429 }, { m = 1431, x = 0.0778, y = 0.3407 }
+    local legs, secs, walk = ns.Travel.Shortcut(from, to)
+    assertNotNil(legs)
+    local _, foot = ns.Travel.Plan({ m = 1431, x = 0.7749, y = 0.4429 }, { m = 1431, x = 0.0778, y = 0.3407 }, { ground = true })
+    assertNotNil(foot); assertTrue(walk <= foot + 0.001, "the walk is the planner's own time on foot at most")
+    -- on foot only: no flight leg in a ground plan
+    local g = ns.Travel.Plan({ m = 1431, x = 0.7749, y = 0.4429 }, { m = 1431, x = 0.0778, y = 0.3407 }, { ground = true })
+    for _, l in ipairs(g) do assertEquals("ride", l.how) end
+    -- ask for more than the flight saves: walk
+    ns.Travel.SHORTCUT_SAVES = (walk - secs) + 5
+    assertNil(ns.Travel.Shortcut({ m = 1431, x = 0.7600, y = 0.4900 }, { m = 1431, x = 0.0778, y = 0.3407 })) -- (another spot: what was decided for a spot holds there)
+  end)
+end)
+
+test("same zone: asked again from the same spot, nothing is planned twice; a short walk plans nothing at all", function()
+  shortcutWorld(function(w)
+    ns.State.knownTaxi = { ["Darkshire, Duskwood"] = true, ["Sentinel Hill, Westfall"] = true }
+    local plans, real = 0, ns.Travel.Plan
+    ns.Travel.Plan = function(...) plans = plans + 1; return real(...) end
+    local ok, err = pcall(function()
+      local to = function() return { m = 1431, x = 0.0778, y = 0.3407 } end
+      local a = ns.Travel.Shortcut({ m = 1431, x = 0.7700, y = 0.4600 }, to())
+      assertNotNil(a); assertTrue(plans > 0)
+      local n = plans
+      local b = ns.Travel.Shortcut({ m = 1431, x = 0.7701, y = 0.4601 }, to()) -- a step further: the same 40 yd cell
+      assertTrue(a == b, "the same legs"); assertEquals(n, plans)
+      -- a step in sight
+      assertNil(ns.Travel.Shortcut({ m = 1431, x = 0.7700, y = 0.4600 }, { m = 1431, x = 0.70, y = 0.47 })); assertEquals(n, plans)
+      -- a long walk with no second flight path: nothing a flight could do
+      ns.State.knownTaxi = { ["Darkshire, Duskwood"] = true }
+      assertNil(ns.Travel.Shortcut({ m = 1431, x = 0.7700, y = 0.4600 }, to())); assertEquals(n, plans)
+    end)
+    ns.Travel.Plan = real
+    if not ok then error(err, 0) end
+  end)
+end)
+
+test("same zone: when the flight stops being worth it, card and arrow change together", function()
+  local route = { id = "sc", title = "sc", sections = { { title = "Duskwood" } }, steps = {
+    { id = 1, k = "turnin", q = 164, name = "Deliveries to Sven", npc = "Sven Yorgen", m = 1431, x = 0.0778, y = 0.3407, zone = "Duskwood", r = 6, sec = 1 },
+  } }
+  local svInn, svInfo = ns.Travel.HearthInn, C_Map.GetMapInfo
+  ns.Travel.HearthInn = function() return nil end
+  local names = { [1431] = "Duskwood", [1436] = "Westfall" }
+  C_Map.GetMapInfo = function(m) return names[m] and { name = names[m] } or (svInfo and svInfo(m)) end
+  local ok, err = pcall(withWorld, route, function(w)
+    w:knows({ "Darkshire, Duskwood", "Sentinel Hill, Westfall" })
+    w.quests[164] = { on = true, complete = true, objectives = {} }
+    w:go(1431, 0.76, 0.45) -- Darkshire
+    local HBD = LibStub("HereBeDragons-2.0")
+    ns.Engine.UpdateFocus(HBD:GetPlayerWorldPosition()) -- what the arrow does once a second
+    ns.Arrow.SetTarget(ns.Engine.Shown(), true)
+    local t = ns.Arrow.Current()
+    assertEquals("fly", t.leg); assertTrue(math.abs(t.x - 0.7749) < 0.001, "the arrow points at the flight master")
+    assertTrue(ns.Engine.TravelFor(route.steps[1]).shortcut)
+    -- walked west instead: past the middle of the zone the walk wins; the arrow lets go of the flight master
+    w:go(1431, 0.30, 0.45)
+    assertNil(ns.Engine.TravelFor(route.steps[1]))
+    ns.Engine.UpdateFocus(HBD:GetPlayerWorldPosition()) -- what the arrow does once a second
+    t = ns.Arrow.Current()
+    assertNil(t.leg); assertTrue(math.abs(t.x - 0.0778) < 0.001, "the arrow points at Sven")
+    -- and back at Darkshire it is offered again
+    w:go(1431, 0.76, 0.45)
+    ns.Engine.UpdateFocus(HBD:GetPlayerWorldPosition())
+    assertEquals("fly", ns.Arrow.Current().leg)
+  end, { at = { m = 1431, x = 0.60, y = 0.45, level = 28 } })
+  ns.Travel.HearthInn, C_Map.GetMapInfo = svInn, svInfo
+  if not ok then error(err, 0) end
+end)
+
+test("flight points: one of a zone's two flight paths is not both (Feralas: Thalanaar, not Feathermoon)", function()
+  shortcutWorld(function(w)
+    local K = ns.Travel.KnowsFlightPoint
+    ns.State.knownTaxi = { ["Thalanaar, Feralas"] = true }
+    assertTrue(K(1444, "Thyssiana")); assertFalse(K(1444, "Fyldren Moonfeather"))
+    ns.State.knownTaxi = { ["Thalanaar, Feralas"] = true, ["Feathermoon, Feralas"] = true }
+    assertTrue(K(1444, "Thyssiana")); assertTrue(K(1444, "Fyldren Moonfeather"))
+    -- names the data does not know (another language): the zone's name decides, as before
+    ns.State.knownTaxi = { ["Somewhere, Feralas"] = true }
+    assertTrue(K(1444, "Thyssiana")); assertTrue(K(1444, "Fyldren Moonfeather"))
+    ns.State.knownTaxi = {}
+    assertFalse(K(1444, "Thyssiana")); assertFalse(K(1431, "Felicia Maline"))
+    ns.State.knownTaxi = { ["Darkshire, Duskwood"] = true }
+    assertTrue(K(1431, "Felicia Maline")); assertTrue(K(1431))
+  end)
+end)
+
+test("flight points: every flight master has its flight map name, once; Mount Hyjal's two serve both factions", function()
+  for side, byMap in pairs(ns.FLIGHT_BY) do
+    local seen = {}
+    for m, list in pairs(byMap) do
+      for _, f in ipairs(list) do
+        assertTrue(type(f[4]) == "string" and f[4] ~= "", side .. " " .. m .. " " .. tostring(f[3]) .. " has no flight point name")
+        assertNil(seen[f[4] .. "|" .. f[3]], side .. ": " .. f[4] .. " is listed twice")
+        seen[f[4] .. "|" .. f[3]] = true
+      end
+    end
+  end
+  for _, side in ipairs({ "Alliance", "Horde" }) do
+    local hyjal, n = ns.FLIGHT_BY[side][2482], {}
+    assertNotNil(hyjal, side .. " has no Mount Hyjal flight points")
+    for _, f in ipairs(hyjal) do n[f[4]] = true end
+    assertTrue(n["Summit of Eternity, Mount Hyjal"] and n["Tainted Foothills, Mount Hyjal"], side .. " lacks one of Mount Hyjal's flight points")
+    assertEquals(1, #ns.FLIGHT_BY[side][2548]) -- Riverglades: one flight master, not one per spawn point
+  end
+  assertNil(ns.FLIGHT_BY.Alliance[1431][2]) -- Duskwood has Darkshire and nothing else (no Raven Hill flight point in the client)
+end)
+
+test("quest automation (a toggle, off by default): accepts route quests only, hands in finished ones with no reward choice, Shift skips", function()
+  local sv = { on = ns.db.autoQuest, gq = GetQuestID, acc = AcceptQuest, comp = CompleteQuest, rew = GetQuestReward, ch = GetNumQuestChoices, can = IsQuestCompletable, shift = IsShiftKeyDown, idx = C_QuestLog.GetLogIndexForQuestID, auto = QuestGetAutoAccept, nope = ns.char.nope, data = ForeverRouteData }
+  local calls = {}
+  local ok, err = pcall(function()
+    ForeverRouteData = { id = "aq", title = "aq", sections = { { title = "x" } }, steps = { { k = "accept", q = 783, name = "A Threat Within", sec = 1 } } }
+    ns.Fire("FR_ROUTE_CHANGED")
+    AcceptQuest = function() calls[#calls + 1] = "accept" end
+    CompleteQuest = function() calls[#calls + 1] = "complete" end
+    GetQuestReward = function(i) calls[#calls + 1] = "reward" .. tostring(i) end
+    IsShiftKeyDown = function() return false end
+    QuestGetAutoAccept = function() return false end
+    C_QuestLog.GetLogIndexForQuestID = function(q) return q == 783 and 3 or nil end
+    -- off by default: nothing happens
+    ns.db.autoQuest = nil
+    GetQuestID = function() return 999 end
+    assertTrue(not ns.AutoQuest.Detail(), "acted with the option off")
+    ns.db.autoQuest = true
+    -- a quest the route doesn't pick up: left alone
+    assertTrue(not ns.AutoQuest.Detail(), "accepted a quest that isn't on the route")
+    -- one it does (not in the log yet)
+    C_QuestLog.GetLogIndexForQuestID = function() return nil end
+    GetQuestID = function() return 783 end
+    assertTrue(ns.AutoQuest.Detail()); assertEquals("accept", calls[#calls])
+    -- marked "won't do": left alone
+    ns.char.nope = { [783] = true }; ns.Fire("FR_ROUTE_CHANGED")
+    assertTrue(not ns.AutoQuest.Detail(), "accepted a quest you won't do"); ns.char.nope = sv.nope
+    -- hand in: finished and in the log
+    C_QuestLog.GetLogIndexForQuestID = function(q) return q == 783 and 3 or nil end
+    IsQuestCompletable = function() return true end
+    assertTrue(ns.AutoQuest.Progress()); assertEquals("complete", calls[#calls])
+    -- a repeatable turn-in that isn't in your log: never
+    GetQuestID = function() return 7813 end
+    assertTrue(not ns.AutoQuest.Progress(), "handed in a quest that isn't in the log")
+    -- rewards: one or none taken, a choice waits for you
+    GetNumQuestChoices = function() return 1 end; assertTrue(ns.AutoQuest.Complete()); assertEquals("reward1", calls[#calls])
+    GetNumQuestChoices = function() return 0 end; assertTrue(ns.AutoQuest.Complete()); assertEquals("reward0", calls[#calls])
+    local n = #calls
+    GetNumQuestChoices = function() return 3 end; assertTrue(not ns.AutoQuest.Complete(), "picked a reward for you"); assertEquals(n, #calls)
+    -- Shift: you do it yourself
+    IsShiftKeyDown = function() return true end
+    GetQuestID = function() return 783 end; C_QuestLog.GetLogIndexForQuestID = function() return nil end
+    assertTrue(not ns.AutoQuest.Detail(), "Shift did not skip it")
+  end)
+  ns.db.autoQuest, GetQuestID, AcceptQuest, CompleteQuest, GetQuestReward, GetNumQuestChoices, IsQuestCompletable, IsShiftKeyDown, C_QuestLog.GetLogIndexForQuestID, QuestGetAutoAccept, ns.char.nope, ForeverRouteData = sv.on, sv.gq, sv.acc, sv.comp, sv.rew, sv.ch, sv.can, sv.shift, sv.idx, sv.auto, sv.nope, sv.data
+  ns.Fire("FR_ROUTE_CHANGED")
+  if not ok then error(err, 0) end
+end)
+
+test("scrollbars you can use: the route list's and the quest log check's take a drag or a click (they were drawings only)", function()
+  ns.Fire("FR_TOGGLE_LIST")
+  local L = ForeverRouteList or (ns.List and ns.List.Frame and ns.List.Frame())
+  local sv = ForeverRouteData
+  local ok, err = pcall(function()
+    -- a route long enough to scroll
+    local steps = {}
+    for i = 1, 80 do steps[i] = { k = "accept", q = 90000 + i, name = "Quest " .. i, m = 1429, x = 0.4, y = 0.4, sec = 1, lvl = 1 } end
+    ForeverRouteData = { id = "sb", title = "sb", sections = { { title = "x" } }, steps = steps }
+    ns.Engine.Refresh(); ns.List.Draw()
+    local f = L or _G["ForeverRouteList"]
+    assertNotNil(f and f.grip, "the route list has no scrollbar to grab")
+    assertTrue(f.grip:IsMouseEnabled(), "the scrollbar takes no mouse")
+    assertTrue(f.grip:GetWidth() >= 10, "too thin to aim at")
+    -- the grip scrolls the list: to the end and back
+    f.grip.SetFraction(1)
+    local last = f.offset
+    assertTrue(last > 0, "dragging to the bottom did not scroll")
+    f.grip.SetFraction(0)
+    assertEquals(0, f.offset, "dragging to the top did not scroll back")
+    f.grip.SetFraction(0.5)
+    assertTrue(f.offset > 0 and f.offset < last, "the middle is not the middle")
+  end)
+  ForeverRouteData = sv; ns.Engine.Refresh()
+  if ForeverRouteList then ForeverRouteList:Hide() end
+  if not ok then error(err, 0) end
+  -- the quest log check too
+  ns.Fire("FR_TOGGLE_LOGCHECK")
+  local g = ForeverRouteLogCheck and ForeverRouteLogCheck.grip
+  if ForeverRouteLogCheck then assertNotNil(g, "the quest log check has no scrollbar to grab"); ForeverRouteLogCheck:Hide() end
+end)
+
+test("the card hangs from its top (its height changing in combat no longer leaves the Target button off it), and in combat the button's row stays put", function()
+  ForeverRouteTest.withWorld({ id = "tc", title = "tc", sections = { { title = "x" } }, steps = {
+    { k = "accept", q = 783, name = "A Threat Within", npc = "Deputy Willem", level = 1, m = 1429, x = 0.48, y = 0.43, sec = 1, lvl = 1 },
+    { k = "turnin", q = 783, name = "A Threat Within", npc = "Marshal McBride", level = 1, m = 1429, x = 0.49, y = 0.42, sec = 1, lvl = 1 },
+  } }, function(w)
+    local card = ForeverRouteCard
+    card:Show(); ns.Card.Fill(); ns.Card.SetButtons(ForeverRouteData.steps[1]); ns.Card.Layout(); ns.Card.PlaceSecure()
+    ns.Card.AnchorTop()
+    local p = card:GetPoint(1)
+    assertEquals("TOPLEFT", p, "the card is not anchored by its top")
+    local top = card:GetTop()
+    card:SetHeight(card:GetHeight() + 120)
+    assertTrue(math.abs(card:GetTop() - top) < 0.5, "growing the card moved its top")
+    -- combat: the button can't move, so its row stays where the button was put
+    local placed = card.cur.placedBtnY
+    assertNotNil(placed, "the button row was never recorded")
+    local sv = InCombatLockdown
+    InCombatLockdown = function() return true end
+    card.cur.titleText:SetText("A much shorter title")
+    ns.Card.Layout()
+    InCombatLockdown = sv
+    assertEquals(placed, card.cur.btnY, "in combat the button row moved away from the button")
+  end, { anyTarget = true })
 end)

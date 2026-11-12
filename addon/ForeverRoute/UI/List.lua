@@ -59,6 +59,7 @@ local function build()
   f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
   Style.Panel(f, C.bg2)
   table.insert(UISpecialFrames, "ForeverRouteList") -- Escape closes it
+  Style.Scaled(f, nil, true)
   f.title = Style.Text(f, 13, C.gold, "OUTLINE"); f.title:SetPoint("TOPLEFT", 12, -10)
   f.sub = Style.Text(f, 10, C.sub); f.sub:SetPoint("TOPLEFT", 80, -12); f.sub:Hide()
   local close = Style.Button(f, "x", 18, 18, function() f:Hide() end, "Close"); close:SetPoint("TOPRIGHT", -8, -8)
@@ -94,13 +95,15 @@ local function build()
     r:SetScript("OnLeave", GameTooltip_Hide)
     rows[k] = r
   end
-  -- scrollbar thumb (visual only; wheel scrolls)
+  -- scrollbar: the wheel, or drag / click it (Style.ScrollGrip)
   f.track = f:CreateTexture(nil, "ARTWORK"); f.track:SetTexture(Style.WHITE); f.track:SetVertexColor(1, 1, 1, 0.04); f.track:SetWidth(3)
   f.track:SetPoint("BOTTOMRIGHT", -6, 14)
   f.thumb = f:CreateTexture(nil, "OVERLAY"); f.thumb:SetTexture(Style.WHITE); f.thumb:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 0.6); f.thumb:SetWidth(3)
   f.offset = 0
   f:EnableMouseWheel(true)
   f:SetScript("OnMouseWheel", function(_, d) List.Scroll(-d * 3) end)
+  -- drag it, or click to jump
+  f.grip = Style.ScrollGrip(f, f.track, f.thumb, function(fr) local n = #entries; f.offset = math.floor(fr * math.max(0, n - VISIBLE) + 0.5); List.Draw() end)
   f:Hide()
 end
 
@@ -184,7 +187,7 @@ function List.Draw()
         for _, o in ipairs(ch.options) do names[#names + 1] = Style.ShortZone(o.zone) end
         title = title .. "  |cffffd25a(choose: " .. table.concat(names, " / ") .. ")|r"
       end
-      if isDone then r.text:SetText(ns.Card.Plain(title)); r.text:SetTextColor(0.42, 0.45, 0.52)
+      if isDone then r.text:SetText(ns.Card.Plain(title)); r.text:SetTextColor(C.dim[1], C.dim[2], C.dim[3])
       else r.text:SetText(title); r.text:SetTextColor(1, 1, 1) end
       if e.index == cur then r.hl:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 0.16) else r.hl:SetVertexColor(0, 0, 0, 0) end
     end

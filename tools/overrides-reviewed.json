@@ -1,0 +1,8 @@
+{
+  "_about": "Patch notes that mention a quest we correct (tools/overrides-audit.js), already looked at: quest id -> the note's first words and the verdict. A note listed here is not flagged again.",
+  "notes": {
+    "490": { "note": "Teldrassil - The objective count for the quest", "verdict": "kept: the note lowers the kill count (20 -> 15); our correction is the required level", "reviewed": "2026-11-11" },
+    "98283": { "note": "Fixed an issue where Carnage reset near the end", "verdict": "kept: a fight bug; our correction is the item and the earlier quest it needs", "reviewed": "2026-11-11" },
+    "98824": { "note": "The Titan Relic item from the quest", "verdict": "kept: the relic is given back for the follow-ups; the earlier quest is still needed", "reviewed": "2026-11-11" }
+  }
+}

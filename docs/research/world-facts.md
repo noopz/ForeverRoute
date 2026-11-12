@@ -97,3 +97,16 @@ The map conversion had no world bounds for these, so the planner never routed th
 - **Mount Hyjal** (616, map 2482, Kalimdor, quests 56-60): south-west of Winterspring through Darkwhisper Gorge; flights Everlook <-> Tainted Foothills (Bluebell 54.57,83.19) <-> Summit of Eternity (Fayran Elthas 68.84,43.99). QuestieDB marks both masters Alliance; Wowhead shows Cenarion Circle / no faction. *Confirmed; gorge coordinates unknown.*
 - QuestieDB coverage: on 1.0.14 only 15 of Riverglades' 150 quests had a placeable giver, finisher and objectives; on 1.0.15, 120 (Shen'dralas 19 of 19). Mount Hyjal: 0 of 36 (no quest givers yet) - the plans grind there until QuestieDB fills it in.
 - QuestieDB gives Wheatley (259859) a second spawn in Duskwood (60.76,12.32) that Wowhead doesn't show.
+
+## 4. Flight points, from the client's own tables (2026-11-11)
+
+A player in Darkshire thought the world map showed a flight point near Raven Hill. The client's TaxiNodes and TaxiPath tables (build 1.60.1.70862, wago.tools db2) were compared with FlightMasters.lua for both factions. tools/flightmasters.js now builds the list from them (QuestieDB gives the flight master's name and spot; tools/flight-points.json holds our corrections).
+
+- **No Raven Hill flight point.** Duskwood has one node, Darkshire (TaxiNodes 12, Alliance), and nothing for the Horde. *Confirmed (client table).*
+- **Every Classic flight point matches** its QuestieDB flight master within 8 yards, both factions.
+- **Missing: Tainted Foothills, Mount Hyjal** (node 3242, both factions; flights to the Summit of Eternity and Everlook). Its flight master Bluebell (260626, Hyjal 55.0,82.8, Cenarion Circle: Wowhead Forever tooltip) has the subtitle "Flight Mistress", which the old generator did not know.
+- **Wrong faction: Summit of Eternity, Mount Hyjal** (node 559). TaxiNodes flags both Hyjal points for both factions; QuestieDB files Fayran Elthas (41861) and Bluebell under the Alliance, so the Horde had no Hyjal flight point.
+- **Wrong spot: Riverglades.** QuestieDB lists 11 spawn points for Gretchen Mayberry (257087, Farholde Keep, node 3276) and 6 for Grakna (255993, Rog'mar, node 3203). All were written and the first was used. The spawns at the nodes are 60.64,81.51 and 59.57,45.14 (Wowhead Forever: 60.6,81.4 and 59.4-59.6,45).
+- **In the table but not live:** Powderfuse Port, Riverglades (3274 Horde, 3275 Alliance) and Tidegear Coast, Dun Morogh (3205) have no faction flag and no TaxiPath rows; the flight masters that fit them are "NYI" on Wowhead Forever with no spawn (Julia Mallard 257300, Grot Pondskipper 260438, Elimara 254561). Left out; look again after a client patch.
+- **Left out on purpose:** Nighthaven (62, 63: the druids' one-way flights), the Eastern Plaguelands towers (84-87), Alterac Valley (59, 60), boats, zeppelins and quest paths.
+- **Flight times:** the model is straight-line yards / 22 + 25 s. TaxiPathNode gives the real path: Darkshire -> Sentinel Hill is 2794 yd flown (2301 straight), about 92 s at 30.4 yd/s against the model's 130 s. Over the 297 real paths the flown length is 1.38 x the straight line at the median (1.15 to 2.0 for most), which is where 22 yd/s comes from; per-path times would be more exact. *Not done.*

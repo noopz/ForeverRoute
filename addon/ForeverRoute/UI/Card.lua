@@ -74,7 +74,7 @@ local function build()
   -- movable in combat too: the card itself is not protected (its secure target / item buttons are their own frames
   -- on UIParent; moved in combat, they catch up when combat ends - Card.PlaceSecure)
   f:SetScript("OnDragStart", function(self) if not ns.db.locked then self:StartMoving() end end)
-  f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing(); local p, _, rp, x, y = self:GetPoint(); ns.db.cardPos = { p, rp, x, y }; Card.PlaceSecure() end)
+  f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing(); Card.AnchorTop(); Card.PlaceSecure() end)
   Style.Panel(f)
 
   -- header
@@ -107,14 +107,14 @@ local function build()
   cur.map:SetPoint("TOPRIGHT", cur, "TOPRIGHT", 0, -18)
   -- "not doing this quest": drops it from the route and future plans (warns first if later quests need it)
   cur.nope = Style.Button(cur, "not doing this quest", 112, 14, function() ns.Engine.Nope() end, "Drop this quest from your route and from future plans. If later quests need it, you'll be asked first. Undo brings it back.")
-  cur.nope.label:SetFontObject(Style.Font(9)); cur.nope.label:SetTextColor(0.55, 0.58, 0.66)
-  cur.nope:SetScript("OnLeave", function(self) self.label:SetTextColor(0.55, 0.58, 0.66); GameTooltip:Hide() end)
+  cur.nope.label:SetFontObject(Style.Font(10)); cur.nope.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3])
+  cur.nope:SetScript("OnLeave", function(self) self.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3]); GameTooltip:Hide() end)
   cur.nope:SetPoint("TOPRIGHT", cur.map, "BOTTOMRIGHT", 0, -3)
   -- "not offered": the giver has nothing for you (no window opens, so the addon can't tell by itself - James Halloran,
   -- Argos Nightwhisper). Off your route until you level up, like a giver who lists other quests but not this one
   cur.notOffered = Style.Button(cur, "giver doesn't offer it", 112, 14, function() ns.Engine.NotOffered() end, "The quest giver has nothing for you: this quest leaves your route until your next level (a level or a quest you haven't done can be the reason), then it's tried again. Its chain stays.")
-  cur.notOffered.label:SetFontObject(Style.Font(9)); cur.notOffered.label:SetTextColor(0.55, 0.58, 0.66)
-  cur.notOffered:SetScript("OnLeave", function(self) self.label:SetTextColor(0.55, 0.58, 0.66); GameTooltip:Hide() end)
+  cur.notOffered.label:SetFontObject(Style.Font(10)); cur.notOffered.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3])
+  cur.notOffered:SetScript("OnLeave", function(self) self.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3]); GameTooltip:Hide() end)
   cur.notOffered:SetPoint("TOPRIGHT", cur.nope, "BOTTOMRIGHT", 0, -2)
   cur.bars = {}
   cur.heads = {} -- the dungeon state's quest names, one above each quest's bars
@@ -279,7 +279,8 @@ local function build()
   f:SetScript("OnShow", function() C_Timer.After(0, function() Card.PlaceSecure() end) end)
 
   if ns.db.cardPos then local p = ns.db.cardPos; f:ClearAllPoints(); f:SetPoint(p[1], UIParent, p[2], p[3], p[4]) end
-  f:SetScale(ns.db.scale or 1)
+  Style.Scaled(f, "scale") -- the Forever Route scale x the card's own
+  C_Timer.After(0, function() Card.AnchorTop() end)
 end
 
 function Card.Hover(on)
@@ -414,7 +415,7 @@ local function namesOf(list, max)
   local t = {}
   for k, e in ipairs(list) do
     if k > max then t[#t + 1] = string.format("+%d more", #list - max); break end
-    t[#t + 1] = e.name .. (e.from and (" |cff6c7486(" .. e.from .. ")|r") or "")
+    t[#t + 1] = e.name .. (e.from and (" |cff8e99ad(" .. e.from .. ")|r") or "")
   end
   return table.concat(t, ", ")
 end
@@ -441,11 +442,11 @@ function Card.FillDungeon(name, id, bar, look)
   for _, q in ipairs(st.quests) do
     local title = Style.Hex(C.gold) .. q.name .. "|r"
     if q.ready then
-      lines[#lines + 1] = TICK .. "|cff5cdc7a" .. q.name .. "|r |cff6c7486- done|r"
+      lines[#lines + 1] = TICK .. "|cff5cdc7a" .. q.name .. "|r |cff8e99ad- done|r"
     elseif cur.nbars + math.max(1, #q.objectives) > Card.DUNGEON_BARS then
       local n = 0
       for _, o in ipairs(q.objectives) do if not o.finished then n = n + 1 end end
-      over[#over + 1] = q.name .. (n > 0 and string.format(" |cff6c7486(%d left)|r", n) or "")
+      over[#over + 1] = q.name .. (n > 0 and string.format(" |cff8e99ad(%d left)|r", n) or "")
     else
       head(title)
       if #q.objectives == 0 then local b = bar(); b:Set(0, kind.color, "See your quest log", ""); b:Show() end
@@ -523,7 +524,7 @@ function Card.Fill()
   local bits = {}
   if detail and not multi then bits[#bits + 1] = detail end
   if s.zone then bits[#bits + 1] = s.zone end
-  if s.x and s.y then bits[#bits + 1] = string.format("|cff6c7486%.0f, %.0f|r", s.x * 100, s.y * 100) end
+  if s.x and s.y then bits[#bits + 1] = string.format("|cff8e99ad%.0f, %.0f|r", s.x * 100, s.y * 100) end
   -- the walking path knows the floor heights: say when the stop is upstairs (a tower top) or below (a cellar, a cave)
   -- (only indoors - outdoors a height difference is a hill, the same rule as the arrow)
   if s.z and s.z0 and math.abs(s.z - s.z0) >= 6 and ns.Arrow and ns.Arrow.Indoors and ns.Arrow.Indoors() then
@@ -557,7 +558,7 @@ function Card.Fill()
       return string.format("Quest log full (%d/%d) - hand in or abandon something first.", ns.State.LogCount(), ns.State.MaxLog())
         .. ((s.warn and s.note) and ("\n" .. Style.Hex(C.warn) .. Card.Note(s) .. "|r") or ""), C.bad
     elseif s.k == "bonus" then
-      return (s.where or "") .. (s.note and ("  |cff6c7486" .. s.note .. "|r") or ""), C.sub
+      return (s.where or "") .. (s.note and ("  |cff8e99ad" .. s.note .. "|r") or ""), C.sub
     elseif ns.Drops and ns.Drops.Note(s) then
       -- the quest item drops far less than the plan assumed (Forever changed some rates)
       return ns.Drops.Note(s), C.warn
@@ -568,7 +569,7 @@ function Card.Fill()
       -- planner's guess at how to travel, which the live trip replaces
       local own = Card.OwnNote(s)
       if trip.how == "aboard" and s.boat then own = nil end -- "Board the boat at the pier": done, you are on it
-      own = own and ((s.warn and Style.Hex(C.warn) or "|cff6c7486") .. own .. "|r")
+      own = own and ((s.warn and Style.Hex(C.warn) or "|cff8e99ad") .. own .. "|r")
       if trip.legs and #trip.legs > 1 then
         -- a planned trip: numbered steps, the one you are on highlighted (it is re-planned from where you are)
         local lines = {}
@@ -602,7 +603,7 @@ function Card.Fill()
     -- alert matter, so they stay, and the plan's own next step is a dim line under them
     local planned = ns.Engine.planned
     if planned and i ~= planned and steps()[planned] then
-      local pn = "|cff6c7486Picked up from where you are  ·  planned next: " .. Card.Plain((Card.Describe(steps()[planned]))) .. "|r"
+      local pn = "|cff8e99adPicked up from where you are  ·  planned next: " .. Card.Plain((Card.Describe(steps()[planned]))) .. "|r"
       text = (text and text ~= "") and (text .. "\n" .. pn) or pn
     end
     setNote(text, color)
@@ -655,6 +656,17 @@ function Card.SetButtons(s)
   end)
 end
 
+-- The card hangs from its top-left corner: anchored by its middle (as it was, and as a drag can leave it), every
+-- change of height moved its top - and the Target button, which can't move in combat, was left off the card. Out of
+-- combat only (the card's anchor is ours, but it carries the secure buttons' place with it).
+function Card.AnchorTop()
+  if not f or InCombatLockdown() then return end
+  local l, t = f:GetLeft(), f:GetTop()
+  if not (l and t) then return end
+  f:ClearAllPoints(); f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l, t)
+  ns.db.cardPos = { "TOPLEFT", "BOTTOMLEFT", l, t }
+end
+
 function Card.PlaceSecure()
   if not f then return end
   local cur = f.cur
@@ -662,6 +674,7 @@ function Card.PlaceSecure()
   Card.needPlace = false
   local left, top = cur:GetLeft(), cur:GetTop()
   if not (f:IsShown() and not ns.db.collapsed and cur.btnY and left and not ns.Engine.view) then cur.target:Hide(); cur.item:Hide(); return end
+  cur.placedBtnY = cur.btnY
   local x, y = left + 50, top - cur.btnY
   -- just above the card and everything on it, on its layer
   local lvl = f:GetFrameLevel() + 20
@@ -694,7 +707,13 @@ function Card.Layout()
     y = y + 8 + 18
   end
   cur.btnY = nil
-  if cur.wantTarget or cur.wantItem then cur.btnY = y + 8; y = y + 8 + 26 end
+  if cur.wantTarget or cur.wantItem then
+    cur.btnY = y + 8
+    -- in combat the buttons can't move: their row stays where they were put (the step changed mid-fight and the
+    -- row moved up, away from the button)
+    if InCombatLockdown() and cur.placedBtnY and (cur.target:IsShown() or cur.item:IsShown()) then cur.btnY = cur.placedBtnY end
+    y = cur.btnY + 26
+  end
   if (cur.note:GetText() or "") ~= "" then
     cur.note:ClearAllPoints(); cur.note:SetPoint("TOPLEFT", cur, "TOPLEFT", x0, -(y + 7))
     y = y + 7 + cur.note:GetStringHeight()
@@ -988,7 +1007,7 @@ ns.On("FR_STEP", function() Card.Update(false) end)
 ns.On("FR_DUNGEON", function() if f then Card.Update(false) end end) -- walked into or out of a dungeon
 ns.On("FR_XP", function() local s = ns.Engine.current and steps()[ns.Engine.current]; if f and s and s.k == "grind" and not f.cur.animOut:IsPlaying() then Card.Fill(); Card.Layout() end end)
 ns.On("FR_TOGGLE", function() ns.db.hidden = not ns.db.hidden; f:SetShown(not ns.db.hidden) end)
-ns.On("FR_SETTINGS", function() if f then f:SetScale(ns.db.scale or 1); f:SetWidth(ns.db.cardWidth); Card.Update() end end)
+ns.On("FR_SETTINGS", function() if f then Style.ApplyScale(); f:SetWidth(ns.db.cardWidth); Card.Update() end end)
 -- leg = the arrow points at a waypoint on the way (the flight master, the pier), not the step: say which, so
 -- "40 yd" next to a step a zone away is not read as the distance to the step
 -- (a ride points at the first place on the road there - a zone crossing, or a town on the way: "via")

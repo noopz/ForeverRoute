@@ -17,6 +17,8 @@ T=dist/pkg/ForeverRoute/ForeverRoute.toc; grep -v '^Route[.]lua' "$T" > "$T.new"
 if grep -q '^Route.lua' dist/pkg/ForeverRoute/ForeverRoute.toc; then echo "package: Route.lua still in the TOC"; exit 1; fi
 sed -i "s/^## Version: .*/## Version: $VER/" dist/pkg/ForeverRoute/ForeverRoute.toc
 for d in addon/ForeverRoute_Starter_*/; do cp -r "$d" dist/pkg/; done
+# every built-in plan nests under Forever Route in the game's addon list (## Group), or 51 entries fill it
+missing=$(grep -L '^## Group: ForeverRoute' dist/pkg/ForeverRoute_Starter_*/*.toc 2>/dev/null); if [ -n "$missing" ]; then echo "package: built-in plans without ## Group: $missing"; exit 1; fi
 # the licenses (NOTICE says which is which): the addon is CC BY-NC-SA with a few GPL quest-data files; each built-in
 # plan is all quest data, so GPL
 cp LICENSE dist/pkg/ForeverRoute/LICENSE

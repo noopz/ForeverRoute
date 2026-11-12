@@ -83,7 +83,7 @@ local function buildPanel()
   panel:SetResizable(true)
   if panel.SetResizeBounds then panel:SetResizeBounds(News.MIN_W, News.MIN_H, News.MAX_W, News.MAX_H)
   elseif panel.SetMinResize then panel:SetMinResize(News.MIN_W, News.MIN_H); panel:SetMaxResize(News.MAX_W, News.MAX_H) end
-  Style.Panel(panel, C.bg2)
+  Style.Panel(panel, C.bg2); Style.Scaled(panel, nil, true)
   table.insert(UISpecialFrames, "ForeverRouteNews")
   panel.title = Style.Text(panel, 15, C.gold, "OUTLINE"); panel.title:SetPoint("TOPLEFT", 14, -12)
   local close = Style.Button(panel, "x", 18, 18, function() panel:Hide() end, "Close"); close:SetPoint("TOPRIGHT", -8, -8)

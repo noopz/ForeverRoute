@@ -47,7 +47,7 @@ local function build()
   f:SetSize(W, 200); f:SetPoint("CENTER", 0, 40); f:SetFrameStrata("DIALOG")
   f:SetClampedToScreen(true); f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
   f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
-  Style.Panel(f, C.bg2)
+  Style.Panel(f, C.bg2); Style.Scaled(f, nil, true)
   table.insert(UISpecialFrames, "ForeverRouteDungeons")
   f.title = Style.Text(f, 15, C.gold, "OUTLINE"); f.title:SetPoint("TOPLEFT", PAD, -12); f.title:SetText("Side trips")
   local close = Style.Button(f, "x", 18, 18, function() f:Hide() end, "Close"); close:SetPoint("TOPRIGHT", -8, -8)
@@ -125,7 +125,7 @@ function Dungeons.Draw()
     yc = yc + c:GetHeight() + 8
   end
   -- at most 85% of the screen tall; the rest scrolls
-  local maxH = (UIParent:GetHeight() or 800) * 0.85
+  local maxH = (UIParent:GetHeight() or 800) / f:GetScale() * 0.85
   local view = math.max(60, math.min(yc, maxH - y0 - 6))
   f.content:SetHeight(math.max(1, yc))
   f.scroll:ClearAllPoints(); f.scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y0); f.scroll:SetSize(W, view)

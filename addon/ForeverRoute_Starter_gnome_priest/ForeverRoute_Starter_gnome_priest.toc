@@ -2,6 +2,7 @@
 ## Title: Forever Route - built-in plan: gnome priest
 ## Notes: Loaded by Forever Route only for a gnome priest with no plan of its own.
 ## Dependencies: ForeverRoute
+## Group: ForeverRoute
 ## LoadOnDemand: 1
 
 Plan.lua

@@ -12,7 +12,9 @@ const raw = JSON.parse(fs.readFileSync(rawF, 'utf8')).quests;
 const ov = JSON.parse(fs.readFileSync(path.join(__dirname, 'forever-overrides.json'), 'utf8')).quests;
 const baseF = path.join(ROOT, 'qdb', 'overrides-baseline.json');
 const base = fs.existsSync(baseF) ? JSON.parse(fs.readFileSync(baseF, 'utf8')) : {};
-const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+// starters / finishers: ours are "npc:ID", QuestieDB's full records - compared by type and id
+const ends = (v) => Array.isArray(v) ? v.map((e) => typeof e === "string" ? e : (e && e.type + ":" + e.id)).sort() : v;
+const same = (a, b) => JSON.stringify(ends(a) ?? null) === JSON.stringify(ends(b) ?? null);
 const out = { upstream: [], moved: [], needed: [] }, nextBase = {};
 for (const [id, fields] of Object.entries(ov)) {
   const q = raw[id]; if (!q) continue;

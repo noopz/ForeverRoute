@@ -120,7 +120,32 @@ function Travel.OnNetwork(m, x, y)
 end
 function Travel.IsTram(leg) return leg ~= nil and type(leg.dock) == "string" and leg.dock:find("^tram") ~= nil end
 
-local function knowsFP(m) return ns.Engine and ns.Engine.KnowsFlightIn and ns.Engine.KnowsFlightIn(mapName(m)) end
+-- do you have this flight point? FlightMasters.lua names each flight master's point as the flight map does
+-- ("Sentinel Hill, Westfall": the client's TaxiNodes table), so a zone with two points for your faction (Feralas, The
+-- Barrens, Stranglethorn, Ashenvale, Mount Hyjal) no longer counts both as yours when you have one. Having the point by
+-- that name: yes. Having another point of the same zone by its name, and not this one: no. Otherwise (a flight master
+-- without a name, a client in another language) the zone's name decides, as it always did.
+local taxiOf, taxiSrc
+local function taxiNames()
+  if taxiOf and taxiSrc == ns.FLIGHT_BY then return taxiOf end
+  taxiOf, taxiSrc = {}, ns.FLIGHT_BY
+  for _, byMap in pairs(ns.FLIGHT_BY or {}) do
+    for m, list in pairs(byMap) do
+      for _, f in ipairs(list) do if f[4] then taxiOf[m .. ":" .. tostring(f[3])] = f[4] end end
+    end
+  end
+  return taxiOf
+end
+local function knowsFP(m, npc)
+  local known = (ns.State and ns.State.knownTaxi) or {}
+  local mine = npc and taxiNames()[m .. ":" .. npc]
+  if mine then
+    if known[mine] then return true end
+    for _, f in ipairs((ns.FLIGHT and ns.FLIGHT[m]) or {}) do if f[4] and f[4] ~= mine and known[f[4]] then return false end end
+  end
+  return ns.Engine and ns.Engine.KnowsFlightIn and ns.Engine.KnowsFlightIn(mapName(m))
+end
+Travel.KnowsFlightPoint = knowsFP
 
 -- the hearthstone: casting takes 10 s; the hour of cooldown it uses is worth about 3 minutes of travel
 Travel.HEARTH_CAST, Travel.HEARTH_VALUE = 10, 180
@@ -150,7 +175,10 @@ function Travel.HearthInn()
 end
 
 -- from = { m, x, y }, to = { m, x, y, name } -> legs { { how = "ride"|"fly"|"boat", m, x, y (where to go), text } }, seconds
-function Travel.Plan(from, to)
+-- opts.ground: on foot only (no flights, boats, spells or hearthstone) - what the same trip takes without them
+-- opts.hearth = false: without your hearthstone
+function Travel.Plan(from, to, opts)
+  local ground = opts and opts.ground
   from.w = from.w or world(from.m, from.x, from.y); to.w = to.w or world(to.m, to.x, to.y)
   if not (from.w and to.w) then return nil end
   local lvl = UnitLevel and UnitLevel("player") or 60
@@ -196,7 +224,7 @@ function Travel.Plan(from, to)
       end
     end
     -- a flight master of the other faction is only a spot on the road for you
-    if n.kind == "fp" and (not n.side or n.side:find(myLetter, 1, true)) and knowsFP(n.m) then c = setmetatable({ fp = true }, { __index = c }) end
+    if n.kind == "fp" and not ground and (not n.side or n.side:find(myLetter, 1, true)) and knowsFP(n.m, n.name) then c = setmetatable({ fp = true }, { __index = c }) end
     -- a border crossing inside the other faction's town or camp (Mor'shan Rampart's gate) is no way for you: a crossing
     -- is a chokepoint, and the border has another one clear of it (tools/travel.js does the same)
     if not (n.kind == "cross" and inCamp(n)) then idx[n.id] = add(c) end
@@ -208,7 +236,8 @@ function Travel.Plan(from, to)
   if not Travel.NET then
     -- no network: flight paths you know and the docks as plain nodes, straight rides
     for m, list in pairs(ns.FLIGHT or {}) do
-      if knowsFP(m) then local f = list[1]; local w = world(m, f[1], f[2]); if w then add({ id = "fp" .. m, kind = "fp", fp = true, w = w, m = m, x = f[1], y = f[2], name = f[3] }) end end
+      local f = list[1]
+      if not ground and knowsFP(m, f[3]) then local w = world(m, f[1], f[2]); if w then add({ id = "fp" .. m, kind = "fp", fp = true, w = w, m = m, x = f[1], y = f[2], name = f[3] }) end end
     end
     for key, D in pairs(Travel.DOCKS) do
       local L = learned[D.learned or key]
@@ -288,7 +317,7 @@ function Travel.Plan(from, to)
     if bt[5] then for _, r in ipairs(bt[5]) do if r == myRace or r == myClass then allowed = true end end end
     -- (6th entry: a faction's own crossings - the zeppelins, the Stormwind boat)
     if not forSide(bt[6], side) then allowed = false end
-    if u and v and allowed then
+    if u and v and allowed and not ground then
       -- the kind rides along (a portal reads "take the portal"); a 7th entry true: one way (no portal back)
       local c = bt[3] or Travel.BOAT
       if bt[7] then adj[u][#adj[u] + 1] = { v, c, "boat", bt[4] }
@@ -299,11 +328,11 @@ function Travel.Plan(from, to)
   local myLevel = (UnitLevel and UnitLevel("player")) or 1
   for _, sp in ipairs(Travel.SPELLS) do
     local v = idx["dock-" .. sp.dock]
-    if v and sp.class == myClass and myLevel >= (sp.level or 1) and forSide(sp.faction, side) and N[v].m ~= from.m then adj[1][#adj[1] + 1] = { v, sp.cast or 10, "spell" }; N[v].spellSay = sp.say end
+    if v and not ground and sp.class == myClass and myLevel >= (sp.level or 1) and forSide(sp.faction, side) and N[v].m ~= from.m then adj[1][#adj[1] + 1] = { v, sp.cast or 10, "spell" }; N[v].spellSay = sp.say end
   end
   -- your hearthstone, when it is ready: from wherever you are to your inn. It costs an hour's cooldown, so it only
   -- wins when it saves a few minutes (HEARTH_VALUE)
-  local inn = Travel.HearthInn()
+  local inn = not ground and not (opts and opts.hearth == false) and Travel.HearthInn()
   if inn then
     local w = world(inn.m, inn.x, inn.y)
     if w then
@@ -401,8 +430,8 @@ function Travel.Plan(from, to)
     local lw = world(l.sm or l.m, l.sx or l.x, l.sy or l.y) -- where the leg starts (the dock you step off at)
     if lw then
       for m, list in pairs(ns.FLIGHT or {}) do
-        if not knowsFP(m) then
-          for _, f in ipairs(list) do
+        for _, f in ipairs(list) do
+          if not knowsFP(m, f[3]) then
             local fw = world(m, f[1], f[2])
             if fw and fw[3] == lw[3] then
               local dd = math.sqrt((fw[1] - lw[1]) ^ 2 + (fw[2] - lw[2]) ^ 2)
@@ -415,6 +444,70 @@ function Travel.Plan(from, to)
     end
   end
   return legs, dist[2]
+end
+
+-- A trip inside one zone is a walk - unless a flight you know lands so much nearer the spot that flying is clearly
+-- quicker: Darkshire to Sven's camp at the far west end of Duskwood is five minutes on foot, or a flight to Sentinel
+-- Hill and a short walk back across the border. The same planner decides (your flight master, the take-off, the flight,
+-- the walk from where you land - through the real crossings), against the same trip on foot, and the flight is offered
+-- only when it wins by a margin: the times are estimates, and a coin flip is not worth a flight. Your hearthstone is
+-- left out of it: the plan has its own hearth steps, and an hour's cooldown is not spent on a walk inside one zone.
+-- -> legs, seconds, seconds on foot; nil = walk
+-- Cheap, because the card asks on every refresh and most steps are in your zone: a short walk plans nothing; neither
+-- does a walk no flight could beat (your nearest flight point is too far, or you know fewer than two); and what was
+-- decided holds while you stay within SHORTCUT_CELL yards and nothing else changed.
+Travel.SHORTCUT_MIN = 120    -- a walk shorter than this (seconds) is never worth a flight: nothing is planned at all
+Travel.SHORTCUT_SAVES = 45   -- the flight must save at least this many seconds...
+Travel.SHORTCUT_SHARE = 0.15 -- ...and this share of the walk
+Travel.SHORTCUT_CELL = 40
+local shortcutMemo, shortcutCount = {}, 0
+function Travel.Shortcut(from, to)
+  from.w = from.w or world(from.m, from.x, from.y); to.w = to.w or world(to.m, to.x, to.y)
+  if not (from.w and to.w and from.w[3] == to.w[3]) then return nil end
+  local speed = Travel.Speed()
+  local walk = d(from, to) * Travel.OFFNET / speed
+  if walk < Travel.SHORTCUT_MIN then return nil end
+  local function margin(w) return math.max(Travel.SHORTCUT_SAVES, Travel.SHORTCUT_SHARE * w) end
+  local taxi = (ns.State and ns.State.knownTaxi) or {}
+  local known = 0; for _ in pairs(taxi) do known = known + 1 end -- (flight paths are only ever gained: their number says which)
+  local C = Travel.SHORTCUT_CELL
+  local tk = to.m .. ":" .. to.x .. ":" .. to.y
+  local key = table.concat({ from.m, math.floor(from.w[1] / C), math.floor(from.w[2] / C), tostring(taxi), known, speed, Travel.Side(), tostring(Travel.NET), tostring(ns.FLIGHT) }, "|")
+  local memo = shortcutMemo[tk]
+  if memo and memo.key == key then return memo.legs, memo.secs, memo.walk end
+  if not memo then
+    if shortcutCount >= 64 then shortcutMemo, shortcutCount = {}, 0 end
+    memo = {}; shortcutMemo[tk] = memo; shortcutCount = shortcutCount + 1
+  end
+  memo.key, memo.legs, memo.secs, memo.walk = key, nil, nil, nil
+  -- the quickest a flight could be: the walk to your nearest flight point, the take-off, and a landing right on the spot
+  local letter = Travel.Side() == "horde" and "H" or "A"
+  local near, count = nil, 0
+  local function point(w) count = count + 1; local dd = math.sqrt((w[1] - from.w[1]) ^ 2 + (w[2] - from.w[2]) ^ 2); if not near or dd < near then near = dd end end
+  if Travel.NET then
+    for _, n in ipairs(net()) do
+      if n.kind == "fp" and n.w[3] == from.w[3] and (not n.side or n.side:find(letter, 1, true)) and knowsFP(n.m, n.name) then point(n.w) end
+    end
+  else
+    for m, list in pairs(ns.FLIGHT or {}) do
+      local f = list[1]; local w = world(m, f[1], f[2])
+      if w and w[3] == from.w[3] and knowsFP(m, f[3]) then point(w) end
+    end
+  end
+  if not (count >= 2 and near * Travel.OFFNET / speed + Travel.FLY_EXTRA <= walk - margin(walk)) then return nil end
+  local legs, secs = Travel.Plan(from, to, { hearth = false })
+  if not (legs and legs[1] and secs) then return nil end
+  local rides = true
+  for _, l in ipairs(legs) do if l.how ~= "ride" then rides = false; break end end
+  if rides then return nil end
+  -- on foot along the roads may beat the straight-line guess: the flight has to beat the better of the two
+  local _, foot = Travel.Plan({ m = from.m, x = from.x, y = from.y, w = from.w }, { m = to.m, x = to.x, y = to.y, name = to.name, w = to.w }, { ground = true })
+  if foot and foot < walk then walk = foot end
+  if secs > walk - margin(walk) then return nil end
+  -- said on the card and the arrow: why you are sent to a flight master for a step in your own zone
+  legs[1].text = legs[1].text .. " - about " .. math.max(1, math.floor((walk - secs) / 60 + 0.5)) .. " min quicker than walking there"
+  memo.legs, memo.secs, memo.walk = legs, secs, walk
+  return legs, secs, walk
 end
 
 -- one line for the card: "Fly to Wetlands -> Boat from Menethil Harbor to Theramore -> Ride to The Barrens"

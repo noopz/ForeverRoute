@@ -180,7 +180,7 @@ local function build()
   f:SetSize(W, 200); f:SetPoint("CENTER", 0, 40); f:SetFrameStrata("DIALOG")
   f:SetClampedToScreen(true); f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
   f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
-  Style.Panel(f, C.bg2)
+  Style.Panel(f, C.bg2); Style.Scaled(f, nil, true)
   table.insert(UISpecialFrames, "ForeverRouteLogCheck")
   f.title = Style.Text(f, 15, C.gold, "OUTLINE"); f.title:SetPoint("TOPLEFT", PAD, -12); f.title:SetText("Quest log check")
   local close = Style.Button(f, "x", 18, 18, function() f:Hide() end, "Close"); close:SetPoint("TOPRIGHT", -8, -8)
@@ -206,6 +206,7 @@ local function build()
   end
   f.setScroll = setScroll
   f.scroll:SetScript("OnMouseWheel", function(self, d) setScroll(self:GetVerticalScroll() - d * 60) end)
+  f.grip = Style.ScrollGrip(f, f.track, f.thumb, function(fr) setScroll(fr * math.max(0, f.content:GetHeight() - f.scroll:GetHeight())) end)
   f:Hide()
 end
 
@@ -224,7 +225,7 @@ function LogCheck.Draw()
     local c = COLORS[x.verdict]
     r.edge:SetVertexColor(c[1], c[2], c[3], 0.9)
     local qc = Style.QuestColor(x.e.level)
-    r.title:SetText(string.format("%s[%s] %s|r  |cff6c7486%s|r", Style.Hex(qc), x.e.level or "?", x.e.title, x.e.zone or ""))
+    r.title:SetText(string.format("%s[%s] %s|r  |cff8e99ad%s|r", Style.Hex(qc), x.e.level or "?", x.e.title, x.e.zone or ""))
     r.why:SetText(Style.Hex(c) .. x.why .. "|r")
     local noped = ns.char.nope and ns.char.nope[x.e.id]
     r.btn:SetShown(x.verdict == "drop"); r.keep:SetShown(x.verdict == "drop" and not noped)
@@ -256,7 +257,7 @@ function LogCheck.Draw()
   end
   for k, r in ipairs(rows) do if k > #list + #extra then r:Hide() end end
   -- the window: the header, then the list up to MAXH (scrolling beyond)
-  local MAXH = math.min(560, (UIParent:GetHeight() or 800) - top - 140)
+  local MAXH = math.min(560, (UIParent:GetHeight() or 800) / f:GetScale() - top - 140)
   local view = math.min(y, MAXH)
   f.content:SetHeight(math.max(y, 1))
   f.scroll:ClearAllPoints(); f.scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -top); f.scroll:SetPoint("TOPRIGHT", f, "TOPRIGHT", -8, -top); f.scroll:SetHeight(view)

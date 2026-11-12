@@ -14,11 +14,13 @@ Libs\HereBeDragons\HereBeDragons-Pins-2.0.lua
 
 Core.lua
 Why.lua
+Storage.lua
 State.lua
 Route.lua
 FlightMasters.lua
 Vendors.lua
 DungeonQuests.lua
+AutoQuest.lua
 Dungeon.lua
 Engine.lua
 Quests.lua

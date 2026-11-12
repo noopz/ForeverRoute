@@ -33,6 +33,7 @@ says which plan someone had, apart from the addon version.
 - **Plans:** after the planner or its data changed enough to matter. All plans are rebuilt (`tools/starters-all.sh`)
   and must pass the route audit (`tools/lint-route.js`) and the simulated players. Never ship a plan that fails
   either.
+- **Rebuild with `tools/rebuild-plans.sh`:** it takes in a new QuestieDB release and sweeps Forever's patch notes and hotfixes (`tools/patch-watch.js`) before rebuilding, so a release is never built on stale data.
 - **Triggers for a rebuild:** a new QuestieDB release, and Forever hotfixes or patch notes that touch quests, XP,
   drops or travel. Run `node tools/patch-watch.js` to see what changed since the last check.
 

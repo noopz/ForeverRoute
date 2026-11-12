@@ -2,6 +2,7 @@
 ## Title: Forever Route - built-in plan: skyborne rogue
 ## Notes: Loaded by Forever Route only for a skyborne rogue with no plan of its own.
 ## Dependencies: ForeverRoute
+## Group: ForeverRoute
 ## LoadOnDemand: 1
 
 Plan.lua
