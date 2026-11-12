@@ -154,17 +154,26 @@
       "special": 1,
       "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
     },
+    "92457": {
+      "reqLevel": 30,
+      "_why": "Seen in game 2026-11-11 (City of Dalaran quest list): Available from Level 30 - the quest data says 24"
+    },
     "92458": {
       "preSingle": [
         92432
       ],
-      "_why": "Wowhead (https://www.wowhead.com/forever/quest=92458): needs 92432 first - the quest data did not say"
+      "_why": "Seen in game 2026-11-11 (City of Dalaran quest list): Available from Level 30 - the quest data says 24",
+      "reqLevel": 30
     },
     "92459": {
       "preSingle": [
         92458
       ],
       "_why": "Wowhead (https://www.wowhead.com/forever/quest=92458): needs 92458 first - the quest data did not say"
+    },
+    "96984": {
+      "reqLevel": 30,
+      "_why": "Seen in game 2026-11-11 (City of Dalaran quest list): Available from Level 30 - the quest data says 24"
     },
     "98072": {
       "reqLevel": 19,

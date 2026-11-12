@@ -55,6 +55,16 @@ function State.LogCount()
   end
   return n
 end
+-- is the quest log full? Asked for every pick-up on every refresh: read at most once a second, and again as soon as
+-- the log changes (QUEST_LOG_UPDATE)
+local fullAt, fullWas = -100, false
+function State.LogFull()
+  local now = GetTime and GetTime() or 0
+  if now - fullAt < 1 then return fullWas end
+  fullAt, fullWas = now, State.LogCount() >= State.MaxLog()
+  return fullWas
+end
+ns.On("QUEST_LOG_UPDATE", function() fullAt = -100 end)
 function State.MaxLog() return C_QuestLog and C_QuestLog.GetMaxNumQuestsCanAccept and call(C_QuestLog.GetMaxNumQuestsCanAccept) or MAX_QUESTLOG_QUESTS or 40 end -- Forever: 40
 
 function State.RefreshCompleted()
@@ -108,6 +118,24 @@ function State.Skills()
     end
   end
   return skills
+end
+
+-- "Ride to" only once you can ride: before that, every trip on foot reads "Run to" ("ride to xxx when we don't have a
+-- mount"). A riding skill of any kind (Riding, Horse Riding, the warlock's and paladin's mounts teach one) counts.
+-- Read at most every 10 s: the card asks on every refresh.
+local rideAt, rideCan = -100, false
+function State.CanRide()
+  local now = GetTime and GetTime() or 0
+  if now - rideAt < 10 then return rideCan end
+  rideAt, rideCan = now, false
+  for name in pairs(State.Skills()) do if type(name) == "string" and name:find("Riding", 1, true) then rideCan = true; break end end
+  return rideCan
+end
+-- "Ride" or "Run", and the card's travel kind follows
+function ns.RideWord()
+  local w = State.CanRide() and "Ride" or "Run"
+  if ns.Style and ns.Style.KIND and ns.Style.KIND.ride then ns.Style.KIND.ride.verb = w .. " to" end
+  return w
 end
 
 function State.Snapshot(reason)

@@ -16,6 +16,7 @@ ns.DEFAULTS = {
   locked = false,
   rewardHint = true,     -- highlight the best quest reward
   combatFade = true,     -- fade the card while in combat
+  markTarget = true,     -- the Target button (and its key) also puts a star on the NPC
 }
 
 -- ns.Is(fn, ...): a yes/no question to the game (UnitOnTaxi, UnitIsAFK, IsFlying, IsIndoors...). Forever hides some
@@ -460,6 +461,7 @@ BINDING_NAME_FOREVERROUTE_BACK = "Look at previous step"
 BINDING_NAME_FOREVERROUTE_UNDO = "Undo last skip / done"
 BINDING_NAME_FOREVERROUTE_TOGGLE = "Show / hide the card"
 BINDING_NAME_FOREVERROUTE_LIST = "Show the whole route"
+_G["BINDING_NAME_CLICK ForeverRouteTargetButton:LeftButton"] = "Forever Route Targeting"
 
 SLASH_FOREVERROUTE1 = "/fr"
 SLASH_FOREVERROUTE2 = "/route"
@@ -471,8 +473,12 @@ SlashCmdList.FOREVERROUTE = function(msg)
   elseif msg == "why" then ns.WhyPrint(15)
   elseif msg == "save" then if ns.Card and ns.Card.Save then ns.Card.Save() else ReloadUI() end
   elseif msg == "dungeons" or msg == "dungeon" or msg == "trips" or msg == "bag" then ns.Fire("FR_TOGGLE_DUNGEONS")
+  elseif msg == "news" then ns.Fire("FR_NEWS")
+  elseif msg == "report" then ns.Fire("FR_REPORT", false)
+  elseif msg == "report full" then ns.Fire("FR_REPORT", true)
   elseif msg == "logcheck" or msg == "cleanup" then ns.Fire("FR_TOGGLE_LOGCHECK")
   elseif msg == "nope" then ns.Engine.Nope()
+  elseif msg == "rejoin" then ns.Engine.Rejoin()
   elseif msg == "nav" or msg == "pins" then for _, l in ipairs(ns.Nav.Report()) do ns.Print(l) end
   elseif msg == "perf" then
     local p = ns.Perf()
@@ -496,7 +502,7 @@ SlashCmdList.FOREVERROUTE = function(msg)
   elseif msg == "snapshot" then ns.State.Snapshot("manual"); ns.Print("snapshot saved - written to disk on /reload or logout.")
   elseif msg == "options" or msg == "config" then ns.Fire("FR_OPEN_OPTIONS")
   else
-    ns.Print("/fr - card · /fr list - whole route · /fr paths - choose a path · /fr dungeons - dungeon routes · /fr logcheck - what to abandon · /fr log - recent errors · /fr nav - where the game says you, the step and the minimap are · /fr skip · /fr back · /fr undo · /fr lock · /fr arrow · /fr demo · /fr options")
+    ns.Print("/fr - card · /fr list - whole route · /fr paths - choose a path · /fr dungeons - dungeon routes · /fr logcheck - what to abandon · /fr rejoin - pick the built-in plan up at your level · /fr report - copy a bug report · /fr news - what changed · /fr log - recent errors · /fr nav - where the game says you, the step and the minimap are · /fr skip · /fr back · /fr undo · /fr lock · /fr arrow · /fr demo · /fr options")
   end
 end
 

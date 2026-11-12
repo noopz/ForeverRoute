@@ -42,6 +42,7 @@ function Pins.NotYetText(i)
   if why == "level" then return extra and ("Not yet - at level " .. extra) or "Not yet - you need a higher level" end
   if why == "dungeon" then return "Not yet - on your next run of " .. (extra or "the dungeon") end
   if why == "pickup" then return "Not yet - its quest isn't in your log" end
+  if why == "full" then return "Not yet - your quest log is full" end
   if why == "handin" then return "Not yet - an earlier quest of its chain comes first" end
   return "Not yet - its objectives come first"
 end
@@ -270,7 +271,8 @@ local lastPathKey
 function Pins.Update(force)
   local list, spots = {}, {}
   local cur = ns.Engine.Shown()
-  if ns.db.pins and ForeverRouteData and cur then
+  -- (none inside a dungeon: there is no position in there to place them by, and the card is about the dungeon)
+  if ns.db.pins and ForeverRouteData and cur and not (ns.Dungeon and ns.Dungeon.Inside()) then
     list[1] = cur
     for _, i in ipairs(ns.Engine.Upcoming(cur, (ns.db.pinCount or 4) - 1)) do list[#list + 1] = i end
   end
@@ -354,6 +356,7 @@ end
 ns.On("FR_LOADED", function() C_Timer.NewTicker(2, ns.Guard("pins", function() Pins.Update() end)) end)
 
 ns.On("FR_STEP", function() Pins.Update() end)
+ns.On("FR_DUNGEON", function() Pins.Update(true) end)
 ns.On("FR_SETTINGS", function() Pins.Update(true) end)
 ns.On("FR_ROUTE_CHANGED", function() Pins.Update(true) end)
 ns.On("ZONE_CHANGED_NEW_AREA", function() C_Timer.After(1.5, function() Pins.Update() end) end)

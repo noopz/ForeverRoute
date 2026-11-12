@@ -42,6 +42,8 @@ character of any level. Flight paths you already know are picked up at login.
 | `/fr dungeons` | Dungeon routes, as side trips you choose |
 | `/fr logcheck` | Quests in your log the route won't use |
 | `/fr why` | Why the addon did what it just did |
+| `/fr report` | Copy a bug report to paste to us (anonymous) |
+| `/fr news` | What changed in recent versions |
 | `/fr options` | Settings |
 
 **Optional: the Windows companion** replans your route from your own save every time you `/reload`, with several

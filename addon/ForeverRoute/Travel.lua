@@ -359,7 +359,7 @@ function Travel.Plan(from, to)
         for _, x in ipairs(c.via) do if x.w and f.w and d(f, x) > Travel.AHEAD_YD then first = x; break end end
         local crossings = {}
         for _, x in ipairs(c.via) do if x.kind == "cross" or x.gate then crossings[#crossings + 1] = placeName(x) end end
-        local text = "Ride " .. (f.town and ("from " .. f.town .. " ") or "") .. "to " .. placeName(n) .. (#crossings > 0 and (" (through " .. table.concat(crossings, ", ") .. ")") or "")
+        local text = ns.RideWord() .. " " .. (f.town and ("from " .. f.town .. " ") or "") .. "to " .. placeName(n) .. (#crossings > 0 and (" (through " .. table.concat(crossings, ", ") .. ")") or "")
         local tgt = first or n
         local tm, tx, ty = tgt.m, tgt.x, tgt.y
         if first and first.m2 == f.m then tm, tx, ty = first.m2, first.x2, first.y2 end

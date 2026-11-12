@@ -2473,7 +2473,13 @@ test("travel step title follows the live trip: 'Ride to' when it is a ride, 'Tra
     ns.Engine.view = nil; ns.Engine.current = 1; ns.Engine.planned = 1
     local title = function() ns.Card.Fill(); return ns.Card.Plain(ForeverRouteCard.cur.titleText:GetText()) end
     ns.Engine.TravelFor = function() return { how = "ride", text = "Ride to Ashenvale (through the Darkshore - Ashenvale border)", legs = { { how = "ride", text = "Ride to Ashenvale" } } } end
+    local can = ns.State.CanRide
+    ns.State.CanRide = function() return true end
     assertEquals("Ride to Ashenvale", title())
+    -- no mount yet: on foot
+    ns.State.CanRide = function() return false end
+    assertEquals("Run to Ashenvale", title())
+    ns.State.CanRide = can
     ns.Engine.TravelFor = function() return { how = "ride", text = "x", legs = { { how = "ride", text = "Ride to the pier" }, { how = "boat", text = "Boat to Auberdine" } } } end
     assertEquals("Travel to Ashenvale", title())
     ns.Engine.TravelFor = function() return { how = "fly", text = "Fly to Ashenvale", legs = { { how = "fly", text = "Fly to Ashenvale" } } } end
@@ -3039,6 +3045,39 @@ test("a plan made for someone lower (the built-in plan from level 1): at 24 the 
     assertTrue(not ns.Engine.IsDone(10)) -- the stop that's due now stays
   end)
   UnitLevel = sv.lvl
+end)
+
+test("joining the built-in plan at 30: what the plan does below your level is behind you, quests in your log stay", function()
+  local sv = { lvl = UnitLevel, pk = ns.planKey }
+  withState({ [244] = { on = true, objectives = { { finished = false, text = "x: 0/1" } } } }, function()
+    ns.State.OnQuest = function(id) return id == 244 end
+    ForeverRouteData = { id = "join", title = "join", sections = { { title = "Redridge Mountains" }, { title = "Duskwood" } }, steps = {
+      -- the plan does Redridge at 20-22: quests of level 24-26, not far enough below 30 to be outlevelled
+      { k = "accept", q = 34, name = "An Unwelcome Guest", level = 24, m = 1433, x = 0.17, y = 0.46, sec = 1, lvl = 21 },
+      { k = "turnin", q = 34, name = "An Unwelcome Guest", level = 24, m = 1433, x = 0.17, y = 0.46, sec = 1, lvl = 22 },
+      { k = "fp", fp = "Lakeshire, Redridge", m = 1433, x = 0.30, y = 0.59, sec = 1, lvl = 20 },
+      -- one of them already in your log: it stays yours
+      { k = "turnin", q = 244, name = "Encroaching Gnolls", level = 24, m = 1433, x = 0.30, y = 0.44, sec = 1, lvl = 22 },
+      -- Duskwood at 28-30: your level
+      { k = "accept", q = 1110, name = "Raven Hill", level = 28, m = 1431, x = 0.73, y = 0.46, sec = 2, lvl = 28 },
+    } }
+    UnitLevel = function() return 30 end
+    ns.planKey = { starter = "human-mage" }
+    ns.Engine.Refresh()
+    for _, i in ipairs({ 1, 2, 3 }) do assertTrue(ns.Engine.IsDone(i), "step " .. i .. " (planned at " .. ForeverRouteData.steps[i].lvl .. ") should be behind a level 30") end
+    assertTrue(not ns.Engine.IsDone(4), "a quest in your log was dropped")
+    assertTrue(not ns.Engine.IsDone(5), "a step at your level was passed")
+    -- a plan of your own (the companion's) is made from your save: nothing is passed for this
+    ns.planKey = { found = "x" }
+    ns.Engine.Refresh()
+    assertTrue(not ns.Engine.IsDone(1), "your own plan's step was passed")
+    -- levelling along the built-in plan: a step a level or two behind stays
+    ns.planKey = { starter = "human-mage" }
+    UnitLevel = function() return 24 end
+    ns.Engine.Refresh()
+    assertTrue(not ns.Engine.IsDone(1), "a step 3 levels behind was passed")
+  end)
+  UnitLevel, ns.planKey = sv.lvl, sv.pk
 end)
 
 test("a quest far below you that you're still on is finished, not dropped", function()
@@ -3960,5 +3999,511 @@ test("flight paths you know come from the world map's flight points, no flight m
     assertEquals(0, ns.State.ScanTaxi())
   end)
   C_TaxiMap, ns.State.knownTaxi, ns.char.knownTaxi, UnitFactionGroup = sv.api, sv.known, sv.charKnown, sv.fac
+  if not ok then error(err, 0) end
+end)
+
+test("Target key: a real keybinding (Options > Keybindings > AddOns), and targeting marks the NPC with a star once", function()
+  -- the binding is there, with a name (the options hint used to point at one that didn't exist)
+  local found
+  for i = 1, (GetNumBindings and GetNumBindings() or 0) do
+    local action = GetBinding(i)
+    if action == "CLICK ForeverRouteTargetButton:LeftButton" then found = true end
+  end
+  -- the simulator loads no addon Bindings.xml (tools/install.sh checks the file itself); the game does
+  do local any = false; for i = 1, (GetNumBindings and GetNumBindings() or 0) do local a = GetBinding(i); if type(a) == "string" and a:find("^FOREVERROUTE") then any = true end end; if any then assertTrue(found, "no Target binding in Bindings.xml") end end
+  assertEquals("Forever Route Targeting", _G["BINDING_NAME_CLICK ForeverRouteTargetButton:LeftButton"])
+  assertTrue(ns.Card.TargetMacro("Martie Jainrose"):find("/target Martie Jainrose", 1, true) ~= nil)
+  assertTrue(ns.Card.TargetMacro("x"):find("ForeverRoute.Card.MarkTarget()", 1, true) ~= nil, "the macro does not mark")
+  local sv = { ex = UnitExists, pl = UnitIsPlayer, gi = GetRaidTargetIndex, set = SetRaidTarget, opt = ns.db.markTarget }
+  local mark, sets = nil, 0
+  local ok, err = pcall(function()
+    UnitExists = function() return true end
+    UnitIsPlayer = function() return false end
+    GetRaidTargetIndex = function() return mark end
+    SetRaidTarget = function(_, i) mark = i; sets = sets + 1 end
+    ns.db.markTarget = true
+    assertTrue(ns.Card.MarkTarget()); assertEquals(1, mark)
+    -- key down and key up both fire: the second must not take the star off
+    assertTrue(not ns.Card.MarkTarget()); assertEquals(1, sets)
+    -- a player is never marked; the option turns it off
+    mark = nil; UnitIsPlayer = function() return true end
+    assertTrue(not ns.Card.MarkTarget())
+    UnitIsPlayer = function() return false end; ns.db.markTarget = false
+    assertTrue(not ns.Card.MarkTarget()); assertEquals(1, sets)
+  end)
+  UnitExists, UnitIsPlayer, GetRaidTargetIndex, SetRaidTarget, ns.db.markTarget = sv.ex, sv.pl, sv.gi, sv.set, sv.opt
+  if not ok then error(err, 0) end
+end)
+
+test("stops on the way: a gap you fly is not a walk (Thorium Point lies under the line from Southshore to Duskwood, and a level 30 was sent there next for its flight path)", function()
+  local HBD = LibStub("HereBeDragons-2.0")
+  local sv = { info = C_Map.GetMapInfo, routes = ns.DungeonRoutes, flight = ns.FLIGHT }
+  local names = { [1424] = "Hillsbrad Foothills", [1427] = "Searing Gorge", [1428] = "Burning Steppes", [1431] = "Duskwood", [1433] = "Redridge Mountains" }
+  C_Map.GetMapInfo = function(m) local i = (sv.info and sv.info(m)) or {}; if names[m] then return { mapID = m, name = names[m], mapType = i.mapType, parentMapID = i.parentMapID } end return i end
+  ns.DungeonRoutes = function() return {} end
+  local A = ns.FLIGHT_BY.Alliance
+  ns.FLIGHT = { [1424] = A[1424], [1427] = A[1427], [1428] = A[1428], [1431] = A[1431], [1433] = A[1433] }
+  -- the plan is in Duskwood; you went north for something else and stand in Southshore, a flight away
+  local route = { id = "fpgap", title = "fpgap", sections = { { title = "Darkshire" } }, steps = {
+    { id = 1, k = "accept", q = 221, name = "Worgen in the Woods", npc = "Calor", m = 1431, x = 0.7575, y = 0.4757, zone = "Duskwood", r = 6, sec = 1 },
+    { id = 2, k = "obj", q = 221, text = "Kill 12 Nightbane Dark Runner", match = "Nightbane Dark Runner", m = 1431, x = 0.645, y = 0.724, zone = "Duskwood", r = 124, sec = 1 },
+    { id = 3, k = "turnin", q = 221, name = "Worgen in the Woods", npc = "Calor", m = 1431, x = 0.7575, y = 0.4757, zone = "Duskwood", r = 6, sec = 1 },
+  } }
+  local quests = { [221] = { on = true, complete = false, objectives = { { text = "Nightbane Dark Runner slain: 0/12", finished = false, have = 0, need = 12 } } } }
+  local function added() local t = {}; for i, s in ipairs(ForeverRouteData.steps) do if s.inserted then t[#t + 1] = i .. ":" .. tostring(s.k) .. ":" .. tostring(s.zone or s.name) end end; return table.concat(t, " ") end
+  local ok, err = pcall(ForeverRouteTest.withWorld, route, function(w)
+    w:knows({ "Southshore, Hillsbrad", "Darkshire, Duskwood", "Lakeshire, Redridge" })
+    ns.Engine.Refresh()
+    assertEquals(2, w:shown())
+    -- the way to the step is a flight: nothing under that line is on the way (Searing Gorge, the Burning Steppes)
+    ForeverRouteData.steps._merged = nil
+    ns.Engine.MergeSideTrips(); ns.Engine.Refresh()
+    if added() ~= "" then error("stops added from Southshore: " .. added(), 0) end
+    assertEquals(2, w:shown()); assertEquals("obj", ForeverRouteData.steps[2].k)
+    assertFalse(ns.Engine.OnFoot(1424, 0.5052, 0.5183, 1431, 0.645, 0.724), "Southshore to Duskwood read as a ride")
+    -- a hand-in right beside you still goes first: there and back from where you leave
+    local px, py, pinst = HBD:GetPlayerWorldPosition()
+    local at = ns.Engine.InsertStop({ k = "turnin", q = 98219, name = "The Shamed Lieutenant", npc = "Lieutenant Farren Orinelle", m = 1424, x = 0.5146, y = 0.5839, r = 6, inserted = true }, px, py, pinst)
+    assertEquals(2, at)
+    -- in Duskwood without its flight path: the flight master is a few steps off your way to the kill spot - added
+    w:go(1431, 0.74, 0.47)
+    w:knows({ "Southshore, Hillsbrad" })
+    ForeverRouteData.steps._merged = nil
+    assertTrue(ns.Engine.MergeSideTrips(), "Darkshire's flight path, right on the way, was not added")
+    local fp; for i, s in ipairs(ForeverRouteData.steps) do if s.inserted and s.k == "fp" then if fp then error("more than one flight path added: " .. added(), 0) end; fp = s end end
+    assertNotNil(fp); assertEquals(1431, fp.m)
+  end, { anyTarget = true, at = { m = 1424, x = 0.5052, y = 0.5183, level = 30, quests = quests } })
+  C_Map.GetMapInfo, ns.DungeonRoutes, ns.FLIGHT = sv.info, sv.routes, sv.flight
+  if not ok then error(err, 0) end
+end)
+
+test("/fr report: packs what a replay needs, reads back the same, no name or realm, the short form fits a Discord message", function()
+  local d = {
+    full = false,
+    meta = { version = "1.2.2", client = 16001, time = 1794431000, race = "Gnome", class = "WARLOCK", faction = "Alliance", level = 30, xp = 12345, xpMax = 40000,
+      map = 1424, x = 0.505, y = 0.518, bind = "Southshore", plan = "built-in gnome-warlock", stamp = "plans 2026-11-10", route = "path:ElwynnForest-Westfall",
+      current = 7, steps = 2431, step = "obj Worgen in the Woods", stepQ = 221, stepKey = "obj:221#1" },
+    log = { [221] = { complete = false, objectives = { { 3, 15, false, "x" } } }, [1100] = { complete = true, objectives = {} } },
+    completed = {}, taxi = { "Southshore, Hillsbrad", "Stormwind, Elwynn" },
+    ticks = { skipped = { "fly::Duskwood#1" }, manualDone = {}, nope = { 34 } },
+    card = { { i = 5, r = ns.Report.REASON.behind, k = "accept", q = 34 }, { i = 6, r = ns.Report.REASON.done, k = "fly", q = 0 } },
+    why = { { t = 1794430000, k = "insert", lv = 30, m = 1424, x = "added fp as step 7" } },
+    errors = {}, settings = { pathLine = true, pins = true, hideDone = true, markTarget = true },
+  }
+  local text = ns.Report.Pack(d)
+  assertTrue(text:find("^FR report 1.2.2 |") ~= nil, text:sub(1, 60))
+  local back = ns.Report.Unpack(text)
+  assertNotNil(back and back.meta, "did not read back")
+  assertEquals(30, back.meta.level); assertEquals(1424, back.meta.map); assertEquals(7, back.meta.current)
+  assertTrue(math.abs(back.meta.x - 0.505) < 0.0001)
+  assertEquals("built-in gnome-warlock", back.meta.plan); assertEquals("obj:221#1", back.meta.stepKey)
+  assertEquals(3, back.log[221].objectives[1][1]); assertEquals(15, back.log[221].objectives[1][2]); assertTrue(back.log[1100].complete)
+  assertEquals("Stormwind, Elwynn", back.taxi[2])
+  assertEquals(ns.Report.REASON.behind, back.card[1].r); assertEquals("fly", back.card[2].k)
+  -- completed quests: sorted gaps, any order in
+  d.full, d.completed = true, { 900, 7, 4000, 33 }
+  local full = ns.Report.Unpack(ns.Report.Pack(d))
+  assertEquals("7,33,900,4000", table.concat(full.completed, ","))
+  -- the real thing, gathered in a world: anonymous, short enough
+  ForeverRouteTest.withWorld({ id = "rep", title = "rep", sections = { { title = "x" } }, steps = {
+    { k = "accept", q = 783, name = "A Threat Within", level = 1, m = 1429, x = 0.48, y = 0.43, sec = 1, lvl = 1 },
+  } }, function(w)
+    local before = { pos = { map = 1, x = 0.1, y = 0.2 }, reason = "logout" }
+    ns.char.snapshot = before
+    local live = ns.Report.Pack(ns.Report.Gather(false))
+    assertTrue(ns.char.snapshot == before, "the report replaced the save's snapshot (the planner reads it)")
+    local name, realm = UnitName("player"), GetRealmName()
+    if name and #name > 2 then assertTrue(not live:find(name, 1, true), "the report has the character's name") end
+    if realm and #realm > 2 then assertTrue(not live:find(realm, 1, true), "the report has the realm") end
+    assertTrue(#live < 1900, #live .. " characters: too long for one Discord message")
+    assertNotNil(ns.Report.Unpack(live).meta)
+  end, { anyTarget = true })
+  -- the fixed vector tools/check-report.js decodes: the addon must keep packing exactly this
+  local vec = {
+    full = false,
+    meta = { version = "1.2.2", client = 16001, time = 1794431000, race = "Gnome", class = "WARLOCK", faction = "Alliance", level = 30, xp = 12345, xpMax = 40000,
+      map = 1424, x = 0.505, y = 0.518, bind = "Southshore", plan = "built-in gnome-warlock", stamp = "plans 2026-11-10", route = "path:ElwynnForest-Westfall",
+      current = 7, steps = 2431, step = "obj Worgen in the Woods", stepQ = 221, stepKey = "obj:221#1" },
+    log = { [221] = { complete = false, objectives = { { 3, 15, false, "x" } } }, [1100] = { complete = true, objectives = {} } },
+    completed = { 7, 33, 900, 4000 }, taxi = { "Southshore, Hillsbrad", "Stormwind, Elwynn" },
+    ticks = { skipped = { "fly::Duskwood#1" }, manualDone = {}, nope = { 34 } },
+    card = { { i = 5, r = ns.Report.REASON.behind, k = "accept", q = 34 } },
+    why = { { t = 1794430000, k = "insert", lv = 30, m = 1424, x = "added fp as step 7" } },
+    errors = { { where = "nav", count = 2, msg = "boom", shown = "7 obj" } }, settings = { pathLine = true, pins = false, hideDone = true, markTarget = true },
+  }
+  local packed = ns.Report.Pack(vec)
+  assertEquals("FR1.AakBBTEuMi4yBTE2MDAxmLDT1wYFR25vbWUHV0FSTE9DSwhBbGxpYW5jZR65YMC4ApALuie8KApTb3V0aHNob3JlFmJ1aWx0LWluIGdub21lLXdhcmxvY2sQcGxhbnMgMjAyNi0xMS0xMBpwYXRoOkVsd3lubkZvcmVzdC1XZXN0ZmFsbAf_EhdvYmogV29yZ2VuIGluIHRoZSBXb29kc90BCW9iajoyMjEjMQIMAt0BAAEDDwDMCAEAAwcEBxrjBpwYBCkCFVNvdXRoc2hvcmUsIEhpbGxzYnJhZBFTdG9ybXdpbmQsIEVsd3lubgUUAQ9mbHk6OkR1c2t3b29kIzEAASIIBQEFDQEiBiMBsKjT1wYGaW5zZXJ0HpALEmFkZGVkIGZwIGFzIHN0ZXAgNwsTAQNuYXYCBGJvb20FNyBvYmoAAAkBDQ", packed:match("FR1%.%S+"))
+end)
+
+----------------------------------------------------------------------------------------------------------------
+-- Your place in the built-in plan (Engine.BehindYou, Engine.FindPlace)
+----------------------------------------------------------------------------------------------------------------
+-- a small built-in plan: Redridge at 21-22, Duskwood at 28-29, the Wetlands at 29-30, town, Redridge again at 31.
+-- Travel, the flight path, the bind and the training stop carry no level, like the plans shipped in v1.2.0.
+local function joinPlan() return { id = "joinplan", title = "joinplan", sections = { { title = "Redridge Mountains" }, { title = "Duskwood" }, { title = "Wetlands" } }, steps = {
+  { k = "fly", dest = "Redridge Mountains", text = "Redridge Mountains", sec = 1 },                                                                    -- 1
+  { k = "fp", npc = "Ariena Stormfeather", fp = "Lakeshire, Redridge", zone = "Redridge Mountains", m = 1433, x = 0.30, y = 0.59, sec = 1 },           -- 2
+  { k = "accept", q = 34, name = "An Unwelcome Guest", level = 24, m = 1433, x = 0.17, y = 0.46, sec = 1, lvl = 21 },                                  -- 3
+  { k = "turnin", q = 34, name = "An Unwelcome Guest", level = 24, m = 1433, x = 0.17, y = 0.46, sec = 1, lvl = 22 },                                  -- 4
+  { k = "turnin", q = 244, name = "Encroaching Gnolls", npc = "Deputy Feldon", level = 26, m = 1433, x = 0.30, y = 0.44, sec = 1, lvl = 22 },           -- 5: in your log, finished
+  { k = "obj", q = 245, name = "Assessing the Threat", text = "Collect 8 Gnoll Paws", match = "Gnoll Paws", level = 26, m = 1433, x = 0.40, y = 0.40, sec = 1, lvl = 22 }, -- 6: in your log, half done
+  { k = "bind", npc = "Innkeeper Allison", zone = "Stormwind", m = 1453, x = 0.60, y = 0.75, sec = 1 },                                                -- 7
+  { k = "train", text = "level 22 spells", zone = "Stormwind", m = 1453, x = 0.39, y = 0.85, sec = 1 },                                                -- 8
+  { k = "fly", dest = "Duskwood", text = "Duskwood", sec = 2 },                                                                                        -- 9
+  { k = "accept", q = 1110, name = "Raven Hill", level = 28, m = 1431, x = 0.73, y = 0.46, sec = 2, lvl = 28 },                                        -- 10
+  { k = "turnin", q = 1110, name = "Raven Hill", level = 28, m = 1431, x = 0.18, y = 0.56, sec = 2, lvl = 29 },                                        -- 11
+  { k = "fly", dest = "Wetlands", text = "Wetlands", sec = 3 },                                                                                        -- 12: where a level 30 joins
+  { k = "accept", q = 900, name = "The Dark Iron War", level = 30, m = 1437, x = 0.50, y = 0.50, sec = 3, lvl = 29 },                                  -- 13
+  { k = "turnin", q = 900, name = "The Dark Iron War", level = 30, m = 1437, x = 0.50, y = 0.50, sec = 3, lvl = 30 },                                  -- 14
+  { k = "hearth", dest = "Stormwind", text = "Stormwind", bindMap = 1453, sec = 3 },                                                                   -- 15
+  { k = "turnin", q = 690, name = "Malin's Request", level = 32, m = 1453, x = 0.40, y = 0.60, sec = 3, lvl = 30 },                                    -- 16: in your log, its hand-in ahead
+  { k = "accept", q = 901, name = "Jitters' Growling Gut", level = 31, m = 1453, x = 0.50, y = 0.60, sec = 3, lvl = 30 },                              -- 17: needs Raven Hill handed in
+  { k = "turnin", q = 901, name = "Jitters' Growling Gut", level = 31, m = 1453, x = 0.55, y = 0.60, sec = 3, lvl = 30 },                              -- 18
+  { k = "turnin", q = 245, name = "Assessing the Threat", level = 26, m = 1453, x = 0.60, y = 0.60, sec = 3, lvl = 30 },                               -- 19
+  { k = "fly", dest = "Redridge Mountains", text = "Redridge Mountains", sec = 3 },                                                                    -- 20
+  { k = "accept", q = 902, name = "Shadow Magic", level = 31, m = 1433, x = 0.20, y = 0.45, sec = 3, lvl = 31 },                                       -- 21
+  { k = "accept", q = 903, name = "Howling in the Hills", level = 31, m = 1433, x = 0.60, y = 0.45, sec = 3, lvl = 31 },                               -- 22
+} } end
+-- the log of someone who levelled without the addon: a finished Redridge quest, a half-done one, and one for later
+local function joinLog() return {
+  [244] = { on = true, complete = true, objectives = {} },
+  [245] = { on = true, objectives = { { finished = false, have = 2, need = 8, text = "Gnoll Paws: 2/8" } } },
+  [690] = { on = true, complete = true, objectives = {} },
+} end
+local function onBuiltIn(fake, fn)
+  local sv = { lvl = UnitLevel, pk = ns.planKey, ready = ns.Engine.placeReady, unl = ForeverRouteUnlocks, bind = GetBindLocation, after = C_Timer.After }
+  local ok, err = pcall(withState, fake, function()
+    ns.planKey = { starter = "gnome-warlock" }
+    ns.Engine.placeReady = true
+    ForeverRouteUnlocks = { [1110] = { 901 } }
+    GetBindLocation = function() return "Southshore" end
+    C_Timer.After = function() end -- (the note to the player)
+    ForeverRouteData = joinPlan()
+    fn()
+  end)
+  UnitLevel, ns.planKey, ns.Engine.placeReady, ForeverRouteUnlocks, GetBindLocation, C_Timer.After = sv.lvl, sv.pk, sv.ready, sv.unl, sv.bind, sv.after
+  if not ok then error(err, 0) end
+end
+
+test("joining the built-in plan at 30: you start at the trip where it reaches your level - travel, flight paths, binds and quests in your log before it are behind you", function()
+  onBuiltIn(joinLog(), function()
+    UnitLevel = function() return 30 end
+    ns.Engine.Refresh()
+    assertEquals(30, ns.char.join and ns.char.join.level, "no place found for a level 30 meeting the plan")
+    local level, at = ns.Engine.Place()
+    assertEquals(30, level); assertEquals(12, at, "you join at the trip into the stretch where the plan reaches 30")
+    assertEquals(12, ns.Engine.Shown(), "the card starts at that trip")
+    -- everything before it: the flight to Redridge and its flight path (no level of their own), the bind, the training
+    -- stop, and the quests in your log - finished (5) or not (6)
+    for i = 1, 11 do assertTrue(ns.Engine.IsDone(i), "step " .. i .. " (" .. ForeverRouteData.steps[i].k .. ") is before the trip you joined at") end
+    -- the stretch you join is whole: its first pick-up is planned a level below you
+    assertEquals(21, ns.Engine.PlanLevel(1)); assertEquals(28, ns.Engine.PlanLevel(9)); assertEquals(29, ns.Engine.PlanLevel(12))
+    assertTrue(not ns.Engine.IsDone(13), "the first pick-up of the stretch you joined was passed")
+    assertTrue(not ns.Engine.IsDone(14))
+    -- a hearth to the inn the plan bound you at back there: you are not bound there
+    assertTrue(ns.Engine.IsDone(15), "a hearth to an inn you never bound at")
+    -- a quest in your log whose hand-in is ahead stays; one with something left to do behind you goes as a whole
+    assertTrue(not ns.Engine.IsDone(16), "a quest in your log with its hand-in ahead was dropped")
+    assertTrue(ns.Engine.IsDone(19), "the hand-in of a quest whose objective is behind you")
+    -- a pick-up that needs a quest handed in behind you is not offered, and its hand-in goes with it
+    assertTrue(ns.Engine.IsDone(17), "a pick-up that needs a quest you never did"); assertTrue(ns.Engine.IsDone(18))
+    for i = 20, 22 do assertTrue(not ns.Engine.IsDone(i), "step " .. i .. " is ahead of you") end
+    -- bound at that inn after all: the hearth is yours
+    GetBindLocation = function() return "Stormwind City" end
+    ns.Engine.Refresh()
+    assertTrue(not ns.Engine.IsDone(15), "a hearth to the inn you are bound at was passed")
+    -- your place holds as you level: at 31 nothing more is passed (the plan's 29-30 stretch is still yours)
+    UnitLevel = function() return 31 end
+    ns.Engine.Refresh()
+    assertEquals(30, ns.char.join.level); assertEquals(12, ns.Engine.Shown())
+    -- a plan of your own (the companion's) is made from your save: none of this
+    ns.planKey = { found = "x" }
+    ns.Engine.Refresh()
+    assertTrue(not ns.Engine.IsDone(10), "your own plan's step was passed"); assertNil(ns.Engine.Place())
+  end)
+end)
+
+test("levelling along the built-in plan: up to 3 levels ahead nothing is passed, and you are never taken for someone joining", function()
+  local fake = joinLog(); fake[34] = { on = false, done = true, objectives = {} }
+  onBuiltIn(fake, function()
+    -- 24 where the plan has you at 21 (rested XP): you are following it
+    UnitLevel = function() return 24 end
+    ns.Engine.Refresh()
+    assertEquals(0, ns.char.join and ns.char.join.level, "someone 2-3 levels ahead of the plan was taken for joining")
+    assertNil(ns.Engine.Place())
+    for _, i in ipairs({ 1, 2, 5, 6, 7 }) do assertTrue(not ns.Engine.IsDone(i), "step " .. i .. " was passed for someone following the plan") end
+    assertEquals(1, ns.Engine.Shown())
+    -- 4 and more ahead (a dungeon or two): what the plan does down there is passed - its travel and flight path too -
+    -- but a quest in your log stays: you picked it up on the plan
+    UnitLevel = function() return 27 end; ns.char.join.seen = 27
+    ns.Engine.Refresh()
+    assertEquals(0, ns.char.join.level, "racing ahead is not joining")
+    assertTrue(ns.Engine.IsDone(1), "the flight to a zone 5 levels below you"); assertTrue(ns.Engine.IsDone(2), "its flight path")
+    assertTrue(not ns.Engine.IsDone(5), "a quest in your log was dropped"); assertTrue(not ns.Engine.IsDone(6))
+    assertTrue(not ns.Engine.IsDone(10), "a step 1 level above you was passed")
+  end)
+end)
+
+test("coming back to the built-in plan many levels on finds your place again, and /fr rejoin does it when you ask", function()
+  onBuiltIn(joinLog(), function()
+    -- tried the addon at 4 (following from the start), came back at 30
+    ns.char.join = { plan = "gnome-warlock", level = 0, seen = 4 }
+    UnitLevel = function() return 30 end
+    -- (not while you are on a side trip: its steps have no levels to tell by)
+    ForeverRouteData.dungeon = true
+    ns.Engine.Refresh()
+    assertEquals(0, ns.char.join.level, "your place was looked for on a side trip")
+    ForeverRouteData.dungeon = nil
+    ns.Engine.Refresh()
+    assertEquals(30, ns.char.join.level); assertEquals(30, ns.char.join.seen); assertEquals(12, ns.Engine.Shown())
+    -- seen levelling all the way (seen keeps up): nothing is looked up again
+    ns.char.join = { plan = "gnome-warlock", level = 0, seen = 29 }
+    ns.Engine.Refresh()
+    assertEquals(0, ns.char.join.level); assertNil(ns.Engine.Place())
+    -- asked for
+    local said = {}; local svP = ns.Print; ns.Print = function(m) said[#said + 1] = m end
+    local ok, err = pcall(function()
+      ns.Engine.Rejoin()
+      assertEquals(30, ns.char.join.level); assertEquals(12, ns.Engine.Shown())
+      assertTrue(#said == 1 and said[1]:find("level 30", 1, true) ~= nil, "no word to the player about where they joined")
+      -- another character's place (another race and class) is not yours
+      ns.char.join = { plan = "human-mage", level = 50, seen = 50 }
+      ns.Engine.Refresh()
+      assertEquals("gnome-warlock", ns.char.join.plan); assertEquals(30, ns.char.join.level)
+      -- on a plan of your own there is nothing to rejoin
+      ns.planKey = { found = "x" }; ns.char.join = nil
+      ns.Engine.Rejoin()
+      assertNil(ns.char.join)
+    end)
+    ns.Print = svP
+    if not ok then error(err, 0) end
+  end)
+end)
+
+test("a finished quest in your log whose hand-in is behind you: the log check says so, and it gets a stop where the plan passes its NPC again", function()
+  local HBD = LibStub("HereBeDragons-2.0")
+  local sv = { conv = HBD.GetWorldCoordinatesFromZone, n = C_QuestLog.GetNumQuestLogEntries, i = C_QuestLog.GetInfo, enders = ForeverRouteEnders }
+  HBD.GetWorldCoordinatesFromZone = function(_, x, y, m) return x * 1000, y * 1000, m end
+  local log = { { isHeader = true, title = "Redridge Mountains" }, { questID = 244, title = "Encroaching Gnolls", level = 28 }, { questID = 245, title = "Assessing the Threat", level = 28 },
+    { isHeader = true, title = "Stormwind City" }, { questID = 690, title = "Malin's Request", level = 32 } }
+  C_QuestLog.GetNumQuestLogEntries = function() return #log, 3 end
+  C_QuestLog.GetInfo = function(k) return log[k] end
+  ForeverRouteEnders = { [244] = { npc = "Deputy Feldon", m = 1433, x = 0.30, y = 0.44, name = "Encroaching Gnolls" } }
+  local ok, err = pcall(onBuiltIn, joinLog(), function()
+    UnitLevel = function() return 30 end
+    ns.Engine.Refresh()
+    local function verdicts() local v = {}; for _, x in ipairs(ns.LogCheck.Classify()) do v[x.e.id] = x.verdict end return v end
+    local v = verdicts()
+    assertEquals("turnin", v[244], "finished, its hand-in behind you: hand it in if you pass by")
+    assertEquals("drop", v[245], "half done, behind you: not on your route")
+    assertEquals("keep", v[690], "its hand-in is ahead")
+    -- the plan comes back to Redridge at 31: the hand-in gets a stop there (not a trip of its own now)
+    assertTrue(ns.Engine.ApplyInserts(), "no stop for a finished quest whose hand-in is behind you")
+    local at; for j, s in ipairs(ForeverRouteData.steps) do if s.q == 244 and s.inserted then at = j end end
+    assertTrue(at ~= nil and at > 20, "the stop belongs in the Redridge stretch ahead, it went to step " .. tostring(at))
+    assertFalse(ns.Engine.ApplyInserts()) -- once
+    ns.Engine.Refresh()
+    assertEquals(12, ns.Engine.Shown(), "the card left the trip you joined at")
+    assertTrue(not ns.Engine.IsDone(at)); assertEquals("keep", verdicts()[244])
+  end)
+  HBD.GetWorldCoordinatesFromZone, C_QuestLog.GetNumQuestLogEntries, C_QuestLog.GetInfo, ForeverRouteEnders = sv.conv, sv.n, sv.i, sv.enders
+  if not ok then error(err, 0) end
+end)
+
+test("joining the built-in plan waits until the game has told us your done quests (a cold login must not read a follower as a joiner)", function()
+  local sv = { lvl = UnitLevel, done = ns.State.completed, rc = ns.State.RefreshCompleted, pk = ns.planKey, data = ForeverRouteData, join = ns.char.join }
+  local ok, err = pcall(function()
+    ForeverRouteData = { id = "j", title = "j", sections = { { title = "x" } }, steps = { { k = "accept", q = 783, name = "x", level = 1, sec = 1, lvl = 1 } } }
+    ns.planKey = { starter = "gnome-warlock" }; ns.char.join = nil
+    UnitLevel = function() return 30 end
+    ns.State.completed = {}; ns.State.RefreshCompleted = function() end -- the game has nothing yet
+    assertTrue(not ns.Engine.PlaceDue(), "decided where you join before your done quests were known")
+    ns.State.completed = { [783] = true }
+    assertTrue(ns.Engine.PlaceDue(), "never decides once they are known")
+  end)
+  UnitLevel, ns.State.completed, ns.State.RefreshCompleted, ns.planKey, ForeverRouteData, ns.char.join = sv.lvl, sv.done, sv.rc, sv.pk, sv.data, sv.join
+  if not ok then error(err, 0) end
+end)
+
+test("what's new: a bar under the card once per version for someone updating, never on a first install; the panel lists only newer versions", function()
+  local sv = { news = ns.NEWS, ver = ns.VERSION, seen = ns.db.newsSeen, db = ForeverRouteDB.why, snap = ns.char.snapshot, md = ns.char.manualDone }
+  local ok, err = pcall(function()
+    ns.NEWS = { { version = "1.2.2", date = "d", items = { "a", "b" } }, { version = "1.2.1", date = "d", items = { "c" } }, { version = "1.2.0", date = "d", items = { "e" } } }
+    ns.VERSION = "1.2.2"
+    -- a first install: nothing is new to you
+    ns.db.newsSeen = nil; ForeverRouteDB.why = {}; ns.char.snapshot = nil; ns.char.manualDone = {}
+    assertTrue(not ns.News.Due(), "a first install got the what's-new bar")
+    assertEquals("1.2.2", ns.db.newsSeen)
+    -- someone who had 1.2.0: the bar, and the panel lists 1.2.2 and 1.2.1 only
+    ns.db.newsSeen = "1.2.0"
+    assertTrue(ns.News.Check(), "no bar after an update")
+    assertTrue(ForeverRouteNewsBar:IsShown())
+    assertEquals("1.2.2,1.2.1", (function() local t = {} for _, e in ipairs(ns.News.Since("1.2.0")) do t[#t + 1] = e.version end return table.concat(t, ",") end)())
+    -- dismissed: gone, and gone for good
+    ns.News.Dismiss()
+    assertTrue(not ForeverRouteNewsBar:IsShown()); assertEquals("1.2.2", ns.db.newsSeen); assertTrue(not ns.News.Due())
+    -- an older user with no record of a version (from before this feature): the bar
+    ns.db.newsSeen = nil; ForeverRouteDB.why = { { t = 1, k = "card", x = "x" } }
+    assertTrue(ns.News.Due(), "an existing user updating from before the bar existed got nothing")
+    -- the panel opens and marks it seen; versions compare as numbers
+    ns.News.Show("1.2.0"); assertTrue(ForeverRouteNews:IsShown()); ForeverRouteNews:Hide()
+    -- long notes scroll inside a panel that stays a fixed size
+    local many = {}; for i = 1, 60 do many[i] = "a change worth a line of its own, number " .. i end
+    ns.NEWS = { { version = "1.3.0", date = "d", items = many } }
+    ns.News.Show(nil)
+    assertTrue(ForeverRouteNews:GetHeight() <= ns.News.MAX_HEIGHT + 0.5, "the panel grew to " .. ForeverRouteNews:GetHeight())
+    assertTrue(ForeverRouteNewsScroll:GetVerticalScrollRange() > 0, "long notes do not scroll")
+    ForeverRouteNews:Hide()
+    assertTrue(ns.News.Newer("1.2.10", "1.2.9")); assertTrue(not ns.News.Newer("1.2.2", "1.2.2"))
+  end)
+  ns.NEWS, ns.VERSION, ns.db.newsSeen, ForeverRouteDB.why, ns.char.snapshot, ns.char.manualDone = sv.news, sv.ver, sv.seen, sv.db, sv.snap, sv.md
+  if ForeverRouteNewsBar then ForeverRouteNewsBar:Hide() end
+  if not ok then error(err, 0) end
+end)
+
+test("quest log full: pick-ups wait and the card goes to hand-ins and objectives first; with room again they come back", function()
+  local sv = { lc = ns.State.LogCount, lvl = UnitLevel }
+  withState({ [244] = { on = true, complete = true, objectives = {} } }, function()
+    ns.State.OnQuest = function(id) return id == 244 end
+    ns.State.QuestReady = function(id) return id == 244 end
+    ForeverRouteData = { id = "full", title = "full", sections = { { title = "x" } }, steps = {
+      { k = "accept", q = 1110, name = "Raven Hill", level = 28, m = 1431, x = 0.73, y = 0.46, sec = 1, lvl = 28 },
+      { k = "turnin", q = 244, name = "Encroaching Gnolls", level = 24, m = 1431, x = 0.75, y = 0.45, sec = 1, lvl = 28 },
+    } }
+    UnitLevel = function() return 28 end
+    ns.State.LogCount = function() return 40 end
+    ns.Fire("QUEST_LOG_UPDATE") -- (what the game fires when the log changes)
+    ns.Engine.Refresh()
+    assertEquals(2, ns.Engine.Shown(), "a full log should send you to the hand-in first")
+    assertEquals("full", ns.Engine.Status(1))
+    assertEquals("full", (ns.Engine.NotYet(1)))
+    ns.State.LogCount = function() return 12 end
+    -- (the full check is cached for a second; the log changing clears it)
+    ns.Fire("QUEST_LOG_UPDATE")
+    ns.Engine.Refresh()
+    assertEquals(1, ns.Engine.Shown(), "with room again the pick-up comes back")
+  end)
+  ns.State.LogCount, UnitLevel = sv.lc, sv.lvl
+end)
+
+----------------------------------------------------------------------------------------------------------------
+-- Where you start on the built-in plan (Engine.ChooseStart): by value, from where you stand
+----------------------------------------------------------------------------------------------------------------
+-- joinPlan() with a place to stand and a trip that costs 10 minutes between zones, none within one
+local function standing(m, fn)
+  local sv = { pos = ns.State.Position, plan = ns.Travel.Plan, min = ns.Engine.START_MIN_TURNINS }
+  ns.State.Position = function() return m, 0.5, 0.5 end
+  ns.Travel.Plan = function(from, to) return {}, (from.m == to.m) and 0 or 600 end
+  ns.Engine.START_MIN_TURNINS = 1
+  local ok, err = pcall(onBuiltIn, joinLog(), function() UnitLevel = function() return 30 end; fn() end)
+  ns.State.Position, ns.Travel.Plan, ns.Engine.START_MIN_TURNINS = sv.pos, sv.plan, sv.min
+  if not ok then error(err, 0) end
+end
+
+test("joining the built-in plan: you start in the stretch worth most from where you stand - its XP over its work and the travel it adds", function()
+  -- in Duskwood, whose level 28 stretch the plan has just before the trip a level 30 joins at: no trip to it, and the
+  -- trip on to the Wetlands is the one you'd make anyway
+  standing(1431, function()
+    ns.Engine.Refresh()
+    local _, at = ns.Engine.Place()
+    assertEquals(12, at)
+    local a, b = ns.Engine.FirstStretch()
+    assertEquals(9, a, "standing in Duskwood, its stretch is where to start"); assertEquals(11, b)
+    assertEquals(9, ns.Engine.Shown())
+    for i = 1, 8 do assertTrue(ns.Engine.IsDone(i), "step " .. i .. " is behind you") end
+    assertTrue(not ns.Engine.IsDone(10), "the stretch you start in was passed")
+    local _, priced = ns.Engine.ChooseStart(30)
+    assertTrue(#priced >= 2 and priced[1].from == 9 and priced[1].xph > priced[2].xph, "the stretches are priced, best first")
+    assertEquals(0, priced[1].extra, "a stretch around you adds no travel")
+    -- done there: on to the trip you joined at
+    ns.State.IsCompleted = function(id) return id == 1110 end
+    ns.Engine.Refresh()
+    assertEquals(12, ns.Engine.Shown())
+  end)
+  -- in the Wetlands: the plan's own trip costs nothing, Duskwood would be a detour there and back
+  standing(1437, function()
+    ns.Engine.Refresh()
+    assertNil(ns.Engine.FirstStretch(), "a detour won over the stretch you stand in")
+    assertEquals(12, ns.Engine.Shown())
+    assertTrue(ns.Engine.IsDone(10), "Duskwood's stretch is behind someone who starts in the Wetlands")
+  end)
+  -- in Stormwind, where the plan has you hand in Malin's Request after the Wetlands: that stretch first (though the
+  -- plan has it later), then the plan's order again
+  standing(1453, function()
+    ns.Engine.Refresh()
+    local a = ns.Engine.FirstStretch()
+    assertEquals(15, a, "the stretch in the city you stand in")
+    assertEquals(16, ns.Engine.Shown(), "its hand-in comes first (the hearth to it is not yours)")
+    assertTrue(not ns.Engine.IsDone(12), "the trip you joined at is still to do")
+    local q = ns.State.Quest
+    ns.State.Quest = function(id) if id == 690 then return { on = false, objectives = {} } end return q(id) end
+    ns.State.IsCompleted = function(id) return id == 690 end
+    ns.Engine.Refresh()
+    assertEquals(12, ns.Engine.Shown(), "after it, the plan's order")
+  end)
+end)
+
+test("a finished quest from before you joined is handed in first while you are in its hand-in's zone; an unfinished one stays yours", function()
+  standing(1433, function() -- Redridge: Encroaching Gnolls (finished) is handed in right here
+    ns.Engine.Refresh()
+    assertEquals(5, ns.Engine.Shown(), "the hand-in in your zone comes first")
+    assertTrue(ns.Engine.IsDone(6), "an unfinished quest from before you joined is not the plan's")
+    assertTrue(ns.Engine.IsDone(3), "a pick-up behind you is not opened by standing next to it")
+  end)
+  standing(1437, function() -- anywhere else it is behind you (and gets a stop where the route passes its NPC)
+    ns.Engine.Refresh()
+    assertTrue(ns.Engine.IsDone(5))
+    -- a quest picked up since you joined is the plan's, wherever it leads
+    ns.char.join.had[244] = nil
+    ns.Engine.Refresh()
+    assertTrue(not ns.Engine.IsDone(5), "a quest picked up since you joined was dropped")
+  end)
+end)
+
+test("the built-in plan first met in the start zone: you are following it, and nothing of the zone is behind you", function()
+  local sv = { lvl = UnitLevel, pk = ns.planKey, ready = ns.Engine.placeReady }
+  local ok, err = pcall(withState, {}, function()
+    ns.planKey = { starter = "gnome-warlock" }
+    ns.Engine.placeReady = true
+    ForeverRouteData = { id = "startzone", title = "startzone", sections = { { title = "Dun Morogh" } }, steps = {
+      { k = "accept", q = 179, name = "Dwarven Outfitters", level = 1, m = 1426, x = 0.30, y = 0.71, sec = 1, lvl = 1 },
+      { k = "turnin", q = 179, name = "Dwarven Outfitters", level = 1, m = 1426, x = 0.30, y = 0.71, sec = 1, lvl = 2 },
+      { k = "accept", q = 233, name = "Coldridge Valley Mail Delivery", level = 4, m = 1426, x = 0.30, y = 0.71, sec = 1, lvl = 4 },
+      { k = "turnin", q = 233, name = "Coldridge Valley Mail Delivery", level = 4, m = 1426, x = 0.23, y = 0.80, sec = 1, lvl = 5 },
+      { k = "accept", q = 287, name = "Frostmane Hold", level = 9, m = 1426, x = 0.46, y = 0.52, sec = 1, lvl = 6 },
+      { k = "fly", dest = "Stormwind", text = "Stormwind", sec = 1 },
+      { k = "accept", q = 333, name = "Harlan Needs a Resupply", level = 6, m = 1453, x = 0.5, y = 0.5, sec = 1, lvl = 7 },
+    } }
+    UnitLevel = function() return 5 end
+    ns.Engine.Refresh()
+    assertEquals(0, ns.char.join and ns.char.join.level, "a level 5 in the start zone was taken for someone joining")
+    assertEquals(1, ns.Engine.Shown())
+    for i = 1, 5 do assertTrue(not ns.Engine.IsDone(i), "step " .. i .. " of the start zone was passed") end
+    -- out of the start zone the usual rule holds: at 12, what the plan did at 7 and below is passed
+    UnitLevel = function() return 12 end; ns.char.join.seen = 12
+    ns.Engine.Refresh()
+    assertTrue(ns.Engine.IsDone(7))
+  end)
+  UnitLevel, ns.planKey, ns.Engine.placeReady = sv.lvl, sv.pk, sv.ready
+  if not ok then error(err, 0) end
+end)
+
+test("flight path hint: level 10+ with at most one known flight path is asked to open a flight master's map, once that's done it goes", function()
+  local sv = { lvl = UnitLevel, taxi = ns.State.knownTaxi, off = ns.db.hintTaxiOff }
+  local ok, err = pcall(function()
+    ns.db.hintTaxiOff = nil
+    UnitLevel = function() return 30 end
+    ns.State.knownTaxi = { ["Stormwind, Elwynn"] = true }
+    assertTrue(ns.Hints.Check(), "no hint at 30 with one flight path known"); assertTrue(ForeverRouteHintBar:IsShown())
+    ns.State.knownTaxi = { ["Stormwind, Elwynn"] = true, ["Southshore, Hillsbrad"] = true, ["Darkshire, Duskwood"] = true }
+    ns.Fire("FR_TAXI_OPENED")
+    assertTrue(not ForeverRouteHintBar:IsShown(), "the hint stayed after the flight paths were learned")
+    UnitLevel = function() return 6 end; ns.State.knownTaxi = {}
+    assertTrue(not ns.Hints.Check(), "a level 6 was asked")
+    UnitLevel = function() return 30 end; ns.db.hintTaxiOff = true
+    assertTrue(not ns.Hints.Check(), "dismissed for good, but shown again")
+  end)
+  UnitLevel, ns.State.knownTaxi, ns.db.hintTaxiOff = sv.lvl, sv.taxi, sv.off
+  if ForeverRouteHintBar then ForeverRouteHintBar:Hide() end
   if not ok then error(err, 0) end
 end)

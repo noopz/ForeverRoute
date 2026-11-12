@@ -4,6 +4,8 @@
 --             at this spot; target / use-item buttons; note or warning
 --   timeline: the next few steps on a vertical line with coloured nodes
 --   controls: icon buttons that fade in while the mouse is over the card
+--   inside a dungeon (no coordinates in there): the dungeon's name and what your quest log has for it, with live
+--             bars - Card.FillDungeon; the plan's step waits in the timeline below
 local _, ns = ...
 local Style = ns.Style
 local C = Style.C
@@ -115,6 +117,7 @@ local function build()
   cur.notOffered:SetScript("OnLeave", function(self) self.label:SetTextColor(0.55, 0.58, 0.66); GameTooltip:Hide() end)
   cur.notOffered:SetPoint("TOPRIGHT", cur.nope, "BOTTOMRIGHT", 0, -2)
   cur.bars = {}
+  cur.heads = {} -- the dungeon state's quest names, one above each quest's bars
   cur.note = Style.Text(cur, 11, C.sub)
 
   -- target / use-item: secure buttons on UIParent, placed at the card's slot out of combat
@@ -125,7 +128,7 @@ local function build()
   cur.target.icon = cur.target:CreateTexture(nil, "ARTWORK"); cur.target.icon:SetTexture(Style.MEDIA .. "icon-grind"); cur.target.icon:SetSize(12, 12); cur.target.icon:SetPoint("LEFT", 7, 0)
   cur.target.icon:SetVertexColor(1, 0.55, 0.5)
   cur.target.label = Style.Text(cur.target, 10, C.text); cur.target.label:SetPoint("LEFT", cur.target.icon, "RIGHT", 5, 0); cur.target.label:SetPoint("RIGHT", -6, 0); cur.target.label:SetWordWrap(false); cur.target.label:SetJustifyV("MIDDLE")
-  cur.target:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText("Click to target " .. (self.who or ""), 1, 1, 1); GameTooltip:AddLine("Works when they're close enough to see, in combat too.", 0.75, 0.8, 0.88, true); GameTooltip:AddLine("Want a key for it? Options > Keybindings > Forever Route, or a macro: /click ForeverRouteTargetButton", 0.5, 0.55, 0.62, true); GameTooltip:Show() end)
+  cur.target:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText("Click to target " .. (self.who or ""), 1, 1, 1); GameTooltip:AddLine("Works when they're close enough to see, in combat too.", 0.75, 0.8, 0.88, true); GameTooltip:AddLine("Want a key for it? Options > Keybindings, under AddOns: Forever Route Targeting.", 0.5, 0.55, 0.62, true); GameTooltip:Show() end)
   cur.target:SetScript("OnLeave", GameTooltip_Hide)
   cur.item = CreateFrame("Button", "ForeverRouteItemButton", UIParent, "SecureActionButtonTemplate"); cur.item:SetFrameStrata("HIGH")
   cur.item:SetSize(26, 26); cur.item:RegisterForClicks("AnyUp", "AnyDown"); cur.item:SetAttribute("type", "item")
@@ -373,6 +376,7 @@ function Card.TripKind(s)
     k = lk
   end
   if not k or k == "fly" then return nil end
+  if k == "ride" and ns.RideWord then ns.RideWord() end -- "Run to" until you can ride
   return Style.KIND[k]
 end
 
@@ -387,11 +391,81 @@ local function objectiveBar(bar, s, o, kind)
   bar:Show()
 end
 
+-- Inside a dungeon: the game gives no coordinates in there, so no plan step can be pointed at. The card shows the
+-- dungeon and what your quest log has for it instead (Dungeon.lua): each quest with a live bar per objective, the
+-- finished ones ticked; quests picked up inside; and the ones you could have brought but didn't. The plan's own step
+-- is the first line of the timeline below. Walking out brings the normal card back.
+Card.DUNGEON_BARS = 12 -- bars at most; quests past that are one line each in the note
+local TICK = "|T" .. Style.MEDIA .. "icon-check:12|t "
+local function namesOf(list, max)
+  local t = {}
+  for k, e in ipairs(list) do
+    if k > max then t[#t + 1] = string.format("+%d more", #list - max); break end
+    t[#t + 1] = e.name .. (e.from and (" |cff6c7486(" .. e.from .. ")|r") or "")
+  end
+  return table.concat(t, ", ")
+end
+function Card.FillDungeon(name, id, bar, look)
+  local cur = f.cur
+  local st = ns.Dungeon.State(id)
+  local kind = Style.KIND.obj
+  look(kind.color, "icon-kill")
+  cur.dungeon = { name = name, id = id, done = st.done, total = st.total }
+  cur.titleText:SetText(Style.Hex(Style.ZoneColor(name)) .. name .. "|r")
+  local left = 0
+  for _, q in ipairs(st.quests) do if not q.ready then left = left + 1 end end
+  if #st.quests == 0 then cur.detail:SetText("Nothing in your quest log is done in here")
+  elseif left == 0 then cur.detail:SetText(string.format("All %d quest%s for here done", #st.quests, #st.quests == 1 and "" or "s"))
+  else cur.detail:SetText(string.format("%d quest%s to do in here%s", left, left == 1 and "" or "s", #st.quests > left and string.format("  ·  %d done", #st.quests - left) or "")) end
+  cur.dist:SetText("")
+  local lines, over = {}, {}
+  local function head(text)
+    local n = cur.nbars + 1 -- sits above the next bar
+    local h = cur.heads[n]
+    if not h then h = Style.Text(cur, 11, C.text); h:SetWordWrap(false); h:SetJustifyH("LEFT"); cur.heads[n] = h end
+    h:SetText(text); cur.headAt[n] = h
+  end
+  for _, q in ipairs(st.quests) do
+    local title = Style.Hex(C.gold) .. q.name .. "|r"
+    if q.ready then
+      lines[#lines + 1] = TICK .. "|cff5cdc7a" .. q.name .. "|r |cff6c7486- done|r"
+    elseif cur.nbars + math.max(1, #q.objectives) > Card.DUNGEON_BARS then
+      local n = 0
+      for _, o in ipairs(q.objectives) do if not o.finished then n = n + 1 end end
+      over[#over + 1] = q.name .. (n > 0 and string.format(" |cff6c7486(%d left)|r", n) or "")
+    else
+      head(title)
+      if #q.objectives == 0 then local b = bar(); b:Set(0, kind.color, "See your quest log", ""); b:Show() end
+      for _, o in ipairs(q.objectives) do
+        local b = bar()
+        if o.need > 0 then
+          local label = o.text:gsub(":%s*%d+%s*/%s*%d+%s*$", ""):gsub("^%s*%d+%s*/%s*%d+%s*", "")
+          b:Set(o.finished and 1 or o.have / o.need, kind.color, label, string.format("%d/%d", o.have, o.need))
+        else
+          b:Set(o.finished and 1 or 0, kind.color, o.text, "")
+        end
+        b:Show()
+      end
+    end
+  end
+  if #over > 0 then table.insert(lines, 1, "Also: " .. table.concat(over, ", ")) end
+  if #st.inside > 0 then lines[#lines + 1] = Style.Hex(C.gold) .. "Picked up in here:|r " .. namesOf(st.inside, 4) end
+  if #st.missed > 0 then lines[#lines + 1] = "|cff8a93a6Not picked up:|r " .. namesOf(st.missed, 4) end
+  setNote(table.concat(lines, "\n"), C.sub)
+  f.title:SetText("|cffff7a6b" .. name:upper() .. "|r  |cff8a93a6DUNGEON|r")
+  Card.UpdateProgress()
+  Card.SetButtons(nil)
+end
+
 function Card.Fill()
   if not f then return end
   local cur = f.cur
   local i = ns.Engine.Shown()
   for _, b in ipairs(cur.bars) do b:Hide() end
+  for _, h in ipairs(cur.heads) do h:Hide() end
+  cur.headAt = {}
+  local wasDungeon = cur.dungeon
+  cur.dungeon = nil
   cur.nbars = 0
   cur.choice = nil; for _, r in ipairs(cur.optRows or {}) do r:Hide() end
   cur.map:Hide(); cur.nope:Hide(); cur.notOffered:Hide()
@@ -401,6 +475,12 @@ function Card.Fill()
     cur.accent:SetVertexColor(color[1], color[2], color[3], 0.9); cur.icon:SetTexture(Style.MEDIA .. glyph)
   end
   local data = ns.Demo and ns.Demo.active and ns.Demo.data or ForeverRouteData
+  -- inside a dungeon the card is about the dungeon (not while you look at another step, or in the demo)
+  if not ns.Engine.view and not (ns.Demo and ns.Demo.active) and ns.Dungeon then
+    local dname, did = ns.Dungeon.Inside()
+    if did then Card.FillDungeon(dname, did, bar, look); return end
+  end
+  if wasDungeon then Card.Header(); Card.UpdateProgress() end -- back out: the plan's own header again
   if not data then
     look(C.dim, "icon-note"); cur.titleText:SetText("No route loaded"); cur.detail:SetText("Run the planner on your PC, then /reload."); setNote("")
     Card.SetButtons(nil); return
@@ -459,7 +539,7 @@ function Card.Fill()
       return "Left for your next dungeon run (what's still to do is inside) - or skip it; the route goes on.", C.sub
     elseif status == "wait" then
       return string.format("Needs level %d.  %s", s.minLevel or s.until_ or 0, Card.Note(s) or ""), C.warn
-    elseif s.k == "accept" and ns.State.LogCount() >= ns.State.MaxLog() then
+    elseif s.k == "accept" and (status == "full" or ns.State.LogCount() >= ns.State.MaxLog()) then
       -- a warning on the quest itself (elites, an escort) still matters once there is room
       return string.format("Quest log full (%d/%d) - hand in or abandon something first.", ns.State.LogCount(), ns.State.MaxLog())
         .. ((s.warn and s.note) and ("\n" .. Style.Hex(C.warn) .. Card.Note(s) .. "|r") or ""), C.bad
@@ -532,13 +612,29 @@ function Card.Fill()
   Card.SetButtons(s)
 end
 
+-- The Target button's macro (also its key, Options > Keybindings > AddOns): target the NPC by name, then put a star on
+-- it - "/tm 1", but only when it isn't starred already (the button fires on key down and up, and /tm on a starred
+-- target takes the star off). Marking is not protected, so it works solo and in combat.
+Card.MARK = 1 -- the star
+function Card.TargetMacro(who)
+  return "/cleartarget\n/target " .. who .. "\n/targetexact " .. who .. "\n/run ForeverRoute.Card.MarkTarget()"
+end
+function Card.MarkTarget()
+  if not (ns.db and ns.db.markTarget ~= false) then return false end
+  if not (UnitExists and UnitExists("target")) or ns.Is(UnitIsPlayer, "target") then return false end
+  local ok, cur = pcall(GetRaidTargetIndex, "target")
+  if ok and cur == Card.MARK then return false end
+  return (pcall(SetRaidTarget, "target", Card.MARK))
+end
+
 function Card.SetButtons(s)
   local cur = f.cur
   local who = s and (s.target or ((s.k == "accept" or s.k == "turnin" or s.k == "bind" or s.k == "fp" or s.k == "train") and s.npc))
   local item = s and s.k ~= "bonus" and s.item -- books are looted, not used
   cur.wantTarget, cur.wantItem = who, item
   setSecure(function()
-    if who then cur.target:SetAttribute("macrotext", "/cleartarget\n/target " .. who .. "\n/targetexact " .. who); cur.target.who = who; cur.target.label:SetText(who) end
+    if who then cur.target:SetAttribute("macrotext", Card.TargetMacro(who)); cur.target.who = who; cur.target.label:SetText(who)
+    else cur.target:SetAttribute("macrotext", ""); cur.target.who = nil end -- the key does nothing on a step with no one to target
     if item then
       cur.item:SetAttribute("item", "item:" .. item); cur.item.itemID = item
       cur.item.icon:SetTexture((ns.GetItemIcon and ns.GetItemIcon(item)) or 134400)
@@ -574,6 +670,8 @@ function Card.Layout()
   y = math.max(y, 38)
   for k = 1, cur.nbars or 0 do
     local b = cur.bars[k]
+    local h = cur.headAt and cur.headAt[k]
+    if h then h:ClearAllPoints(); h:SetPoint("TOPLEFT", cur, "TOPLEFT", x0, -(y + 9)); h:SetPoint("RIGHT"); h:Show(); y = y + 9 + 11 end
     b:ClearAllPoints(); b:SetPoint("TOPLEFT", cur, "TOPLEFT", x0, -(y + 8)); b:SetPoint("RIGHT")
     y = y + 8 + 18
   end
@@ -605,7 +703,9 @@ function Card.Layout()
   end
   local up = ns.Engine.Upcoming(ns.Engine.Shown(), 8)
   local grouped = {}; for _, j in ipairs(ns.Engine.Group(ns.Engine.Shown() or 0)) do grouped[j] = true end
-  local rows = {}; for _, j in ipairs(up) do if not grouped[j] and #rows < (ns.db.showNext or 3) then rows[#rows + 1] = j end end
+  local rows = {}
+  if cur.dungeon and ns.Engine.Shown() then rows[1] = ns.Engine.Shown() end -- the plan's step, for when you're out again
+  for _, j in ipairs(up) do if not grouped[j] and #rows < (ns.db.showNext or 3) then rows[#rows + 1] = j end end
   for k, r in ipairs(f.rows) do
     local i = rows[k]
     if i then
@@ -701,7 +801,7 @@ function Card.Layout()
     local show = true
     if name == "undo" then show = #ns.char.history > 0 end
     if name == "fwd" then show = viewing end
-    if (name == "done" or name == "skip") and viewing then show = false end
+    if (name == "done" or name == "skip") and (viewing or cur.dungeon) then show = false end -- (in a dungeon the card's step isn't the one on show)
     b:SetShown(show)
     if show then b:ClearAllPoints(); b:SetPoint("RIGHT", f.ctl, "RIGHT", -x, 0); x = x + 23 end
   end
@@ -826,18 +926,30 @@ ns.On("ZONE_CHANGED_NEW_AREA", function() C_Timer.After(2, function() pcall(Card
 
 function Card.UpdateProgress()
   if not f then return end
+  -- inside a dungeon: its quests' objectives, done of all
+  local dg = f.cur and f.cur.dungeon
+  if dg then
+    f.count:SetText(dg.total > 0 and string.format("%d/%d", dg.done, dg.total) or "")
+    f.progFill:SetWidth(math.max(0.001, (f.prog:GetWidth() or 0) * (dg.total > 0 and dg.done / dg.total or 0)))
+    return
+  end
   -- progress through this zone (a fresh plan doesn't reset it to nothing; the whole plan is in /fr list)
   local done, total, zone = ns.Engine.LegProgress()
   f.count:SetText(total > 0 and string.format("%s%d/%d", zone and (Style.ShortZone(zone) .. "  ") or "", done, total) or "")
   f.progFill:SetWidth(math.max(0.001, (f.prog:GetWidth() or 0) * (total > 0 and done / total or 0)))
 end
 
-function Card.Update(animate)
-  if not f then return end
+function Card.Header()
   local i = ns.Engine.Shown()
   local sec = i and section(i)
   local dname = ForeverRouteData and ForeverRouteData.dungeon and (ForeverRouteData.dungeonName or ForeverRouteData.title)
   f.title:SetText((dname and ("|cffff7a6b" .. dname:upper() .. "|r  ") or "") .. (sec and (sec.title:upper() .. (not dname and sec.zone and sec.zone ~= sec.title and ("  |cff8a93a6" .. sec.zone .. "|r") or "")) or (ForeverRouteData and ForeverRouteData.title or "Forever Route")))
+end
+function Card.Update(animate)
+  if not f then return end
+  local i = ns.Engine.Shown()
+  -- (inside a dungeon the header is the dungeon's: Card.FillDungeon)
+  if not (f.cur.dungeon and ns.Dungeon and ns.Dungeon.Inside()) then Card.Header() end
   Card.UpdateProgress()
   local s = i and steps()[i]
   local meta = ForeverRouteData and ForeverRouteData.meta
@@ -855,6 +967,7 @@ end
 ns.On("FR_LOADED", function() build(); f:SetShown(not ns.db.hidden); Card.Update() end)
 ns.On("FR_STEP_DONE", function() if f then Card.Update(true) end end)
 ns.On("FR_STEP", function() Card.Update(false) end)
+ns.On("FR_DUNGEON", function() if f then Card.Update(false) end end) -- walked into or out of a dungeon
 ns.On("FR_XP", function() local s = ns.Engine.current and steps()[ns.Engine.current]; if f and s and s.k == "grind" and not f.cur.animOut:IsPlaying() then Card.Fill(); Card.Layout() end end)
 ns.On("FR_TOGGLE", function() ns.db.hidden = not ns.db.hidden; f:SetShown(not ns.db.hidden) end)
 ns.On("FR_SETTINGS", function() if f then f:SetScale(ns.db.scale or 1); f:SetWidth(ns.db.cardWidth); Card.Update() end end)

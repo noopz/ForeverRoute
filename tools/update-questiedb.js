@@ -6,7 +6,7 @@
 //   3. decode the baked data (extract-qdb.js) and build db.json (build-db.js: Classic XP + Forever's measured XP, drop
 //      tables, our overrides) into temporary files; refused if it lost more than 5% of the quests, else swapped in
 //      (the old one kept as qdb/db.old.json)
-//   4. regenerate what's made from it: flight masters, vendors, breadcrumbs, the other faction's towns, travel data
+//   4. regenerate what's made from it: flight masters, vendors, dungeon quests, breadcrumbs, the other faction's towns, travel data
 //   5. the planner's tests; then --install runs tools/install.sh (the addon's tests + live check) and --plans rebuilds
 //      the built-in plans (tools/starters-all.sh, hours)
 // Your installed QuestieDB addon in the game is never touched. usage: node tools/update-questiedb.js [--force] [--install] [--plans]
@@ -85,10 +85,11 @@ function get(url, binary) {
   node('map-extras.js');
   node('flightmasters.js', db, conv, path.join(addon, 'FlightMasters.lua'));
   node('vendors.js', db, conv, path.join(addon, 'Vendors.lua'));
+  node('dungeon-quests.js', db, path.join(QDB, 'support', 'Forever', 'Zones', 'dungeons.lua'), path.join(QDB, 'client'), path.join(addon, 'DungeonQuests.lua'), conv); // (qdb/client: Map.csv + AreaTable.csv - node tools/dungeon-quests.js --fetch)
   node('gen-breadcrumbs.js');
   node('hostile-towns.js');
   node('gen-travel-data.js');
-  log('regenerated: flight masters, vendors, breadcrumbs, hostile towns, travel data');
+  log('regenerated: flight masters, vendors, dungeon quests, breadcrumbs, hostile towns, travel data');
 
   // 5. checks
   for (const t of ['test-route2-tasks.js', 'test-route2-sim.js', 'test-lint.js', 'test-travel.js', 'test-quality.js']) {

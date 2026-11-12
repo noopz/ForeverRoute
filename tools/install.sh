@@ -10,6 +10,11 @@ GAME="$(cygpath -u "$(node "$ROOT/tools/game-dir.js")")" # the game's _forever_ 
 DEST="$GAME/Interface/AddOns/ForeverRoute"
 # yes/no questions to the game go through ns.Is (Core.lua): Forever hides some answers in dungeons and combat, and
 # testing a hidden one is an error. A raw call here is refused before anything runs.
+# keybindings: the simulator loads none, so the file is checked here (tools/check-bindings.js)
+# the in-game what's new comes from CHANGELOG.md
+node "$ROOT/tools/gen-news.js" >/dev/null || { echo "NOT installed (News.lua)"; exit 1; }
+node "$ROOT/tools/check-bindings.js" "$SRC" || { echo "NOT installed (Bindings.xml)"; exit 1; }
+node "$ROOT/tools/check-report.js" || { echo "NOT installed (/fr report format)"; exit 1; }
 RAW=$(cd "$SRC" && grep -rnE '(UnitOnTaxi|UnitIsAFK|UnitIsDeadOrGhost|UnitIsGhost|IsFlying|IsIndoors|IsInInstance|IsMounted|IsSwimming|IsResting|UnitInVehicle)[(]' --include=*.lua . | grep -v '^./tests/' | grep -v '^./Libs/')
 if [ -n "$RAW" ]; then echo "$RAW"; echo "NOT installed (ask the game through ns.Is: a hidden answer is an error otherwise)"; exit 1; fi
 SIM="$ROOT/sim/pkg/wow-ui-sim-v0.1.40-forever-windows-x86_64"

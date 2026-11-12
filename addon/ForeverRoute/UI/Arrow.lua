@@ -248,6 +248,10 @@ function Arrow.SetTarget(i, force)
   -- Pointing anywhere would read as "go back" (or as a trip planned from the sky). Landing re-targets.
   local step = s
   if s and ns.Is(UnitOnTaxi, "player") then s = nil end
+  -- inside a dungeon the game gives no position: nothing to measure a direction from (the card lists the dungeon's
+  -- quests instead). Walking out re-targets (FR_DUNGEON).
+  local inDungeon = ns.Dungeon and ns.Dungeon.Inside()
+  if inDungeon then s = nil end
   local m, x, y, label = s and s.m, s and s.x, s and s.y, nil
   local leg -- how you travel from the waypoint the arrow points at ("fly", "boat", ...), when it is not the step itself
   if s and not x then
@@ -310,12 +314,13 @@ function Arrow.SetTarget(i, force)
   else
     target = nil; f:Hide(); ns.Fire("FR_DISTANCE", nil)
     if ns.Nav then ns.Nav.Want(nil) end
-    noteHidden(not step and "no step" or ns.Is(UnitOnTaxi, "player") and "on a flight" or (trip and trip.how == "aboard") and "aboard (boat or tram, or somewhere no trip starts from)" or step.k == "hearth" and "hearth step (nowhere to walk)" or ("no position for this step: " .. tostring(step.k) .. " " .. tostring(step.text)))
+    noteHidden(not step and "no step" or inDungeon and ("inside " .. inDungeon .. " (no coordinates in a dungeon)") or ns.Is(UnitOnTaxi, "player") and "on a flight" or (trip and trip.how == "aboard") and "aboard (boat or tram, or somewhere no trip starts from)" or step.k == "hearth" and "hearth step (nowhere to walk)" or ("no position for this step: " .. tostring(step.k) .. " " .. tostring(step.text)))
   end
 end
 
 ns.On("FR_LOADED", build)
 ns.On("FR_STEP", function(i) Arrow.SetTarget(i) end)
+ns.On("FR_DUNGEON", function() if f then Arrow.SetTarget(ns.Engine.Shown(), true) end end)
 -- a new zone can change the way there (landed, or rode across a border)
 ns.On("ZONE_CHANGED_NEW_AREA", function() C_Timer.After(1, function() if f then Arrow.SetTarget(ns.Engine.Shown(), true) end end) end)
 -- a different route can have a step at the same position: always rebuild the target

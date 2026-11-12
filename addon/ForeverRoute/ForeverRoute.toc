@@ -18,11 +18,14 @@ State.lua
 Route.lua
 FlightMasters.lua
 Vendors.lua
+DungeonQuests.lua
+Dungeon.lua
 Engine.lua
 Quests.lua
 Trails.lua
 Boats.lua
 TravelData.lua
+News.lua
 Breadcrumbs.lua
 Travel.lua
 Nav\Nav1429.lua
@@ -45,4 +48,7 @@ UI\Offers.lua
 UI\Errands.lua
 UI\Extras.lua
 UI\Options.lua
+UI\Report.lua
+UI\News.lua
+UI\Hints.lua
 Demo.lua

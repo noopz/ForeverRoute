@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 VER="${1:-$(sed -n 's/^## Version: *//p' addon/ForeverRoute/ForeverRoute.toc | tr -d '\r')}"
 rm -rf dist && mkdir -p dist/pkg
+node tools/gen-news.js >/dev/null # the in-game what's new, from CHANGELOG.md
 cp -r addon/ForeverRoute dist/pkg/
 rm -rf dist/pkg/ForeverRoute/tests
 # your own plan (the companion writes it) is never shipped

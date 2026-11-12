@@ -38,7 +38,7 @@ local function findIn(route, id)
   if not route then return nil end
   local steps = route.steps or {}
   for i, s in ipairs(steps) do
-    if s.q == id then
+    if s.q == id and not (ns.Engine.BehindYou and ns.Engine.BehindYou(s)) then -- (a step behind you is not on your route)
       -- the planned level there (steps the safety net added have none: use the nearest step that has one)
       for j = i, math.min(#steps, i + 30) do if steps[j].lvl then return i, steps[j].lvl end end
       for j = i - 1, math.max(1, i - 30), -1 do if steps[j].lvl then return i, steps[j].lvl end end
@@ -78,7 +78,7 @@ function LogCheck.Classify()
       verdict, why = "keep", "Worth keeping: " .. keep
     elseif i then
       local st -- this quest's hand-in step on the route (the first step found may be its accept)
-      for _, s in ipairs((where and where.steps) or {}) do if s.q == e.id and s.k == "turnin" then st = s; break end end
+      for _, s in ipairs((where and where.steps) or {}) do if s.q == e.id and s.k == "turnin" and not (ns.Engine.BehindYou and ns.Engine.BehindYou(s)) then st = s; break end end
       if done and ns.Engine.GrayHandIn and ns.Engine.GrayHandIn(st) then
         -- the route passes this hand-in (finished, far below you, opens nothing): the card won't send you there
         verdict, why = "drop", "Gray and nothing follows it - your route skips this hand-in (not worth a trip)"

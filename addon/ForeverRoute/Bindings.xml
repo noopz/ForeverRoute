@@ -4,4 +4,5 @@
   <Binding name="FOREVERROUTE_UNDO" category="ADDONS">ForeverRoute.Engine.Undo()</Binding>
   <Binding name="FOREVERROUTE_TOGGLE" category="ADDONS">ForeverRoute.Fire("FR_TOGGLE")</Binding>
   <Binding name="FOREVERROUTE_LIST" category="ADDONS">ForeverRoute.Fire("FR_TOGGLE_LIST")</Binding>
+  <Binding name="CLICK ForeverRouteTargetButton:LeftButton" category="ADDONS"/>
 </Bindings>
