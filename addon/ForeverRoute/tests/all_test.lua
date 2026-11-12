@@ -788,9 +788,9 @@ test("the dungeon run step is done while you're inside that dungeon", function()
   end)
 end)
 
-test("the target button sits above the card and targets the NPC by name", function()
+test("the target button is on the card's layer and targets the NPC by name", function()
   assertNotNil(ForeverRouteTargetButton)
-  assertEquals("HIGH", ForeverRouteTargetButton:GetFrameStrata())
+  assertEquals(ForeverRouteCard:GetFrameStrata(), ForeverRouteTargetButton:GetFrameStrata())
   assertEquals("macro", ForeverRouteTargetButton:GetAttribute("type"))
   local s = { k = "turnin", q = 1, name = "x", npc = "Gryan Stoutmantle", sec = 1 }
   ns.Card.SetButtons(s)
@@ -4353,6 +4353,18 @@ test("what's new: a bar under the card once per version for someone updating, ne
     ns.News.Show(nil)
     assertTrue(ForeverRouteNews:GetHeight() <= ns.News.MAX_HEIGHT + 0.5, "the panel grew to " .. ForeverRouteNews:GetHeight())
     assertTrue(ForeverRouteNewsScroll:GetVerticalScrollRange() > 0, "long notes do not scroll")
+    -- older versions on request, and the panel resizes
+    ns.NEWS = { { version = "1.3.1", date = "d", items = { "x" } }, { version = "1.3.0", date = "d", items = { "y" } }, { version = "1.2.0", date = "d", items = { "z" } } }
+    ns.db.newsSize = nil
+    ns.News.Show("1.3.0")
+    local function body() return ForeverRouteNews.body:GetText() or "" end
+    assertTrue(body():find("1.3.1", 1, true) and not body():find("1.2.0", 1, true), "showed more than what is new")
+    assertTrue(ForeverRouteNews.older:IsShown(), "no way to see older versions")
+    ForeverRouteNews.older:Click()
+    assertTrue(body():find("1.2.0", 1, true) ~= nil, "Older versions did not add the earlier notes")
+    assertTrue(not ForeverRouteNews.older:IsShown(), "Older versions still offered with everything shown")
+    assertTrue(ForeverRouteNews:IsResizable(), "the panel cannot be resized")
+    assertNotNil(ForeverRouteNewsGrip, "no resize grip")
     ForeverRouteNews:Hide()
     assertTrue(ns.News.Newer("1.2.10", "1.2.9")); assertTrue(not ns.News.Newer("1.2.2", "1.2.2"))
   end)
@@ -4506,4 +4518,36 @@ test("flight path hint: level 10+ with at most one known flight path is asked to
   UnitLevel, ns.State.knownTaxi, ns.db.hintTaxiOff = sv.lvl, sv.taxi, sv.off
   if ForeverRouteHintBar then ForeverRouteHintBar:Hide() end
   if not ok then error(err, 0) end
+end)
+
+test("Target button: on the card's layer just above it (not over the character sheet), Ctrl-click doesn't target, Ctrl+drag spot kept, /fr target reset", function()
+  local sv = { pos = ns.db.targetPos }
+  ForeverRouteTest.withWorld({ id = "tb", title = "tb", sections = { { title = "x" } }, steps = {
+    { k = "accept", q = 783, name = "A Threat Within", npc = "Deputy Willem", level = 1, m = 1429, x = 0.48, y = 0.43, sec = 1, lvl = 1 },
+  } }, function(w)
+    local t, card = ForeverRouteTargetButton, ForeverRouteCard
+    ns.db.targetPos = nil
+    ns.Card.PlaceSecure()
+    assertEquals(card:GetFrameStrata(), t:GetFrameStrata(), "the Target button is not on the card's layer")
+    assertTrue(t:GetFrameStrata() ~= "HIGH" and t:GetFrameStrata() ~= "DIALOG", "it floats over windows: " .. t:GetFrameStrata())
+    assertTrue(t:GetFrameLevel() > card:GetFrameLevel(), "under the card: the card would take its clicks")
+    assertEquals("macro", t:GetAttribute("ctrl-type1")); assertEquals("", t:GetAttribute("ctrl-macrotext1"))
+    assertTrue(t:IsMovable(), "not movable")
+    -- a spot you dragged it to is where it goes (the card up, filled and laid out, on a step with an NPC)
+    ns.db.collapsed = nil; ns.Engine.view = nil; card:Show(); ns.Card.Fill(); ns.Card.SetButtons(ForeverRouteData.steps[1]); ns.Card.Layout()
+    ns.db.targetPos = { 300, 400 }
+    ns.Card.PlaceSecure()
+    local s = UIParent:GetEffectiveScale() / t:GetEffectiveScale()
+    local cur = card.cur
+    if not t:IsShown() then error("the Target button is hidden on a step with an NPC: card " .. tostring(card:IsShown()) .. " collapsed " .. tostring(ns.db.collapsed) .. " btnY " .. tostring(cur and cur.btnY) .. " left " .. tostring(cur and cur:GetLeft()) .. " view " .. tostring(ns.Engine.view) .. " want " .. tostring(cur and cur.wantTarget) .. " combat " .. tostring(InCombatLockdown()), 0) end
+    do
+      local _, _, _, x, y = t:GetPoint(1)
+      assertTrue(math.abs(x - 300 * s) < 1 and math.abs(y - 400 * s) < 1, "not at the dragged spot: " .. tostring(x) .. "," .. tostring(y))
+      SlashCmdList["FOREVERROUTE"]("target reset")
+      assertNil(ns.db.targetPos, "/fr target reset kept the spot")
+      local _, _, _, x2 = t:GetPoint(1)
+      assertTrue(math.abs(x2 - 300 * s) > 1, "reset did not put it back on the card")
+    end
+  end, { anyTarget = true })
+  ns.db.targetPos = sv.pos
 end)

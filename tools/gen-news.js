@@ -1,10 +1,10 @@
 // The in-game "what's new" (UI/News.lua) from CHANGELOG.md: the last few versions' lines, as addon/ForeverRoute/News.lua.
 // Run by tools/install.sh and tools/package.sh, so the game and the changelog never disagree.
-// usage: node tools/gen-news.js [CHANGELOG.md] [out News.lua] [versions=4]
+// usage: node tools/gen-news.js [CHANGELOG.md] [out News.lua] [versions=all]
 const fs = require('fs');
 const path = require('path');
 const ROOT = path.join(__dirname, '..');
-const [src = path.join(ROOT, 'CHANGELOG.md'), out = path.join(ROOT, 'addon', 'ForeverRoute', 'News.lua'), n = '4'] = process.argv.slice(2);
+const [src = path.join(ROOT, 'CHANGELOG.md'), out = path.join(ROOT, 'addon', 'ForeverRoute', 'News.lua'), n = '99'] = process.argv.slice(2);
 const md = fs.readFileSync(src, 'utf8');
 const versions = [];
 for (const part of md.split(/^## /m).slice(1)) {

@@ -473,6 +473,7 @@ SlashCmdList.FOREVERROUTE = function(msg)
   elseif msg == "why" then ns.WhyPrint(15)
   elseif msg == "save" then if ns.Card and ns.Card.Save then ns.Card.Save() else ReloadUI() end
   elseif msg == "dungeons" or msg == "dungeon" or msg == "trips" or msg == "bag" then ns.Fire("FR_TOGGLE_DUNGEONS")
+  elseif msg == "target reset" then ns.db.targetPos = nil; if ns.Card and ns.Card.PlaceSecure then ns.Card.PlaceSecure() end; ns.Print("Target button back on the card.")
   elseif msg == "news" then ns.Fire("FR_NEWS")
   elseif msg == "report" then ns.Fire("FR_REPORT", false)
   elseif msg == "report full" then ns.Fire("FR_REPORT", true)

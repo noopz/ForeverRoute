@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1 - 2026-11-11
+- The Target button sits with the card instead of over every window (the character sheet covers it now).
+- Ctrl+drag the Target button anywhere; `/fr target reset` puts it back.
+- What's new: resizable, and "Older versions" shows earlier notes.
+
 ## 1.3.0 - 2026-11-11
 - Starting at any level: the built-in plan picks up where you are, choosing the best nearby part of the plan for your level.
 - No more far-away stops (like another zone's flight path) put in front of you.

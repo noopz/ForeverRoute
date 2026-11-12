@@ -121,16 +121,29 @@ local function build()
   cur.note = Style.Text(cur, 11, C.sub)
 
   -- target / use-item: secure buttons on UIParent, placed at the card's slot out of combat
-  cur.target = CreateFrame("Button", "ForeverRouteTargetButton", UIParent, "SecureActionButtonTemplate"); cur.target:SetFrameStrata("HIGH") -- above the card, so the card cannot take the click
+  -- on the card's own layer, just above the card (Card.PlaceSecure sets the level): what covers the card - the
+  -- character sheet, the map - covers these too (on "HIGH" they floated over every window)
+  cur.target = CreateFrame("Button", "ForeverRouteTargetButton", UIParent, "SecureActionButtonTemplate"); cur.target:SetFrameStrata(f:GetFrameStrata())
+  -- Ctrl+drag puts it wherever you like (ns.db.targetPos; /fr target reset brings it back); a Ctrl-click runs an empty
+  -- macro, so grabbing it never targets
+  cur.target:SetAttribute("ctrl-type1", "macro"); cur.target:SetAttribute("ctrl-macrotext1", "")
+  cur.target:SetMovable(true); cur.target:RegisterForDrag("LeftButton"); cur.target:SetClampedToScreen(true)
+  cur.target:SetScript("OnDragStart", function(self) if IsControlKeyDown() and not InCombatLockdown() then self:StartMoving() end end)
+  cur.target:SetScript("OnDragStop", function(self)
+    self:StopMovingOrSizing(); self:SetUserPlaced(false) -- (ours to keep, not the game's layout cache)
+    local l, t, s = self:GetLeft(), self:GetTop(), self:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    if l and t then ns.db.targetPos = { l * s, t * s } end
+    Card.PlaceSecure()
+  end)
   cur.target:SetSize(140, 20); cur.target:RegisterForClicks("AnyUp", "AnyDown"); cur.target:SetAttribute("type", "macro")
   Style.Nine(cur.target, "panel", "BACKGROUND", 0, 8, 0, 1, 0.47, 0.42, 0.2)
   local thl = cur.target:CreateTexture(nil, "HIGHLIGHT"); thl:SetTexture(Style.WHITE); thl:SetPoint("TOPLEFT", 3, -3); thl:SetPoint("BOTTOMRIGHT", -3, 3); thl:SetVertexColor(1, 1, 1, 0.07)
   cur.target.icon = cur.target:CreateTexture(nil, "ARTWORK"); cur.target.icon:SetTexture(Style.MEDIA .. "icon-grind"); cur.target.icon:SetSize(12, 12); cur.target.icon:SetPoint("LEFT", 7, 0)
   cur.target.icon:SetVertexColor(1, 0.55, 0.5)
   cur.target.label = Style.Text(cur.target, 10, C.text); cur.target.label:SetPoint("LEFT", cur.target.icon, "RIGHT", 5, 0); cur.target.label:SetPoint("RIGHT", -6, 0); cur.target.label:SetWordWrap(false); cur.target.label:SetJustifyV("MIDDLE")
-  cur.target:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText("Click to target " .. (self.who or ""), 1, 1, 1); GameTooltip:AddLine("Works when they're close enough to see, in combat too.", 0.75, 0.8, 0.88, true); GameTooltip:AddLine("Want a key for it? Options > Keybindings, under AddOns: Forever Route Targeting.", 0.5, 0.55, 0.62, true); GameTooltip:Show() end)
+  cur.target:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText("Click to target " .. (self.who or ""), 1, 1, 1); GameTooltip:AddLine("Works when they're close enough to see, in combat too.", 0.75, 0.8, 0.88, true); GameTooltip:AddLine("Want a key for it? Options > Keybindings, under AddOns: Forever Route Targeting.", 0.5, 0.55, 0.62, true); GameTooltip:AddLine("Ctrl+drag to move it (/fr target reset puts it back).", 0.5, 0.55, 0.62, true); GameTooltip:Show() end)
   cur.target:SetScript("OnLeave", GameTooltip_Hide)
-  cur.item = CreateFrame("Button", "ForeverRouteItemButton", UIParent, "SecureActionButtonTemplate"); cur.item:SetFrameStrata("HIGH")
+  cur.item = CreateFrame("Button", "ForeverRouteItemButton", UIParent, "SecureActionButtonTemplate"); cur.item:SetFrameStrata(f:GetFrameStrata())
   cur.item:SetSize(26, 26); cur.item:RegisterForClicks("AnyUp", "AnyDown"); cur.item:SetAttribute("type", "item")
   local ibg = cur.item:CreateTexture(nil, "BACKGROUND"); ibg:SetTexture(Style.WHITE); ibg:SetAllPoints(); ibg:SetVertexColor(0, 0, 0, 0.8)
   cur.item.icon = cur.item:CreateTexture(nil, "ARTWORK"); cur.item.icon:SetPoint("TOPLEFT", 1, -1); cur.item.icon:SetPoint("BOTTOMRIGHT", -1, 1); cur.item.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -650,9 +663,14 @@ function Card.PlaceSecure()
   local left, top = cur:GetLeft(), cur:GetTop()
   if not (f:IsShown() and not ns.db.collapsed and cur.btnY and left and not ns.Engine.view) then cur.target:Hide(); cur.item:Hide(); return end
   local x, y = left + 50, top - cur.btnY
-  for _, b in ipairs({ cur.item, cur.target }) do b:SetScale(f:GetScale()) end
+  -- just above the card and everything on it, on its layer
+  local lvl = f:GetFrameLevel() + 20
+  for _, b in ipairs({ cur.item, cur.target }) do b:SetScale(f:GetScale()); b:SetFrameStrata(f:GetFrameStrata()); b:SetFrameLevel(lvl) end
   if cur.wantItem then cur.item:ClearAllPoints(); cur.item:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y); cur.item:Show(); x = x + 32 else cur.item:Hide() end
-  if cur.wantTarget then cur.target:ClearAllPoints(); cur.target:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y - 3); cur.target:Show() else cur.target:Hide() end
+  -- where you dragged it (Ctrl+drag), else on the card
+  local tp = ns.db.targetPos
+  local s = UIParent:GetEffectiveScale() / cur.target:GetEffectiveScale()
+  if cur.wantTarget then cur.target:ClearAllPoints(); if tp then cur.target:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", tp[1] * s, tp[2] * s) else cur.target:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y - 3) end; cur.target:Show() else cur.target:Hide() end
 end
 ns.On("PLAYER_REGEN_ENABLED", function()
   if pendingSecure then local fn = pendingSecure; pendingSecure = nil; fn() end

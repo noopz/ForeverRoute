@@ -59,29 +59,56 @@ function News.Dismiss()
 end
 
 local panel
+News.MIN_W, News.MIN_H, News.MAX_W, News.MAX_H = 320, 160, 900, 800
+News.MAX_HEIGHT = 360 -- the tallest it opens at (drag the corner for more); past that the notes scroll
+
+-- the notes, laid out for the panel's width: what's measured depends on it
+local function relayout()
+  if not panel then return end
+  local w = math.max(100, panel:GetWidth() - 46)
+  panel.content:SetWidth(w); panel.body:SetWidth(w)
+  local h = panel.body:GetStringHeight()
+  panel.content:SetHeight(h + 4)
+  panel.older:ClearAllPoints(); panel.older:SetPoint("TOPLEFT", panel.body, "BOTTOMLEFT", 0, -6)
+  panel.content:SetHeight(h + 4 + (panel.older:IsShown() and 28 or 0))
+end
+
 local function buildPanel()
   panel = CreateFrame("Frame", "ForeverRouteNews", UIParent)
-  panel:SetSize(440, 200); panel:SetPoint("CENTER", 0, 80); panel:SetFrameStrata("DIALOG")
+  local size = ns.db.newsSize
+  panel:SetSize(size and size[1] or 440, size and size[2] or 200); panel:SetPoint("CENTER", 0, 80); panel:SetFrameStrata("DIALOG")
   panel:SetClampedToScreen(true); panel:SetMovable(true); panel:EnableMouse(true); panel:RegisterForDrag("LeftButton")
   panel:SetScript("OnDragStart", panel.StartMoving); panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
+  -- resizable from the bottom-right corner; the size is remembered
+  panel:SetResizable(true)
+  if panel.SetResizeBounds then panel:SetResizeBounds(News.MIN_W, News.MIN_H, News.MAX_W, News.MAX_H)
+  elseif panel.SetMinResize then panel:SetMinResize(News.MIN_W, News.MIN_H); panel:SetMaxResize(News.MAX_W, News.MAX_H) end
   Style.Panel(panel, C.bg2)
   table.insert(UISpecialFrames, "ForeverRouteNews")
   panel.title = Style.Text(panel, 15, C.gold, "OUTLINE"); panel.title:SetPoint("TOPLEFT", 14, -12)
   local close = Style.Button(panel, "x", 18, 18, function() panel:Hide() end, "Close"); close:SetPoint("TOPRIGHT", -8, -8)
-  -- the notes scroll: four versions of them are taller than a screen's corner
   panel.scroll = CreateFrame("ScrollFrame", "ForeverRouteNewsScroll", panel, "UIPanelScrollFrameTemplate")
-  panel.scroll:SetPoint("TOPLEFT", 14, -38); panel.scroll:SetPoint("BOTTOMRIGHT", -32, 12)
+  panel.scroll:SetPoint("TOPLEFT", 14, -38); panel.scroll:SetPoint("BOTTOMRIGHT", -32, 18)
   panel.content = CreateFrame("Frame", nil, panel.scroll); panel.content:SetSize(394, 10)
   panel.scroll:SetScrollChild(panel.content)
   panel.body = Style.Text(panel.content, 11, C.text); panel.body:SetPoint("TOPLEFT", 0, 0); panel.body:SetWidth(394)
   panel.body:SetJustifyH("LEFT"); panel.body:SetWordWrap(true)
+  -- older versions, on request, at the end of the notes
+  panel.older = Style.Button(panel.content, "Older versions", 110, 20, function() News.Show(panel.seen, true) end, "The notes of earlier versions too")
+  panel.grip = CreateFrame("Button", "ForeverRouteNewsGrip", panel)
+  panel.grip:SetSize(14, 14); panel.grip:SetPoint("BOTTOMRIGHT", -3, 3)
+  local g = panel.grip:CreateTexture(nil, "OVERLAY"); g:SetAllPoints(); g:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+  panel.grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+  panel.grip:SetScript("OnMouseDown", function() panel:StartSizing("BOTTOMRIGHT") end)
+  panel.grip:SetScript("OnMouseUp", function() panel:StopMovingOrSizing(); ns.db.newsSize = { math.floor(panel:GetWidth()), math.floor(panel:GetHeight()) }; relayout() end)
+  panel:SetScript("OnSizeChanged", function() relayout() end)
 end
-News.MAX_HEIGHT = 360 -- the panel's tallest; past that the notes scroll
 
--- the panel: what changed since `seen` (nil: the last few versions)
-function News.Show(seen)
+-- the panel: what changed since `seen` (nil: the latest version); all = every version News.lua has
+function News.Show(seen, all)
   if not panel then buildPanel() end
-  local list = News.Since(seen)
+  panel.seen = seen
+  local list = all and (ns.NEWS or {}) or News.Since(seen)
   if #list == 0 then list = { ns.NEWS and ns.NEWS[1] } end
   local lines = {}
   for _, e in ipairs(list) do
@@ -93,10 +120,11 @@ function News.Show(seen)
   end
   panel.title:SetText("What's new in Forever Route")
   panel.body:SetText(table.concat(lines, "\n"))
-  local h = panel.body:GetStringHeight()
-  panel.content:SetHeight(h + 4)
-  panel:SetHeight(math.min(News.MAX_HEIGHT, h + 56))
-  panel.scroll:SetVerticalScroll(0)
+  -- the "Older versions" button when there are more versions than shown
+  panel.older:SetShown(not all and #list < #(ns.NEWS or {}))
+  relayout()
+  if not ns.db.newsSize then panel:SetHeight(math.min(News.MAX_HEIGHT, panel.content:GetHeight() + 60)) end
+  if not all then panel.scroll:SetVerticalScroll(0) end
   panel:Show()
   News.Dismiss()
   return panel
