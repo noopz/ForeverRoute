@@ -1,6 +1,6 @@
 # Forever Route
 
-Leveling routes for WoW Forever, 1-60, for every Alliance race and class. A step card, an arrow and map pins tell you
+Leveling routes for WoW Forever, 1-60, for every race and class, Alliance and Horde. A step card, an arrow and map pins tell you
 what to accept, kill, hand in, train and where to travel. Skip quests or dungeons and the route keeps up.
 
 ![The human paladin plan, 1 to 60](docs/img/journey.gif)
@@ -24,15 +24,16 @@ Skyborne skyship:
 
 ![Finding a trip](docs/img/travel.gif)
 
-**Every plan is played 1-60 by ten simulated players before it ships:**
+**Every plan is played 1-60 by simulated players before it ships:**
 
-![Every Alliance plan, checked](docs/img/plans.gif)
+![Every plan, checked](docs/img/plans.gif)
 
 ## Getting started
 
 Install Forever Route from CurseForge or from [Releases](https://github.com/noopz/ForeverRoute/releases) and log in. A
 built-in plan for your race and class loads by itself, and quests you've already done are skipped, so it works for a
-character of any level. Flight paths you already know are picked up at login.
+character of any level: it starts you on the best part of the plan for your level and where you are. Open any flight
+master's map once so the addon knows your flight paths.
 
 | Command | What it does |
 |---|---|

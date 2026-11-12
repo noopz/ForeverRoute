@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0 - 2026-11-11
+- Horde: built-in plans for every Horde race and class.
+- Every Alliance plan rebuilt: through Forever's new zones (Riverglades, Shen'dralas), grinding a level where the quests run out instead of sending you into dungeons.
+- The built-in plans are two addons, one per faction, instead of one per race and class (a much shorter addon list).
+- The arrow aims a little ahead along the path, so it no longer swings at every corner.
+- Walking paths follow the roads and keep away from hostile camps (Elwynn Forest, the Wetlands so far).
+- The Forever Route scale slider applies when you let go (it used to jump to its end while dragging); the card can no longer end up off the screen (`/fr card reset` brings it back).
+
 ## 1.3.2 - 2026-11-11
 - The Target button stays on the card in combat.
 - Built-in plans are grouped under Forever Route in the addon list.

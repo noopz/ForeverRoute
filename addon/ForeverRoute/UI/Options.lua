@@ -20,7 +20,23 @@ local function slider(parent, label, key, lo, hi, step, y, fmt, default)
   local t = Style.Text(parent, 11, C.sub); t:SetPoint("BOTTOMLEFT", s, "TOPLEFT", 0, 4)
   local function upd(v) t:SetText(label .. ":  " .. string.format(fmt or "%.2f", v)) end
   s:SetScript("OnShow", function(self) self.loading = true; self:SetValue(ns.db[key] or default); upd(ns.db[key] or default); self.loading = false end)
-  s:SetScript("OnValueChanged", function(self, v) upd(v); if self.loading or (ns.db[key] or default) == v then return end; ns.db[key] = v; ns.Fire("FR_SETTINGS") end)
+  -- the Forever Route scale also sizes this window: applied while you drag, the slider grew or shrank under the
+  -- cursor and ran off to its end. That one takes effect when you let go (the number follows as you drag)
+  local onRelease = key == "uiScale"
+  s:SetScript("OnValueChanged", function(self, v)
+    upd(v)
+    if self.loading or (ns.db[key] or default) == v then return end
+    if onRelease and self.dragging then self.pending = v; return end
+    ns.db[key] = v; ns.Fire("FR_SETTINGS")
+  end)
+  if onRelease then
+    s:HookScript("OnMouseDown", function(self) self.dragging = true end)
+    s:HookScript("OnMouseUp", function(self)
+      self.dragging = false
+      local v = self.pending; self.pending = nil
+      if v and (ns.db[key] or default) ~= v then ns.db[key] = v; ns.Fire("FR_SETTINGS") end
+    end)
+  end
   for _, r in ipairs({ s:GetRegions() }) do if r.GetText and (r:GetText() == "Low" or r:GetText() == "High") then r:SetText("") end end
   if s.Low then s.Low:SetText(""); s.High:SetText("") end
   return s

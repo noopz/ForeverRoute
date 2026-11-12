@@ -7,6 +7,10 @@
 -- over the canal, an upper floor) are overlay nodes with their own links.
 -- Search: A* from the target back to you, a couple of milliseconds per frame. What it has explored stays: when you
 -- stray from the line, the way from your new spot is usually read straight off it, with no new search.
+-- Outdoors a square also says what its ground is like (road, water, a hostile spawn nearby): a yard of road costs
+-- less than a yard of field, a yard beside a mob that would come for you costs more, so the line keeps to the road
+-- and walks round camps where that is not much further.
+-- The arrow steers for a point a little way ahead along the line (Nav.Aim), not for the line's next corner.
 -- The line is fixed in the world; only the part behind you goes.
 -- Design, measurements and what is left for all zones: docs/research/navigation-paths.md.
 local _, ns = ...
@@ -17,12 +21,28 @@ local byte, sub, rep, char, concat = string.byte, string.sub, string.rep, string
 local floor, sqrt, abs, max, min, huge = math.floor, math.sqrt, math.abs, math.max, math.min, math.huge
 
 Nav.WEIGHT = 1.2       -- how greedy the search is: a few % longer lines for far fewer squares looked at
+Nav.WEIGHT_RATED = 0.9 -- the same where the ground is rated (roads, mobs), counted against a yard of open ground: 1.2
+                       -- times what a yard of road costs. Measured on seven walks in Elwynn, Redridge and the
+                       -- Wetlands: at 1.1 the search runs straight past a road that bends away (a fifth to a half
+                       -- of the road yards of the cheapest line); at 0.9 its line costs within 3% of the cheapest,
+                       -- for 30 to 70% of the squares an estimate that cannot miss (0.75) looks at
 Nav.BUDGET_MS = 2      -- CPU per frame while a zone unpacks or a search runs
 Nav.STRAY_YD = 30      -- this far off the line: a new line from where you are
 Nav.SWIM = 1.5         -- swimming costs this much more than walking (the planner's factor)
 Nav.LOOK = 64          -- a straightened stretch spans at most this many squares
+Nav.SLACK = 1.02       -- ...and may cost this much more than the squares the search walked
+Nav.SLACK_ROAD = 1.08  -- the same from a road square: more would cut the road's bends
+Nav.SLACK_OPEN = 1.2   -- ...and from open ground where the ground is rated (mobs)
 Nav.SNAP = 6           -- you (or the target) may be this many squares from the nearest ground the grid knows
 Nav.KEEP = 2           -- unpacked zones kept in memory
+Nav.ROAD = 0.75        -- a yard of road costs this much of a yard of open ground: up to a third further to stay on it
+Nav.MOB_NEAR = 1.4     -- a yard of open ground within about 24 yd of a hostile spawn costs this much more...
+Nav.MOB_CLOSE = 2.2    -- ...and within about 12 yd this much (tools/navgrid.js MOB_NEAR, MOB_CLOSE)
+Nav.MOB_ROAD = 1.4     -- on a road only a spawn within 12 yd counts, and this much: roads run past camps, and what
+                       -- stands 20 yd off one mostly leaves you alone. (Counting those sent the line off the road
+                       -- and through the quiet woods beside it - the opposite of what a road is for.)
+Nav.MOB_GAP = 5        -- mobs this many levels under you (or more) are left out: they hardly notice you
+Nav.AIM_REACH = 1.25   -- off the line by more than the arrow's look-ahead, it looks this many times as far as you are off
 
 -- the 85 characters of the packed text -> 0..84 (tools/navgrid.js ALPHA)
 local V = {}
@@ -49,15 +69,10 @@ local clock = debugprofilestop or function() return GetTime() * 1000 end
 function Nav.Data(m) return ForeverRouteNavData and ForeverRouteNavData[m] or nil end
 function Nav.Has(m) return Nav.Data(m) ~= nil end
 
--- Unpack a zone's packed text into what the search reads: `base` and `swim` (one character per square) and the
--- overlay tables. pause (optional) is called now and then so the work can be spread over frames.
-function Nav.Unpack(D, pause)
-  local W, H = D.W, D.H
-  local NC = W * H
+-- a packed byte grid (tools/navgrid.js packBase): rows of tokens (run / copy from the row above / literal) -> the rows
+local function unpackRows(s, codes, W, pause)
   local codeChar = {}
-  for i = 0, #D.codes / 2 - 1 do codeChar[i] = char(V[byte(D.codes, 2 * i + 1)] * 16 + V[byte(D.codes, 2 * i + 2)]) end
-  -- the base grid: rows of tokens (run / copy from the row above / literal)
-  local s = D.base
+  for i = 0, #codes / 2 - 1 do codeChar[i] = char(V[byte(codes, 2 * i + 1)] * 16 + V[byte(codes, 2 * i + 2)]) end
   local p, n = 1, #s
   local rows, nr, prevRow, parts, np, filled = {}, 0, nil, {}, 0, 0
   while p <= n do
@@ -89,12 +104,24 @@ function Nav.Unpack(D, pause)
       if pause then pause() end
     end
   end
+  return rows
+end
+-- which side's enemies count (the other side's guards and townsfolk are a layer of their own in the data)
+function Nav.Side() local f = UnitFactionGroup and UnitFactionGroup("player"); return f == "Horde" and "H" or "A" end
+-- your level, for which mobs matter
+function Nav.Level() return (UnitLevel and UnitLevel("player")) or 1 end
+
+-- Unpack a zone's packed text into what the search reads: `base`, `swim` and `terr` (one character per square) and
+-- the overlay tables. pause (optional) is called now and then so the work can be spread over frames.
+function Nav.Unpack(D, pause)
+  local W, H = D.W, D.H
+  local NC = W * H
   local N = { W = W, H = H, NC = NC, cell = D.cell, left = D.left, top = D.top, right = D.right, bottom = D.bottom, inst = D.inst }
-  N.base = concat(rows)
-  rows, parts = nil, nil
+  N.base = concat(unpackRows(D.base, D.codes, W, pause))
   if #N.base ~= NC then error("nav data: " .. #N.base .. " squares unpacked, " .. NC .. " expected") end
   -- water: runs of 0s and 1s in turn
-  s = D.swim; p, n = 1, #s
+  local s = D.swim
+  local p, n = 1, #s
   local sw, ns_, bit = {}, 0, 0
   local ZERO, ONE = char(0), char(1)
   while p <= n do
@@ -104,6 +131,39 @@ function Nav.Unpack(D, pause)
     bit = 1 - bit
   end
   N.swim = concat(sw)
+  if pause then pause() end
+  -- what the ground is like, one character a square: 128 water, 64 road, 32 a hostile spawn right here, 1-31 the
+  -- level (halved) of the hostile spawns around. A zone without this (a city) has only the water.
+  if D.terr then
+    local rows = unpackRows(D.terr, D.terrCodes, W, pause)
+    local extra = D["terr" .. Nav.Side()]
+    if extra then
+      -- the mobs hostile to your side only: the higher level, and "right here" from either
+      local more = unpackRows(extra, D["terr" .. Nav.Side() .. "Codes"], W, pause)
+      local none = rep(char(0), W)
+      for r = 1, #rows do
+        local b = more[r]
+        if b and b ~= none then
+          local a, out = rows[r], {}
+          for i = 1, W do
+            local x, y = byte(a, i), byte(b, i)
+            if y ~= 0 then
+              local lx, ly = x % 32, y % 32
+              x = x - x % 64 + ((x % 64 >= 32 or y >= 32) and 32 or 0) + (lx > ly and lx or ly)
+            end
+            out[i] = char(x)
+          end
+          rows[r] = concat(out)
+          if pause then pause() end
+        end
+      end
+    end
+    N.terr = concat(rows)
+    if #N.terr ~= NC then error("nav data: " .. #N.terr .. " ground squares unpacked, " .. NC .. " expected") end
+    N.rated = true
+  else
+    N.terr = N.swim:gsub(char(1), char(128))
+  end
   if pause then pause() end
   -- overlay nodes: node id = NC + j - 1 for the j-th (squares and base nodes count from 0)
   local oc, oz, osw, at, atN, bz, inc = {}, {}, {}, {}, {}, {}, {}
@@ -160,6 +220,33 @@ function Nav.Unpack(D, pause)
   for d = 1, 8 do off[d] = DR[d] * W + DC[d]; cost[d] = (DR[d] ~= 0 and DC[d] ~= 0) and D.cell * 1.41421356 or D.cell end
   N.off, N.cost = off, cost
   return N
+end
+
+-- What a yard of each kind of ground costs (by the square's character in N.terr), for someone of this level.
+function Nav.Factors(N, level)
+  level = level or Nav.Level()
+  local key = level .. ":" .. Nav.ROAD .. ":" .. Nav.MOB_NEAR .. ":" .. Nav.MOB_CLOSE .. ":" .. Nav.MOB_ROAD .. ":" .. Nav.MOB_GAP .. ":" .. Nav.SWIM
+  if N.F and N.Fkey == key then return N.F end
+  local F = {}
+  for b = 0, 255 do
+    local road, close = b < 128 and b % 128 >= 64, b % 64 >= 32
+    local f = b >= 128 and Nav.SWIM or (road and Nav.ROAD or 1)
+    local lvl = (b % 32) * 2
+    if lvl > 0 and lvl > level - Nav.MOB_GAP then
+      if road then f = f * (close and Nav.MOB_ROAD or 1) else f = f * (close and Nav.MOB_CLOSE or Nav.MOB_NEAR) end
+    end
+    F[b] = f
+  end
+  N.F, N.Fkey = F, key
+  return F
+end
+-- is this square road? and is a hostile spawn that matters at this level near it (2: right here)?
+function Nav.Road(N, sq) return byte(N.terr, sq + 1) % 128 >= 64 end
+function Nav.Mob(N, sq, level)
+  local b = byte(N.terr, sq + 1)
+  local lvl = (b % 32) * 2
+  if lvl == 0 or lvl <= (level or Nav.Level()) - Nav.MOB_GAP then return nil end
+  return b % 64 >= 32 and 2 or 1
 end
 
 -- unpacked zones (the last Nav.KEEP used)
@@ -243,15 +330,15 @@ Nav._nodesNear = nodesNear
 
 -- Start a search on grid N from the target (tx, ty, tz) back to you (sx, sy, sz); heights when known.
 -- Nav.Run works on it a slice at a time; then S.found is the node you stand on (nil: no way).
-function Nav.Search(N, sx, sy, sz, tx, ty, tz)
-  local S = { N = N, g = {}, nxt = {}, closed = {}, hk = {}, hv = {}, hn = 0, starts = {}, sx = sx, sy = sy, tx = tx, ty = ty, tz = tz, expansions = 0, done = false, ms = 0 }
+function Nav.Search(N, sx, sy, sz, tx, ty, tz, level)
+  local S = { N = N, F = Nav.Factors(N, level), w = N.cell * (N.rated and Nav.WEIGHT_RATED or Nav.WEIGHT), g = {}, nxt = {}, closed = {}, hk = {}, hv = {}, hn = 0, starts = {}, sx = sx, sy = sy, tx = tx, ty = ty, tz = tz, expansions = 0, done = false, ms = 0 }
   local goals = nodesNear(N, tx, ty, tz)
   local starts = nodesNear(N, sx, sy, sz)
   if #goals == 0 or #starts == 0 then S.done = true; return S end
   for _, n in ipairs(starts) do S.starts[n] = true end
   local ssq = squareOf(N, starts[1])
   S.sr = floor(ssq / N.W); S.sc = ssq - S.sr * N.W
-  local w = Nav.WEIGHT * N.cell
+  local w = S.w
   for _, n in ipairs(goals) do
     local sq = squareOf(N, n)
     local r = floor(sq / N.W); local c = sq - r * N.W
@@ -271,9 +358,9 @@ function Nav.Run(S, budgetMs)
   if S.done then return true end
   local N = S.N
   local g, nxt, closed, starts, hk, hv = S.g, S.nxt, S.closed, S.starts, S.hk, S.hv
-  local W, NC, base, swim, inc, oc, osw = N.W, N.NC, N.base, N.swim, N.inc, N.oc, N.osw
-  local OFF, COST, cellYd = N.off, N.cost, N.cell
-  local sr, sc, w, swimF = S.sr, S.sc, Nav.WEIGHT * N.cell, Nav.SWIM
+  local W, NC, base, terr, inc, oc, osw = N.W, N.NC, N.base, N.terr, N.inc, N.oc, N.osw
+  local OFF, COST, cellYd, F = N.off, N.cost, N.cell, S.F
+  local sr, sc, w, swimF = S.sr, S.sc, S.w, Nav.SWIM
   local hn = S.hn
   local t0 = clock()
   local count = 0
@@ -299,9 +386,9 @@ function Nav.Run(S, budgetMs)
       count = count + 1
       if starts[u] then S.hn = hn; S.found = u; S.done = true; S.expansions = S.expansions + count; S.ms = S.ms + (clock() - t0); return true end
       local gu = g[u]
-      local su
+      local fu -- what a yard of this node's ground costs; a step costs the dearer of its two ends
       if u < NC then
-        su = byte(swim, u + 1) == 1
+        fu = F[byte(terr, u + 1)]
         local m = byte(base, u + 1)
         if m > 0 then
           local r = floor(u / W); local c = u - r * W
@@ -310,9 +397,9 @@ function Nav.Run(S, budgetMs)
             local d = list[i]
             local v = u + OFF[d]
             if not closed[v] then
-              local cost = COST[d]
-              if su or byte(swim, v + 1) == 1 then cost = cost * swimF end
-              local nv = gu + cost
+              local fv = F[byte(terr, v + 1)]
+              if fv < fu then fv = fu end
+              local nv = gu + COST[d] * fv
               local old = g[v]
               if not old or nv < old then
                 g[v] = nv; nxt[v] = u
@@ -327,7 +414,7 @@ function Nav.Run(S, budgetMs)
             end
           end
         end
-      else su = osw[u - NC + 1] or false end
+      else fu = osw[u - NC + 1] and swimF or 1 end
       local l = inc[u]
       if l then
         local usq = u < NC and u or oc[u - NC + 1]
@@ -342,10 +429,10 @@ function Nav.Run(S, budgetMs)
               cost = sqrt((vr - ur) ^ 2 + (vc - uc) ^ 2) * cellYd
               if cost < cellYd / 2 then cost = cellYd / 2 end
             end
-            local sv
-            if v < NC then sv = byte(swim, v + 1) == 1 else sv = osw[v - NC + 1] end
-            if su or sv then cost = cost * swimF end
-            local nv = gu + cost
+            local fv
+            if v < NC then fv = F[byte(terr, v + 1)] else fv = osw[v - NC + 1] and swimF or 1 end
+            if fv < fu then fv = fu end
+            local nv = gu + cost * fv
             local old = g[v]
             if not old or nv < old then
               g[v] = nv; nxt[v] = u
@@ -370,16 +457,18 @@ function Nav.Run(S, budgetMs)
   return true
 end
 
--- can you walk the straight run of squares from base square a to base square b, for no more than maxCost?
-local function clear(N, a, b, maxCost)
-  local W, base, swim, cellYd, swimF = N.W, N.base, N.swim, N.cell, Nav.SWIM
+-- can you walk the straight run of squares from base square a to base square b, for no more than maxCost (counted
+-- the way the search counts: F, what a yard of each kind of ground costs)?
+local function clear(N, a, b, maxCost, F)
+  local W, base, terr, cellYd = N.W, N.base, N.terr, N.cell
+  F = F or Nav.Factors(N)
   local r, r1 = floor(a / W), floor(b / W)
   local c, c1 = a - r * W, b - r1 * W
   local dr, dc = abs(r1 - r), abs(c1 - c)
   local sr, sc = (r1 > r) and 1 or -1, (c1 > c) and 1 or -1
   local err = dc - dr
-  local cur, cost = a, 0
-  local cs = byte(swim, cur + 1) == 1
+  local cost = 0
+  local cf = F[byte(terr, a + 1)]
   while r ~= r1 or c ~= c1 do
     local e2 = 2 * err
     local mr, mc = 0, 0
@@ -389,11 +478,10 @@ local function clear(N, a, b, maxCost)
     local m = byte(base, nx + 1)
     if floor(m / FROMBIT[(mr + 1) * 3 + (mc + 1)]) % 2 ~= 1 then return false end
     local step = (mr ~= 0 and mc ~= 0) and cellYd * 1.41421356 or cellYd
-    local nsw = byte(swim, nx + 1) == 1
-    if cs or nsw then step = step * swimF end
-    cost = cost + step
+    local nf = F[byte(terr, nx + 1)]
+    cost = cost + step * (nf > cf and nf or cf)
     if cost > maxCost then return false end
-    cur, cs = nx, nsw
+    cf = nf
   end
   return true
 end
@@ -422,13 +510,18 @@ function Nav.Path(S, from, sx, sy, pause)
   local n = #nodes
   local keep = { 1 }
   local a = 1
+  local terr, rated = N.terr, N.rated
   while a < n do
     local j = a + 1
     if nodes[a] < NC then
+      -- how much dearer the straight run may be: little from a road square (the line stays on the road round its
+      -- bends), more in the open (no stepping aside for every spawn)
+      local slack = Nav.SLACK
+      if rated then slack = byte(terr, nodes[a] + 1) % 128 >= 64 and Nav.SLACK_ROAD or Nav.SLACK_OPEN end
       local k, misses, lim = a + 2, 0, min(n, a + Nav.LOOK)
       while k <= lim and nodes[k] < NC and misses < 3 do
         if nodes[k - 1] >= NC then break end
-        if clear(N, nodes[a], nodes[k], (g[nodes[a]] - g[nodes[k]]) * 1.02 + 0.01) then j = k; misses = 0 else misses = misses + 1 end
+        if clear(N, nodes[a], nodes[k], (g[nodes[a]] - g[nodes[k]]) * slack + 0.01, S.F) then j = k; misses = 0 else misses = misses + 1 end
         k = k + 1
       end
     end
@@ -465,7 +558,7 @@ function Nav.Path(S, from, sx, sy, pause)
   pts = slim
   local rem = {}; rem[#pts] = 0
   for k = #pts - 1, 1, -1 do rem[k] = rem[k + 1] + sqrt((pts[k + 1][1] - pts[k][1]) ^ 2 + (pts[k + 1][2] - pts[k][2]) ^ 2) end
-  return { pts = pts, rem = rem, len = rem[1], cursor = 1, z0 = pts[1][3], z1 = pts[#pts][3], nodes = nodes, inst = N.inst, m = N.m, mapYd = N.left - N.right, nav = true }
+  return { pts = pts, rem = rem, len = rem[1], cursor = 1, z0 = pts[1][3], z1 = pts[#pts][3], nodes = nodes, inst = N.inst, m = N.m, mapYd = N.left - N.right, cell = N.cell, nav = true }
 end
 
 -- which grid serves a walk from (px, py) to (tx, ty) in instance inst: the map you are on if it holds both ends,
@@ -482,10 +575,10 @@ function Nav.MapFor(px, py, tx, ty, inst, here, there)
 end
 
 -- One go, for tests and tools: from and to in world yards on map m. -> path (or nil), the search, total ms
-function Nav.Find(m, sx, sy, sz, tx, ty, tz)
+function Nav.Find(m, sx, sy, sz, tx, ty, tz, level)
   local N = Nav.Grid(m); if not N then return nil end
   local t0 = clock()
-  local S = Nav.Search(N, sx, sy, sz, tx, ty, tz)
+  local S = Nav.Search(N, sx, sy, sz, tx, ty, tz, level)
   Nav.Run(S)
   local P = Nav.Path(S)
   return P, S, clock() - t0
@@ -514,6 +607,60 @@ function Nav.Advance(P, px, py)
   return best, bd
 end
 
+-- Where to steer along a line (P.pts, P.rem; a live line or the planner's path): not for the next corner - that
+-- swings the arrow by the whole corner the moment you reach it, and by a lot whenever you stand a little beside the
+-- line near a point - but for the spot on the line `look` yards from you, ahead of where you are on it (where the
+-- line leaves a circle of that size round you). Coming up to a corner that spot slides round it, so the arrow turns
+-- over those yards, as you would; where you stand beside the line hardly matters. Further off the line than the
+-- look-ahead, the circle grows to reach it (Nav.AIM_REACH times as far as you are off), so the arrow leads back onto
+-- the line at a slant, not square to it.
+-- The look-ahead is the caller's (Arrow.lua: short in a city and indoors, longer in open country and on a mount).
+-- It is not shortened where the straight run to the spot is blocked: that was tried (asking the walk map) and made
+-- the spot jump at every corner - the swing this is here to take away. A short look-ahead cuts a corner by no more
+-- than the old arrow did (it turned for the next point 7 yd before a corner).
+-- Where you are = the nearest stretch from P.cursor on (it only moves forward).
+-- -> the spot { x, y } (one table per line, reused), yards to walk (to the spot, then the rest of the line), how
+--    far off the line you are, the line's height where you are (when it has heights)
+function Nav.Aim(P, px, py, look)
+  local pts, rem = P.pts, P.rem
+  local n = #pts
+  local aim = P.aim; if not aim then aim = {}; P.aim = aim end
+  if n < 2 then
+    local a = pts[1]
+    aim[1], aim[2] = a[1], a[2]
+    local d = sqrt((a[1] - px) ^ 2 + (a[2] - py) ^ 2)
+    return aim, d, d, a[3] or P.z0
+  end
+  local c0 = P.cursor or 1; if c0 < 1 then c0 = 1 end; if c0 > n - 1 then c0 = n - 1 end
+  local best, bd, bt = c0, huge, 0
+  for j = c0, n - 1 do
+    local d, t = segDist(px, py, pts[j], pts[j + 1])
+    if d < bd - 0.01 then best, bd, bt = j, d, t end
+  end
+  P.cursor = best
+  local a, b = pts[best], pts[best + 1]
+  local zHere = P.z0
+  if a[3] and b[3] then zHere = a[3] + (b[3] - a[3]) * bt end
+  -- forward from where you are on the line to where it leaves the circle
+  local R = look
+  if bd * Nav.AIM_REACH > R then R = bd * Nav.AIM_REACH end
+  local j, t0, t = best, bt, nil
+  while true do
+    a, b = pts[j], pts[j + 1]
+    local dx, dy, ex, ey = b[1] - a[1], b[2] - a[2], a[1] - px, a[2] - py
+    local A, B, C = dx * dx + dy * dy, 2 * (dx * ex + dy * ey), ex * ex + ey * ey - R * R
+    local disc = B * B - 4 * A * C
+    if A > 0 and disc >= 0 then
+      local t2 = (-B + sqrt(disc)) / (2 * A)
+      if t2 >= t0 and t2 <= 1 then t = t2; break end
+    end
+    if j >= n - 1 then t = 1; break end -- the line ends inside the circle: its end
+    j = j + 1; t0 = 0
+  end
+  local ax, ay = a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t
+  aim[1], aim[2] = ax, ay
+  return aim, sqrt((ax - px) ^ 2 + (ay - py) ^ 2) + rem[j + 1] + (1 - t) * (rem[j] - rem[j + 1]), bd, zHere
+end
 -- ---------------------------------------------------------------------------------------------------------------
 -- The live line: for what the arrow points at right now.
 -- Nav.Want(t): t = { key, wx, wy, inst (world, as HereBeDragons counts), z (height, when known), m (its map) }, or

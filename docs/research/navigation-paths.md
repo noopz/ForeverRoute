@@ -292,3 +292,152 @@ Risks:
   missing, and the planned path is drawn instead. Recorded trails fix those, as they do for the planner.
 - A line is only drawn when one walk map holds both you and the target; a long ride through three zones shows the
   line to the first crossing, not the whole way.
+
+## 7. Roads and mobs (tester feedback: "favor the road more, right now it has you going by mobs")
+
+### Cause
+
+The search counted every yard of ground the same (water 1.5x). The shortest line from Goldshire to Eastvale runs
+through the woods beside the road: 4% of it on the road, 340 of its 1,339 yd within 12 yd of a hostile spawn.
+
+### Where the data comes from
+
+- **Roads: the client's ground textures** (`tools/roads.js`, read the way `tools/terrain.js` reads heights). Each
+  terrain tile has a texture file (`_tex0.adt`, the fourth file id of the tile in the WDT's `MAID`): the tile's
+  ground textures (`MDID`) and for each of its 256 chunks up to four layers (`MCLY`) with a 64x64 alpha map
+  (`MCAL`, half a yard a point). Roads are painted with their own textures: `elwynncobblestonebase`,
+  `redridgerockroadbase`, `wetlandsroad01`, `lochmodanbrickroadbase`... `roads.js pick` lists the textures of
+  all zones whose name says road (49 of them, `tools/road-textures.json`; the names are from the community
+  listfile, which is only needed for that step). `roads.js build` writes `terrain/area<N>.road.u8`: the share of
+  road in each 2.08-yd cell. Looked at as pictures for Elwynn, Redridge and the Wetlands: the road network and
+  nothing else (`roads.js png`). Bridges are buildings, not ground: a road has a gap of a few squares there.
+  A square of the walk map is road when a quarter of it is.
+- **Not usable for roads:** `tools/travel-net.json` has key points and walking yards between them, no lines.
+  QuestieDB has no roads.
+- **Mobs: QuestieDB spawns** (`qdb/db.json`), with two filters found the hard way:
+  - Only NPCs whose **faction** QuestieDB knows (field 12 of `qdb/json/npcs.json`). The NPCs Forever added have
+    none; for them an empty "friendly to" means nobody filled it in, and their "spawns" are sightings along the
+    way they roam: the rare bear Matriarch Bristlefur has 153 points in Elwynn (Wowhead Forever shows 7), the
+    elite Nightveiled Rotheap 947 in the Wetlands, most of them along the road. With them in, the whole Menethil
+    road read as "on top of a mob" and the line left it. They are out: the walk maps do not know Forever's new
+    mobs. (2,155 "hostile" points in Elwynn before, 1,048 after; the Wetlands 4,137 and 1,231.)
+  - No NPC with a level range over 5 or in more than 6 zones: pets people were seen with ("Cat", level 7-30, in
+    40 zones).
+  - Neutral animals are already "friendly to both" in QuestieDB and are left out.
+
+### What ships
+
+A second byte per square, packed like the first (`terr` in `Nav/Nav<map>.lua`, outdoor zones only): water, road,
+"a hostile spawn within 12 yd", and the highest level (halved) of the hostile spawns within 24 yd. Spawns hostile
+to one side only (the other side's guards and townsfolk) are a small layer of their own (`terrA`, `terrH`),
+merged in when the zone is unpacked. Elwynn 95 -> 115 KB, the Wetlands 109 -> 136 KB (zipped 57 -> 68, 65 -> 81).
+Stormwind's file is unchanged. Unpacked: one more character per square (0.13 and 0.18 MB); unpacking takes the
+same time within the noise (160-220 ms).
+
+### The costs (`Nav.lua`)
+
+| Ground | A yard costs |
+|---|---|
+| road | 0.75 |
+| open | 1 |
+| open, a hostile spawn within 24 yd | 1.4 |
+| open, a hostile spawn within 12 yd | 2.2 |
+| road, a hostile spawn within 12 yd | 0.75 x 1.4 |
+| road, a hostile spawn 12-24 yd off | 0.75 (roads run past camps; counting those sent the line off the road) |
+| water | 1.5 (as before), times the mob factor |
+
+A spawn counts when its level is above yours minus 5. A step costs the dearer of its two squares, so stepping on
+and off a road is not free. The search's estimate is 0.9 a yard (1.2 times a road yard): at 1.1 it ran past roads
+that bend away, at 0.75 (cannot miss) it looked at up to three times the squares for lines within 3%.
+Straightening allows a stretch that starts on a road to cost 8% more than the squares walked (more cuts the bends),
+20% in the open.
+
+### Measured (old line -> new line; the simulator; level in brackets)
+
+| Walk | Length | On a road | Hostile spawns within 12 yd / 24 yd | Squares looked at |
+|---|---|---|---|---|
+| Goldshire -> Eastvale (8) | 1,339 -> 1,409 yd | 4% -> 87% | 35 / 53 -> 0 / 4 | 279 -> 1,411 (6 -> 27 ms) |
+| Goldshire -> Westbrook Garrison (8) | 707 -> 764 | 4% -> 55% | 8 / 12 -> 0 / 1 | 113 -> 1,026 |
+| Northshire -> Goldshire (6) | 614 -> 672 | 32% -> 88% | 0 / 0 -> 0 / 0 | 147 -> 623 |
+| Goldshire -> Stormwind gate (8) | 522 -> 552 | 31% -> 94% | 1 / 2 -> 0 / 1 | 51 -> 283 |
+| Lakeshire -> Stonewatch (20) | 864 -> 978 | 5% -> 20% | 27 / 52 -> 2 / 20 | 299 -> 3,171 |
+| Lakeshire -> Render's Camp (18) | 777 -> 822 | 22% -> 64% | 10 / 18 -> 2 / 14 | 470 -> 598 |
+| Menethil -> Thelgen Rock (24) | 2,758 -> 3,050 | 1% -> 65% | 42 / 71 -> 6 / 11 | 17,036 -> 19,732 (370 -> 419 ms) |
+| Menethil -> Dun Modr (24) | 2,123 -> 2,254 | 1% -> 52% | 23 / 33 -> 4 / 7 | 3,144 -> 7,491 |
+| Menethil -> Greenwarden (24) | 2,109 -> 2,231 | 2% -> 73% | 15 / 24 -> 2 / 2 | 4,476 -> 4,496 |
+
+5 to 13% longer. Spawns within 60 yd of the end are not counted (that is where you are going). Redridge has no
+walk map in the addon; it was baked for these numbers only. Stormwind's lines are the same as before.
+
+What it does not do well: a target deep among camps with no road to it (Stonewatch) gets a line that steps aside
+for single spawns on an 8-yd grid: twice the corners per 100 yd of the old line (103 against 50 degrees). The
+arrow's look-ahead takes most of that out of the arrow; the dotted line shows it.
+
+### To rebuild
+
+`node tools/roads.js build <areaId,...>` (6 s for three zones; reads the game's files), then
+`node tools/navgrid.js build <uiMap,...>` (1.5 to 3 s a zone). Without the road file a zone is baked with its mobs
+only and the bake says so. `roads.js pick all <listfile.csv>` (43 s) is only needed for a zone whose road texture
+is not in `road-textures.json` yet; look at `roads.js png` before trusting a new zone.
+
+## 8. The arrow (tester feedback: "it turns a lot to get around a corner")
+
+### Cause
+
+The arrow pointed at the far end of the stretch of the line you were on, and at the next point once you were
+within 7 yd of it. So it swung by the whole corner in one frame, 7 yd before the corner (only eased over a tenth
+of a second on screen), and standing a few yards beside the line near a point it pointed well off the way you were
+going. Followed on real lines (a walker who turns toward the arrow at 240 degrees a second, every 0.05 s) its
+direction changed by 34 to 132 degrees within a quarter second at the worst corner of every line measured.
+
+### Fix (`Nav.Aim`, `UI/Arrow.lua`)
+
+The arrow steers for the spot on the line a look-ahead away from you, ahead of where you are on it (where the line
+leaves a circle of that size round you). The spot slides round a corner as you come up to it. The look-ahead is
+1.5 s of travel: 12 to 24 yd on an outdoor walk map (more on a mount), 8 to 10 in a city, 8 to 12 on the planner's
+path, 6 inside a building. Further off the line than that, the circle grows to 1.25 times your distance from the
+line, so the arrow leads back to it at a slant. The drawn arrow follows its direction a little slower (8 a second,
+was 12). The same for the planner's path in zones without a walk map.
+
+Tried and dropped: a look-ahead counted along the line from the nearest point (the nearest point jumps when you
+cut a corner on the inside, and the arrow with it), and shortening the look-ahead where the walk map says the
+straight run to the spot is blocked (the look-ahead then jumps at every corner: worst swing 110 degrees in
+Stormwind). A fixed short look-ahead cuts a corner by about as much as the old arrow did.
+
+### Measured (the same lines, old arrow -> new arrow)
+
+| Line | Worst swing within 0.25 s | Swings over 30 degrees | Turning per 100 yd | Furthest from the line |
+|---|---|---|---|---|
+| Elwynn, Goldshire -> Eastvale, on foot | 34 -> 6 degrees | 1 -> 0 | 10 -> 11 degrees | 3.5 -> 3.0 yd |
+| the same on a mount (14 yd/s) | 34 -> 7 | 1 -> 0 | 10 -> 9 | 3.4 -> 4.4 |
+| Elwynn, Goldshire -> Westbrook Garrison | 39 -> 7 | 3 -> 0 | 31 -> 34 | 3.8 -> 3.2 |
+| Redridge, Lakeshire -> Stonewatch | 57 -> 15 | 5 -> 0 | 38 -> 39 | 4.5 -> 4.7 |
+| Wetlands, Menethil -> Thelgen Rock | 77 -> 30 | 12 -> 0 | 37 -> 37 | 5.3 -> 5.2 |
+| Wetlands, Menethil -> Dun Modr | 58 -> 12 | 8 -> 0 | 24 -> 25 | 4.9 -> 4.3 |
+| Stormwind, Trade District -> Keep | 80 -> 37 | 4 -> 1 | 72 -> 63 | 4.5 -> 5.1 |
+| Stormwind, harbour -> Trade District | 85 -> 51 | 8 -> 1 | 83 -> 92 | 4.9 -> 4.8 |
+| Stormwind, Dwarven District -> Cathedral | 132 -> 39 | 12 -> 2 | 214 -> 169 | 4.4 -> 4.6 |
+
+These are on the old lines, to compare like with like. On the new lines (roads) the arrow turns more in all where
+the road winds (Goldshire -> Eastvale 30 degrees per 100 yd: the road's own bends) and its worst swing is 5 to 21
+degrees in Elwynn, 8 to 40 in the Wetlands, 27 to 59 in Redridge (the Stonewatch line above). A right-angle corner still
+turns the arrow by about a third within the first quarter second (the spot rounds the corner fast at first), then
+slowly: that is what is left in the city numbers. On a mount the walker strays up to 10 yd from the line at the
+sharpest corners (look-ahead 21 yd).
+
+Not measured in game: the simulator walks a made-up player. How it feels is for the tester to say.
+
+## 9. Tests added (`tests/all_test.lua`)
+
+- nav ground: the outdoor walk maps know their roads and hostile spawns (counts, only on ground, water agrees with
+  the swim bits, a known road and a known Defias camp, by level); Stormwind's has neither
+- nav ground: what a yard costs by ground and level
+- nav roads: Goldshire to Eastvale and to Westbrook Garrison are on the road (70% / 40%), off the mobs, at most 12%
+  longer than the plain line, on the ground, under 5,000 squares
+- nav roads: Menethil to the Green Belt takes the road, in slices, under 12,000 squares; at 60 the mobs no longer
+  count and the road still does
+- arrow look-ahead: its length by place and speed
+- arrow look-ahead: followed on five real lines the arrow's worst swing is under 70% of the old arrow's (and under
+  25 degrees outdoors, 55 in Stormwind), with no more turning in all, and the walker stays near the line
+- routed arrow (rewritten for the look-ahead): the spot is on the path a look-ahead from you, rounds a corner
+  before you do, carries on from a shortcut, leads back from off the path at a slant, ends at the path's end

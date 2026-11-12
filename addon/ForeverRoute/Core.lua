@@ -172,6 +172,32 @@ function ns.StarterKey()
   end
   return race .. "-" .. plain(class)
 end
+-- The built-in plan for your race and class. The plans come as one load-on-demand addon per faction
+-- (ForeverRoute_Plans_Alliance / _Horde, tools/bundle-plans.js), each plan as text: only yours is made into code and
+-- the rest is let go (51 addons, one per race and class, filled the game's addon list). An older install's per-plan
+-- addon (ForeverRoute_Starter_<race>_<class>) still works.
+function ns.LoadStarter(sk)
+  local load = (C_AddOns and C_AddOns.LoadAddOn) or LoadAddOn
+  if not load then return false end
+  local okF, fac = pcall(UnitFactionGroup, "player")
+  local sides = (okF and fac == "Horde") and { "Horde", "Alliance" } or { "Alliance", "Horde" }
+  for _, side in ipairs(sides) do
+    if not (type(ForeverRoutePlanSources) == "table" and ForeverRoutePlanSources[sk]) then pcall(load, "ForeverRoute_Plans_" .. side) end
+  end
+  local src = type(ForeverRoutePlanSources) == "table" and ForeverRoutePlanSources[sk]
+  ForeverRoutePlanSources = nil -- every other plan's text goes
+  if src then
+    local chunk, err = loadstring(src, "plan " .. sk)
+    if chunk then
+      local ok, e = pcall(chunk)
+      if not ok and ns.LogError then ns.LogError("plan", e) end
+    elseif ns.LogError then ns.LogError("plan", err) end
+    collectgarbage("collect")
+  else
+    pcall(load, "ForeverRoute_Starter_" .. sk:gsub("%-", "_"))
+  end
+  return type(ForeverRouteStarter) == "table" and ForeverRouteStarter[sk] ~= nil
+end
 function ns.LoadMyPlan()
   local key, f, found
   if type(ForeverRouteByChar) == "table" then
@@ -185,11 +211,7 @@ function ns.LoadMyPlan()
     if ForeverRouteChar then ForeverRouteChar.charKey = key; ForeverRouteChar.planBlock = found end
   else
     local sk = ns.StarterKey()
-    -- each race/class plan is its own load-on-demand addon (ForeverRoute_Starter_<race>_<class>): only yours loads
-    if sk and not (type(ForeverRouteStarter) == "table" and ForeverRouteStarter[sk]) then
-      local load = (C_AddOns and C_AddOns.LoadAddOn) or LoadAddOn
-      if load then pcall(load, "ForeverRoute_Starter_" .. sk:gsub("%-", "_")) end
-    end
+    if sk and not (type(ForeverRouteStarter) == "table" and ForeverRouteStarter[sk]) then ns.LoadStarter(sk) end
     f = type(ForeverRouteStarter) == "table" and sk and ForeverRouteStarter[sk]
     if type(f) ~= "function" then return false end
     ns.planKey.starter = sk
@@ -478,6 +500,7 @@ SlashCmdList.FOREVERROUTE = function(msg)
   elseif msg == "why" then ns.WhyPrint(15)
   elseif msg == "save" then if ns.Card and ns.Card.Save then ns.Card.Save() else ReloadUI() end
   elseif msg == "dungeons" or msg == "dungeon" or msg == "trips" or msg == "bag" then ns.Fire("FR_TOGGLE_DUNGEONS")
+  elseif msg == "card reset" then ns.db.uiScale, ns.db.scale = nil, 1; ns.Fire("FR_SETTINGS"); ns.db.hidden = nil; if ns.Card and ns.Card.ResetPos then ns.Card.ResetPos() end
   elseif msg == "target reset" then ns.db.targetPos = nil; if ns.Card and ns.Card.PlaceSecure then ns.Card.PlaceSecure() end; ns.Print("Target button back on the card.")
   elseif msg == "storage" then ns.Storage.Print()
   elseif msg == "scale" or msg:find("^scale ") then ns.Style.SlashScale(msg:sub(7))

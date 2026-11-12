@@ -23,6 +23,12 @@
 //   over    overlay nodes with their height and their links to the nodes around them (see pack())
 //   far     the few links that are not between neighbours: lifts, recorded trails (from, to, yards)
 //   solo    base nodes whose byte is 0 (reached only through links)
+//   terr    (outdoor zones) one byte per square, packed like base: what the ground is like, for the search's costs -
+//           bit 7 water (the swim bit again), bit 6 road (tools/roads.js: the ground is painted as a road), bit 5 a
+//           hostile spawn within MOB_CLOSE yd, bits 0-4 the highest level of the hostile spawns within MOB_NEAR yd,
+//           halved and rounded up (0 = none). Hostile = to both factions (QuestieDB's friendlyToFaction is empty).
+//   terrA, terrH  the same mob bits for spawns hostile to the Alliance / the Horde only (the other side's guards
+//           and townsfolk), when the zone has any
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -32,6 +38,10 @@ const MAIN = process.env.FR_MAIN || 'D:/git/ForeverRoute'; // a worktree has no 
 const pick = (name) => (fs.existsSync(path.join(ROOT, name)) ? path.join(ROOT, name) : path.join(MAIN, name));
 const TERRAIN = process.env.FR_TERRAIN || pick('terrain');
 const QDB = process.env.FR_QDB || pick('qdb');
+const Roads = require('./roads');
+const ROAD_SHARE = 0.25;  // a square is road when this much of it is painted as one
+const MOB_NEAR = 24;      // yards from a hostile spawn that count as "by a mob" (about where it would come for you, plus its wandering)
+const MOB_CLOSE = 12;     // ...and as "right on top of it"
 // (dr, dc) of the 8 directions; bit d of a square's byte = "from the neighbour at DIRS[d] into me"
 const DIRS = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
 const CITY = /City|Ironforge|Darnassus|Orgrimmar|Undercity|Thunder Bluff/;
@@ -299,6 +309,58 @@ function buildGraph(area, cell, log = () => {}) {
   return { area, cell, CW, CH, NC, bounds: B, base, swim: swimBits, baseZ, baseOf, over, links, floors: F, nNodes, nav, repFloor, walkable, hasBase: alive.subarray(0, NC) };
 }
 
+// What the ground of each square is like (see "terr" at the top): { terr, terrA, terrH (Uint8Array(NC) or null),
+// roads, mobs (counts) }, or null for a city (streets everywhere, nothing hostile to walk round).
+let DB = null, RAW = null;
+function terrainOf(G, zone) {
+  if (CITY.test(zone.name)) return null;
+  const { NC, CW, CH, cell, bounds: B, hasBase, swim } = G;
+  const terr = new Uint8Array(NC), layers = { A: new Uint8Array(NC), H: new Uint8Array(NC) };
+  let roads = 0;
+  const R = Roads.load(zone.area);
+  if (R) {
+    const n = Math.max(2, Math.round(cell / R.cell));
+    for (let c = 0; c < NC; c++) {
+      if (!hasBase[c] || swim[c]) continue;
+      const Y = B.left - (c % CW) * cell, X = B.top - Math.floor(c / CW) * cell; // the square's north-west corner
+      let on = 0;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (R.at(X - (i + 0.5) * cell / n, Y - (j + 0.5) * cell / n) >= 128) on++;
+      if (on >= ROAD_SHARE * n * n) { terr[c] |= 64; roads++; }
+    }
+  }
+  if (!DB) { DB = JSON.parse(fs.readFileSync(path.join(QDB, 'db.json'), 'utf8')); RAW = JSON.parse(fs.readFileSync(path.join(QDB, 'json', 'npcs.json'), 'utf8')); }
+  const mobs = { both: 0, A: 0, H: 0 }; let unknown = 0;
+  const rad = Math.ceil(MOB_NEAR / cell) + 1;
+  for (const n of Object.values(DB.npcs)) {
+    if (!n || n.friendly === 'AH' || !(n.maxLevel > 0) || !n.spawns || !n.spawns.length) continue;
+    // hostile is only known where QuestieDB has the NPC's faction (field 12). The NPCs Forever added have none: for
+    // them "friendly to nobody" only means nobody filled it in, and their "spawns" are sightings along the way they
+    // roam (one rare bear: 153 points; Wowhead Forever shows 7) - a cloud that says little about where it stands.
+    if (!(RAW[n.id] && RAW[n.id][12])) { unknown++; continue; }
+    // not a spawn of this zone: a hunter's or warlock's pet someone was seen with ("Cat", level 7-30, in 40 zones;
+    // "Infernal" in the capitals) - a level range no wild mob has, or sightings all over the world
+    if (n.maxLevel - (n.minLevel || n.maxLevel) > 5 || new Set(n.spawns.map((p) => p.zone)).size > 6) continue;
+    const who = !n.friendly ? 'both' : n.friendly === 'H' ? 'A' : 'H'; // hostile to whom
+    const grid = who === 'both' ? terr : layers[who];
+    const code = Math.min(31, Math.ceil(n.maxLevel / 2));
+    for (const p of n.spawns) {
+      if (p.zone !== zone.area) continue;
+      const Y = B.left - (p.x / 100) * (B.left - B.right), X = B.top - (p.y / 100) * (B.top - B.bottom);
+      const c0 = Math.floor((B.left - Y) / cell), r0 = Math.floor((B.top - X) / cell);
+      mobs[who]++;
+      for (let r = Math.max(0, r0 - rad); r <= Math.min(CH - 1, r0 + rad); r++) for (let c = Math.max(0, c0 - rad); c <= Math.min(CW - 1, c0 + rad); c++) {
+        const d = Math.hypot(B.left - (c + 0.5) * cell - Y, B.top - (r + 0.5) * cell - X);
+        if (d > MOB_NEAR) continue;
+        const k = r * CW + c; if (!hasBase[k]) continue;
+        const was = grid[k];
+        grid[k] = (was & 0xc0) | ((was & 32) || d <= MOB_CLOSE ? 32 : 0) | Math.max(was & 31, code);
+      }
+    }
+  }
+  for (let c = 0; c < NC; c++) if (swim[c]) terr[c] |= 128;
+  return { terr, terrA: mobs.A ? layers.A : null, terrH: mobs.H ? layers.H : null, roads, mobs, unknown, hasRoads: !!R };
+}
+
 // --- packing -------------------------------------------------------------------------------------------------------
 // Text the addon can unpack quickly with string.byte / string.rep / string.sub (Lua 5.1 has no bit library).
 // 85 printable characters, none of them trouble inside a Lua long string (no brackets, quotes or backslash):
@@ -314,8 +376,8 @@ const num4 = (n) => num2(Math.floor(n / (A * A))) + num2(n % (A * A));
 // Token head: one character t (0..84): t < 28 run of t+1 of the byte that follows; 28..55 "above" of t-27;
 // 56..83 literal of t-55 bytes; 84 long form: kind (0 run, 1 above) and the length as 2 characters follow (then the
 // byte for a run). A byte: its one-character code, or the escape (code 84) and its value as 2 characters (hi*16+lo).
-function packBase(G) {
-  const { base, CW, CH } = G;
+function packBase(G, grid) {
+  const { CW, CH } = G, base = grid || G.base;
   const freq = new Array(256).fill(0); for (const b of base) freq[b]++;
   const order = [...Array(256).keys()].filter((b) => freq[b] > 0).sort((x, y) => freq[y] - freq[x]);
   const codes = order.slice(0, A - 1), codeOf = new Map(codes.map((b, i) => [b, i]));
@@ -399,7 +461,7 @@ function pack(G) {
   return { codes: b.codes, base: b.data, swim: packBits(G.swim), over: parts.join(''), nOver: over.length, far: farS, nFar: far.length, solo: solo.join(''), zmin };
 }
 
-function luaText(uiMap, zone, G, pk) {
+function luaText(uiMap, zone, G, pk, T) {
   const B = G.bounds, L = [];
   L.push(`-- Generated by tools/navgrid.js from terrain/area${G.area}.vox.* (${zone.name}): the navigation grid the map line runs`);
   L.push(`-- on (Nav.lua). ${G.CW}x${G.CH} squares of ${G.cell} yd, ${G.over.length} overlay nodes, ${G.links.length} links. Regenerate, don't edit.`);
@@ -413,13 +475,16 @@ function luaText(uiMap, zone, G, pk) {
   L.push(`  nOver = ${pk.nOver}, over = [==[${pk.over}]==],`);
   L.push(`  far = [==[${pk.far}]==],`);
   L.push(`  solo = [==[${pk.solo}]==],`);
+  if (T) for (const k of ['terr', 'terrA', 'terrH']) if (T[k]) { const p = packBase(G, T[k]); L.push(`  ${k}Codes = [==[${p.codes}]==], ${k} = [==[${p.data}]==],`); }
   L.push('}');
   return L.join('\n') + '\n';
 }
 
 // --- the search the addon runs, here for measuring and pictures (Nav.lua is the real one) --------------------------
 // unpack the base grid again the way Nav.lua does: the packing must round-trip
-function unpackCheck(G, pk) {
+function unpackCheck(G, pk, grid) {
+  if (!pk.base) pk = { codes: pk.codes, base: pk.data };
+  grid = grid || G.base;
   const { CW, CH } = G, codes = []; for (let i = 0; i < pk.codes.length; i += 2) codes.push(ALPHA.indexOf(pk.codes[i]) * 16 + ALPHA.indexOf(pk.codes[i + 1]));
   const out = new Uint8Array(CW * CH); let p = 0, o = 0; const s = pk.base, v = (i) => ALPHA.indexOf(s[i]);
   const readSym = () => { const c = v(p++); if (c < A - 1) return codes[c]; const b = v(p) * 16 + v(p + 1); p += 2; return b; };
@@ -430,7 +495,7 @@ function unpackCheck(G, pk) {
     o += n;
   }
   if (o !== out.length) throw new Error(`unpack: ${o} of ${out.length} squares`);
-  for (let i = 0; i < out.length; i++) if (out[i] !== G.base[i]) throw new Error('unpack: square ' + i + ' differs');
+  for (let i = 0; i < out.length; i++) if (out[i] !== grid[i]) throw new Error('unpack: square ' + i + ' differs');
 }
 function runtime(G) {
   const { NC, over, links } = G;
@@ -503,11 +568,14 @@ function bake(ui, cellArg, write, log) {
   const G = buildGraph(zone.area, cell, (m) => log('  ' + m));
   const pk = pack(G);
   unpackCheck(G, pk);
-  const text = luaText(ui, zone, G, pk);
+  const T = terrainOf(G, zone);
+  if (T) for (const k of ['terr', 'terrA', 'terrH']) if (T[k]) unpackCheck(G, packBase(G, T[k]), T[k]);
+  const text = luaText(ui, zone, G, pk, T);
+  if (T) log(`  ground: ${T.hasRoads ? T.roads + ' road squares' : 'NO ROAD DATA (node tools/roads.js build ' + zone.area + ')'}; hostile spawns ${T.mobs.both} (to both), ${T.mobs.A} (to the Alliance only), ${T.mobs.H} (to the Horde only); ${['terr', 'terrA', 'terrH'].map((k) => (T[k] ? k + ' ' + (packBase(G, T[k]).data.length + packBase(G, T[k]).codes.length) + ' B' : '')).filter(Boolean).join(', ')}`);
   const sizes = { base: pk.base.length + pk.codes.length, swim: pk.swim.length, over: pk.over.length, far: pk.far.length, file: Buffer.byteLength(text), gz: zlib.gzipSync(text, { level: 9 }).length };
   log(`${zone.name} (map ${ui}, area ${zone.area}) @${cell} yd: ${G.CW}x${G.CH} = ${G.NC} squares, ${G.nNodes} nodes, ${G.over.length} overlay, ${G.links.length} links (${pk.nFar} far); base ${sizes.base} B, swim ${sizes.swim}, overlay ${sizes.over}, far ${sizes.far}; file ${sizes.file} B (zipped ${sizes.gz}) (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
   if (write) { const out = path.join(ROOT, 'addon', 'ForeverRoute', 'Nav', `Nav${ui}.lua`); fs.mkdirSync(path.dirname(out), { recursive: true }); fs.writeFileSync(out, text); log('  wrote ' + out); }
-  return { zone, G, pk, sizes };
+  return { zone, G, pk, sizes, T };
 }
 
 if (require.main === module) {
@@ -553,4 +621,4 @@ if (require.main === module) {
     fs.writeFileSync(rest[0], Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), ch('IHDR', ih), ch('IDAT', zlib.deflateSync(img)), ch('IEND', Buffer.alloc(0))]));
   } else console.error('usage: node navgrid.js build|stats <uiMap|all> [cell] | test <uiMap> <cell|-> x,y x,y ... | png <uiMap> <out.png> [x,y x,y]');
 }
-module.exports = { buildGraph, pack, luaText, search, zoneOf, toWorld, cellFor, bake, DIRS };
+module.exports = { buildGraph, pack, luaText, search, zoneOf, toWorld, cellFor, bake, terrainOf, DIRS, MOB_NEAR, MOB_CLOSE };

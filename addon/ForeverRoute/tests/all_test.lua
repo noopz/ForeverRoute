@@ -690,22 +690,40 @@ test("ticks stay on the same step when the route is regenerated", function()
   end)
 end)
 
-test("routed arrow: follows the path, carries on from a shortcut, knows when you're off it", function()
+test("routed arrow: follows the path a look-ahead in front of you, carries on from a shortcut, knows when you're off it", function()
   local follow = ns.Arrow._follow
   -- an L-shaped path from (0,0): east to a corner at (100,0), then north to the target at (100,100), 20 yd up
   local function P() return { pts = { { 0, 0, 0 }, { 100, 0, 0 }, { 100, 100, 20 } }, rem = { 200, 100, 0 }, cursor = 1, z0 = 0, z1 = 20 } end
+  local function far(a, x, y) return math.sqrt((a[1] - x) ^ 2 + (a[2] - y) ^ 2) end
   local p = P()
-  local aim, walk, off = follow(p, 10, 2)            -- on the first leg: aim at the corner, never diagonally across
-  assertEquals(100, aim[1]); assertEquals(0, aim[2])
+  local aim, walk, off = follow(p, 10, 2, 10)        -- on the first leg: the spot on that leg 10 yd from you - not the
+  assertEquals(0, aim[2])                            -- far corner (a small step aside swung the arrow), never diagonally across
+  assertTrue(math.abs(far(aim, 10, 2) - 10) < 0.01 and aim[1] > 10, "the spot is at " .. aim[1] .. ", " .. aim[2])
   assertTrue(math.abs(walk - 190) < 2)
   assertTrue(off < 3)
-  local aim2 = follow(p, 98, 60)                     -- took a shortcut and came out on the second leg: carry on from there
-  assertEquals(100, aim2[2])
+  local c = P()
+  local before = follow(c, 80, 0, 10)                -- 20 yd before the corner: still straight on
+  assertEquals(0, before[2]); assertTrue(math.abs(before[1] - 90) < 0.01)
+  local atCorner = follow(c, 96, 0, 10)              -- 4 yd before it the spot is already round the corner, 10 yd from you:
+  assertEquals(100, atCorner[1])                     -- the arrow has begun to turn, and turns on as you walk
+  assertTrue(math.abs(far(atCorner, 96, 0) - 10) < 0.01 and atCorner[2] > 8 and atCorner[2] < 10, "the spot is at " .. atCorner[1] .. ", " .. atCorner[2])
+  local last, swing = 0, 0
+  for x = 80, 100, 0.5 do                            -- walking up to the corner the arrow turns in steps: the biggest
+    local a = follow(c, x, 0, 10)                    -- (the moment the spot rounds the corner) a fifth of the corner,
+    local dir = math.atan2(a[2], a[1] - x)           -- where it used to be all 90 degrees at once
+    swing = math.max(swing, math.abs(dir - last)); last = dir
+  end
+  assertTrue(swing < math.rad(20) and math.abs(last - math.pi / 2) < 0.01, "the arrow jumps " .. math.floor(math.deg(swing)) .. " degrees in half a yard at the corner")
+  local aim2 = follow(p, 98, 60, 10)                 -- took a shortcut and came out on the second leg: carry on from there
+  assertEquals(100, aim2[1]); assertTrue(aim2[2] > 60 and aim2[2] <= 70.1)
   assertEquals(2, p.cursor)
-  local aim3 = follow(p, 100, 10)                    -- doesn't go back to the first leg once past it
-  assertEquals(100, aim3[2])
-  local _, _, off4 = follow(P(), 40, 60)             -- wandered off into the field
-  assertTrue(off4 > 45)
+  local aim3 = follow(p, 100, 10, 10)                -- doesn't go back to the first leg once past it
+  assertEquals(100, aim3[1]); assertTrue(aim3[2] > 10)
+  local aim4, _, off4 = follow(P(), 40, 60, 10)      -- wandered off into the field: back onto the path at a slant,
+  assertTrue(off4 > 45)                              -- ahead of where you left it, never across to the other leg
+  assertEquals(0, aim4[2]); assertTrue(aim4[1] > 60 and aim4[1] <= 100, "the spot is at " .. aim4[1] .. ", " .. aim4[2])
+  local aim5, walk5 = follow(P(), 100, 95, 10)       -- the end of the path within reach: the end itself
+  assertEquals(100, aim5[1]); assertEquals(100, aim5[2]); assertTrue(math.abs(walk5 - 5) < 0.01)
   local _, _, _, z = follow(P(), 100, 50)            -- halfway up the second leg
   assertTrue(z > 5 and z < 15)
 end)
@@ -3296,7 +3314,9 @@ test("built-in plans load on demand: only your race and class's plan addon is lo
   local ok, err = pcall(function()
     ForeverRouteStarter = nil; ForeverRouteByChar = {}
     assertTrue(ns.LoadMyPlan())
-    assertEquals(1, #asked); assertEquals("ForeverRoute_Starter_nightelf_druid", asked[1])
+    -- the faction addon first (no such addon here: the older per-plan one is the fallback), never another race's plan
+    assertEquals("ForeverRoute_Plans_Alliance", asked[1]); assertEquals("ForeverRoute_Starter_nightelf_druid", asked[#asked])
+    for _, n in ipairs(asked) do assertTrue(n:find("^ForeverRoute_Plans_") or n == "ForeverRoute_Starter_nightelf_druid", "loaded " .. n) end
     -- a plan of your own: nothing loaded
     asked = {}; ForeverRouteStarter = nil; ForeverRouteByChar = { [ns.CharKey()] = function() end }
     assertTrue(ns.LoadMyPlan()); assertEquals(0, #asked)
@@ -3968,6 +3988,227 @@ test("nav across a zone border: from Goldshire to the Trade District on the walk
   assertEquals(nil, ns.Nav.MapFor(sx, sy, -10500, -1200, 0, 1429, 1431))
   assertEquals(nil, ns.Nav.MapFor(sx, sy, tx, ty, 1, 1429, 1453), "another continent")
 end)
+
+-- Roads and mobs (tools/roads.js, tools/navgrid.js "terr"; docs/research/navigation-paths.md, "Roads and mobs")
+do
+-- (the simulator's assertTrue drops its message; these tests are about numbers, so a failure says them)
+local function assertTrue(ok, msg) if not ok then error(msg or "expected truthy", 0) end end
+-- what a line is made of, a yard at a time: yards in all, on road squares, beside a hostile spawn that matters at
+-- this level, right on top of one
+local function lineGround(m, P, level)
+  local N = ns.Nav.Grid(m)
+  local total, road, near, close = 0, 0, 0, 0
+  for k = 1, #P.pts - 1 do
+    local a, b = P.pts[k], P.pts[k + 1]
+    local len = math.sqrt((b[1] - a[1]) ^ 2 + (b[2] - a[2]) ^ 2)
+    for t = 0, math.floor(len) do
+      local sq = ns.Nav._squareAt(N, a[1] + (b[1] - a[1]) * t / math.max(len, 1), a[2] + (b[2] - a[2]) * t / math.max(len, 1))
+      if sq then
+        total = total + 1
+        if ns.Nav.Road(N, sq) then road = road + 1 end
+        local mob = ns.Nav.Mob(N, sq, level)
+        if mob == 2 then close = close + 1 elseif mob then near = near + 1 end
+      end
+    end
+  end
+  return total, road, near, close
+end
+-- the line the search gave before it knew roads and mobs (every yard of ground the same)
+local function plainLine(m, sx, sy, tx, ty, level)
+  local sv = { ns.Nav.ROAD, ns.Nav.MOB_NEAR, ns.Nav.MOB_CLOSE, ns.Nav.MOB_ROAD, ns.Nav.WEIGHT_RATED, ns.Nav.SLACK_ROAD, ns.Nav.SLACK_OPEN }
+  ns.Nav.ROAD, ns.Nav.MOB_NEAR, ns.Nav.MOB_CLOSE, ns.Nav.MOB_ROAD, ns.Nav.WEIGHT_RATED, ns.Nav.SLACK_ROAD, ns.Nav.SLACK_OPEN = 1, 1, 1, 1, ns.Nav.WEIGHT, ns.Nav.SLACK, ns.Nav.SLACK
+  local ok, P, S = pcall(ns.Nav.Find, m, sx, sy, nil, tx, ty, nil, level)
+  ns.Nav.ROAD, ns.Nav.MOB_NEAR, ns.Nav.MOB_CLOSE, ns.Nav.MOB_ROAD, ns.Nav.WEIGHT_RATED, ns.Nav.SLACK_ROAD, ns.Nav.SLACK_OPEN = unpack(sv)
+  if not ok then error(P, 0) end
+  return P, S
+end
+
+test("nav ground: the outdoor walk maps know their roads and the hostile spawns; a city's has neither", function()
+  for _, m in ipairs({ 1429, 1437 }) do
+    local N = ns.Nav.Grid(m)
+    assertTrue(N.rated, "map " .. m .. " has no ground data")
+    assertEquals(N.W * N.H, #N.terr, "map " .. m .. " ground")
+    local roads, mobs, wet, bad = 0, 0, 0, 0
+    for sq = 0, N.NC - 1 do
+      local b = string.byte(N.terr, sq + 1)
+      if b >= 128 then wet = wet + 1 end
+      if ns.Nav.Road(N, sq) then roads = roads + 1; if not ns.Nav.Ground(N, sq) or b >= 128 then bad = bad + 1 end end
+      if b % 32 > 0 then mobs = mobs + 1; if not ns.Nav.Ground(N, sq) then bad = bad + 1 end end
+      if (b >= 128) ~= (string.byte(N.swim, sq + 1) == 1) then bad = bad + 1 end
+    end
+    -- a road is a thin thread through a zone: some hundreds of 8-yd squares, a percent or two of the ground
+    assertTrue(roads > 700 and roads < N.NC * 0.04, "map " .. m .. ": " .. roads .. " road squares")
+    assertTrue(mobs > 5000 and mobs < N.NC * 0.5, "map " .. m .. ": " .. mobs .. " squares by a hostile spawn")
+    assertEquals(0, bad, "map " .. m .. ": road or mob squares without ground, in water, or water that disagrees with the swim bits")
+  end
+  local N = ns.Nav.Grid(1429)
+  -- the road east out of Goldshire, and the Defias camp at the Jerod's Landing road (bandits, level 8-9)
+  local rx, ry = navWorld(1429, 49.6, 70.9)
+  local onRoad = false
+  for dx = -1, 1 do for dy = -1, 1 do local sq = ns.Nav._squareAt(N, rx + dx * N.cell, ry + dy * N.cell); if sq and ns.Nav.Road(N, sq) then onRoad = true end end end
+  assertTrue(onRoad, "the road east of Goldshire is not a road on the walk map")
+  local bx, by = navWorld(1429, 31.02, 57.51)
+  local camp = ns.Nav._squareAt(N, bx, by)
+  assertEquals(2, ns.Nav.Mob(N, camp, 8), "a Defias Bandit's spawn at level 8")
+  assertEquals(nil, ns.Nav.Mob(N, camp, 20), "the same at level 20: grey, it hardly notices you")
+  local gx, gy = navWorld(1429, 42.1, 65.9)
+  assertEquals(nil, ns.Nav.Mob(N, ns.Nav._squareAt(N, gx, gy), 5), "Goldshire's square by Marshal Dughan")
+  local city = ns.Nav.Grid(1453)
+  assertTrue(not city.rated, "Stormwind's walk map is rated")
+  assertEquals(city.W * city.H, #city.terr, "Stormwind ground (water only)")
+end)
+
+test("nav ground: what a yard costs - road cheaper, by a mob dearer, on a road only a mob right there counts, by level", function()
+  local N = ns.Nav.Grid(1429)
+  local F = ns.Nav.Factors(N, 8)
+  assertEquals(1, F[0]); assertEquals(ns.Nav.ROAD, F[64]); assertEquals(ns.Nav.SWIM, F[128])
+  -- code 5 = spawns of level 9-10
+  assertEquals(ns.Nav.MOB_NEAR, F[5]); assertEquals(ns.Nav.MOB_CLOSE, F[32 + 5])
+  assertEquals(ns.Nav.ROAD, F[64 + 5], "a spawn 20 yd off the road")
+  assertEquals(ns.Nav.ROAD * ns.Nav.MOB_ROAD, F[64 + 32 + 5], "a spawn on the road")
+  assertEquals(ns.Nav.SWIM * ns.Nav.MOB_NEAR, F[128 + 5])
+  assertTrue(F[64] < 1 and F[5] > 1 and F[32 + 5] > F[5] and F[64 + 32 + 5] < F[32 + 5])
+  -- level 10 mobs: they matter up to level 14 (MOB_GAP 5), not at 15
+  assertEquals(ns.Nav.MOB_NEAR, ns.Nav.Factors(N, 14)[5]); assertEquals(1, ns.Nav.Factors(N, 15)[5]); assertEquals(ns.Nav.ROAD, ns.Nav.Factors(N, 60)[64 + 32 + 5])
+  -- a city: every yard of ground the same, as before
+  local C = ns.Nav.Factors(ns.Nav.Grid(1453), 8)
+  assertEquals(1, C[0]); assertEquals(ns.Nav.SWIM, C[128])
+end)
+
+test("nav roads: Goldshire to Eastvale and to Westbrook Garrison keep to the road and off the mobs, not much further", function()
+  for _, T in ipairs({ { "Eastvale", 79.5, 68.8, 0.7 }, { "Westbrook Garrison", 24.2, 74.5, 0.4 } }) do
+    local name, x, y, share = unpack(T)
+    local sx, sy = navWorld(1429, 42.1, 65.9)
+    local tx, ty = navWorld(1429, x, y)
+    local P, S = ns.Nav.Find(1429, sx, sy, nil, tx, ty, nil, 8)
+    local Q = plainLine(1429, sx, sy, tx, ty, 8)
+    assertTrue(P ~= nil and Q ~= nil, "no way to " .. name)
+    local total, road, near, close = lineGround(1429, P, 8)
+    local qTotal, qRoad, qNear, qClose = lineGround(1429, Q, 8)
+    assertTrue(road / total >= share, name .. ": " .. road .. " of " .. total .. " yd on the road")
+    assertTrue(qRoad / qTotal < 0.1, name .. ": the plain line had " .. qRoad .. " of " .. qTotal .. " yd on the road - the test proves nothing")
+    assertTrue(close <= 10 and qClose >= 100, name .. ": " .. close .. " yd on top of a hostile spawn (the plain line: " .. qClose .. ")")
+    assertTrue(near + close < (qNear + qClose) / 3, name .. ": " .. (near + close) .. " yd by a mob, the plain line " .. (qNear + qClose))
+    assertTrue(P.len <= Q.len * 1.12, name .. ": " .. math.floor(P.len) .. " yd, the plain line " .. math.floor(Q.len))
+    assertEquals(0, (offGround(1429, P)), name .. ": yards of the line off the ground")
+    assertTrue(#P.pts < 60, name .. ": " .. #P.pts .. " points")
+    assertTrue(S.expansions < 5000, name .. ": the search looked at " .. S.expansions .. " squares")
+  end
+end)
+
+test("nav roads: out of Menethil the line takes the road; at 60 the marsh's mobs no longer bend it, the road still pulls", function()
+  local sx, sy = navWorld(1437, 10.9, 59.6)
+  local tx, ty = navWorld(1437, 56.3, 40.4) -- the Green Belt
+  local P, S = ns.Nav.Find(1437, sx, sy, nil, tx, ty, nil, 24)
+  local Q = plainLine(1437, sx, sy, tx, ty, 24)
+  local total, road, near, close = lineGround(1437, P, 24)
+  local qTotal, qRoad, qNear, qClose = lineGround(1437, Q, 24)
+  assertTrue(road / total >= 0.5 and qRoad / qTotal < 0.1, road .. " of " .. total .. " yd on the road (the plain line: " .. qRoad .. " of " .. qTotal .. ")")
+  assertTrue(close <= 40 and close < qClose / 4, close .. " yd on top of a hostile spawn (the plain line: " .. qClose .. ")")
+  assertTrue(P.len <= Q.len * 1.12, math.floor(P.len) .. " yd, the plain line " .. math.floor(Q.len))
+  assertEquals(0, (offGround(1437, P)), "yards of the line off the ground")
+  -- the cost in game: the search may look at more squares than before, within reason (2 ms a frame)
+  assertTrue(S.expansions < 12000, "the search looked at " .. S.expansions .. " squares")
+  local slices, S2 = 1, ns.Nav.Search(ns.Nav.Grid(1437), sx, sy, nil, tx, ty, nil, 24)
+  while not ns.Nav.Run(S2, 0.5) do slices = slices + 1; assertTrue(slices < 100000, "the search never ends") end
+  assertTrue(slices > 3, "the search was not cut into slices")
+  -- level 60: nothing in the Wetlands comes for you
+  local H = ns.Nav.Find(1437, sx, sy, nil, tx, ty, nil, 60)
+  local hTotal, hRoad = lineGround(1437, H, 24)
+  assertTrue(hRoad / hTotal >= 0.4, "at 60: " .. hRoad .. " of " .. hTotal .. " yd on the road")
+  assertTrue(H.len <= P.len + 1, "at 60 the line is " .. math.floor(H.len) .. " yd, at 24 " .. math.floor(P.len))
+end)
+
+-- The arrow's look-ahead (Nav.Aim; docs/research/navigation-paths.md, "The arrow")
+local function turnOf(a) return (a + math.pi) % (2 * math.pi) - math.pi end
+-- follow the arrow along a line the way a player does: every 0.05 s it gives a direction, you turn toward it (240
+-- degrees a second at most) and move. aimAt(P, px, py) -> the spot the arrow points at.
+-- -> the biggest change of the arrow's direction within a quarter second (degrees), all its turning (degrees), the
+--    furthest you got from the line (yards), whether you arrived
+local function followArrow(P, speed, aimAt)
+  local px, py = P.pts[1][1], P.pts[1][2]
+  local tx, ty = P.pts[#P.pts][1], P.pts[#P.pts][2]
+  local dt, facing, hist, worst, total, maxOff = 0.05, nil, {}, 0, 0, 0
+  P.cursor = 1
+  for _ = 1, 40000 do
+    if math.sqrt((px - tx) ^ 2 + (py - ty) ^ 2) < 6 then return math.deg(worst), math.deg(total), maxOff, true end
+    local aim, _, off = aimAt(P, px, py)
+    if off and off > maxOff then maxOff = off end
+    local a = math.atan2(aim[2] - py, aim[1] - px)
+    local n = #hist + 1
+    hist[n] = a
+    if n > 1 then total = total + math.abs(turnOf(a - hist[n - 1])) end
+    if n > 5 then local d = math.abs(turnOf(a - hist[n - 5])); if d > worst then worst = d end end
+    facing = facing or a
+    local turn, lim = turnOf(a - facing), math.rad(240) * dt
+    if turn > lim then turn = lim elseif turn < -lim then turn = -lim end
+    facing = facing + turn
+    px, py = px + math.cos(facing) * speed * dt, py + math.sin(facing) * speed * dt
+  end
+  return math.deg(worst), math.deg(total), maxOff, false
+end
+-- the arrow as it was: at the far end of the stretch you are nearest to; within 7 yd of it, the one after
+local function cornerAim(P, px, py)
+  local pts = P.pts
+  local best, bd = P.cursor, math.huge
+  for j = P.cursor, #pts - 1 do
+    local a, b = pts[j], pts[j + 1]
+    local dx, dy = b[1] - a[1], b[2] - a[2]; local L2 = dx * dx + dy * dy
+    local t = L2 > 0 and math.max(0, math.min(1, ((px - a[1]) * dx + (py - a[2]) * dy) / L2)) or 0
+    local d = math.sqrt((px - a[1] - t * dx) ^ 2 + (py - a[2] - t * dy) ^ 2)
+    if d < bd - 0.01 then best, bd = j, d end
+  end
+  P.cursor = best
+  local ai = best + 1
+  if ai < #pts and math.sqrt((pts[ai][1] - px) ^ 2 + (pts[ai][2] - py) ^ 2) < 7 then ai = ai + 1 end
+  return pts[ai], nil, bd
+end
+
+test("arrow look-ahead: further on a mount than on foot, short in a city and on the planner's path, least indoors", function()
+  local look = ns.Arrow._lookFor
+  local open, city, planned = { nav = true, cell = 8 }, { nav = true, cell = 4 }, {}
+  local sv = ns.Arrow.Indoors
+  ns.Arrow.Indoors = function() return false end
+  local ok, err = pcall(function()
+    assertTrue(look(open, 14) > look(open, 7), "a mount looks no further ahead than feet")
+    assertTrue(look(open, 7) >= 10 and look(open, 30) <= 24, "open country: " .. look(open, 7) .. " on foot, " .. look(open, 30) .. " at a gallop")
+    assertTrue(look(city, 7) >= 8 and look(city, 30) <= 10, "a city: " .. look(city, 7) .. " to " .. look(city, 30))
+    assertTrue(look(planned, 7) >= 8 and look(planned, 30) <= 12, "the planner's path: " .. look(planned, 7) .. " to " .. look(planned, 30))
+    assertTrue(look(open, 0) >= 10, "standing still")
+    ns.Arrow.Indoors = function() return true end
+    assertEquals(6, look(open, 14)); assertEquals(6, look(city, 7))
+  end)
+  ns.Arrow.Indoors = sv
+  if not ok then error(err, 0) end
+end)
+
+test("arrow look-ahead: it turns into a corner over the yards before it - no swing at the corner, on real lines", function()
+  local walks = {
+    { "Stormwind, Trade District to the Keep", 1453, 66.1, 70.8, 80.0, 38.0, 20, 7 },
+    { "Stormwind, the harbour to the Trade District", 1453, 28.0, 50.0, 66.1, 70.8, 20, 7 },
+    { "Elwynn, Goldshire to Eastvale on foot", 1429, 42.1, 65.9, 79.5, 68.8, 8, 7 },
+    { "Elwynn, Goldshire to Eastvale on a mount", 1429, 42.1, 65.9, 79.5, 68.8, 8, 14 },
+    { "the Wetlands, Menethil to Dun Modr on a mount", 1437, 10.9, 59.6, 49.9, 18.3, 24, 14 },
+  }
+  for _, T in ipairs(walks) do
+    local name, m, x1, y1, x2, y2, level, speed = unpack(T)
+    local sx, sy = navWorld(m, x1, y1)
+    local tx, ty = navWorld(m, x2, y2)
+    local P = ns.Nav.Find(m, sx, sy, nil, tx, ty, nil, level)
+    assertTrue(P ~= nil, name .. ": no way")
+    local look = ns.Arrow._lookFor(P, speed)
+    local worst, total, off, there = followArrow(P, speed, function(Q, px, py) return ns.Arrow._follow(Q, px, py, look) end)
+    local oldWorst, oldTotal, _, oldThere = followArrow(P, speed, cornerAim)
+    assertTrue(there and oldThere, name .. ": following the arrow never got there")
+    -- the old arrow swung by the whole corner at once (35 to 130 degrees within a quarter second on these lines)
+    assertTrue(oldWorst > 30, name .. ": the old arrow's worst swing was only " .. math.floor(oldWorst) .. " degrees - the test proves nothing")
+    assertTrue(worst < oldWorst * 0.7 and worst <= (m == 1453 and 55 or 25), name .. ": the arrow swings " .. math.floor(worst) .. " degrees within a quarter second (the old one " .. math.floor(oldWorst) .. ")")
+    -- ...and it does not pay for that with more turning in all, or by leading you off the line
+    assertTrue(total <= oldTotal * 1.15 + 20, name .. ": the arrow turns " .. math.floor(total) .. " degrees in all, the old one " .. math.floor(oldTotal))
+    assertTrue(off <= look * 0.6 + 2, name .. ": following the arrow strays " .. string.format("%.1f", off) .. " yd from the line (look-ahead " .. look .. ")")
+  end
+end)
+end
 
 test("flight paths you know come from the world map's flight points, no flight master needed", function()
   local sv = { api = C_TaxiMap, known = ns.State.knownTaxi, charKnown = ns.char.knownTaxi, fac = UnitFactionGroup }
@@ -5032,4 +5273,88 @@ test("the card hangs from its top (its height changing in combat no longer leave
     InCombatLockdown = sv
     assertEquals(placed, card.cur.btnY, "in combat the button row moved away from the button")
   end, { anyTarget = true })
+end)
+
+test("built-in plans from the faction addon: only your plan's text becomes code, the others are never run, and the text is let go", function()
+  local sv = { load = C_AddOns.LoadAddOn, starter = ForeverRouteStarter, fac = UnitFactionGroup }
+  local ok, err = pcall(function()
+    ForeverRouteStarter = {}
+    local loaded = {}
+    UnitFactionGroup = function() return "Alliance" end
+    C_AddOns.LoadAddOn = function(name)
+      loaded[#loaded + 1] = name
+      if name == "ForeverRoute_Plans_Alliance" then
+        ForeverRoutePlanSources = {
+          ["gnome-warlock"] = "ForeverRouteStarter = ForeverRouteStarter or {}; ForeverRouteStarter['gnome-warlock'] = function() ForeverRouteBundleRan = true end",
+          ["human-mage"] = "ForeverRouteOtherPlanRan = true",
+        }
+      end
+      return true
+    end
+    ForeverRouteOtherPlanRan = nil
+    assertTrue(ns.LoadStarter("gnome-warlock"), "your plan did not load from the faction addon")
+    assertEquals("ForeverRoute_Plans_Alliance", loaded[1], "loaded " .. tostring(loaded[1]) .. " first")
+    assertEquals("function", type(ForeverRouteStarter["gnome-warlock"]))
+    assertNil(ForeverRouteOtherPlanRan, "another race's plan was run")
+    assertNil(ForeverRoutePlanSources, "the other plans' text was kept")
+    -- an older install: no faction addon, the per-plan one still works
+    loaded = {}
+    C_AddOns.LoadAddOn = function(name) loaded[#loaded + 1] = name; if name == "ForeverRoute_Starter_dwarf_hunter" then ForeverRouteStarter["dwarf-hunter"] = function() end end; return true end
+    assertTrue(ns.LoadStarter("dwarf-hunter"), "the per-plan addon of an older install no longer loads")
+  end)
+  C_AddOns.LoadAddOn, ForeverRouteStarter, UnitFactionGroup = sv.load, sv.starter, sv.fac
+  ForeverRoutePlanSources = nil
+  if not ok then error(err, 0) end
+end)
+
+test("the Forever Route scale slider applies when you let go (dragging it resized the window under the cursor and it ran to its end)", function()
+  ns.Fire("FR_OPEN_OPTIONS")
+  local panel = ForeverRouteOptions
+  local s = panel and panel.scaleSlider
+  assertNotNil(s, "no scale slider")
+  local before = ns.db.uiScale
+  local fired = 0
+  local sv = ns.Fire
+  local ok, err = pcall(function()
+    ns.Fire = function(ev, ...) if ev == "FR_SETTINGS" then fired = fired + 1 end; return sv(ev, ...) end
+    s:GetScript("OnMouseDown")(s)
+    s:SetValue(1.4); s:SetValue(1.6)
+    assertEquals(0, fired, "the scale changed while dragging")
+    assertEquals(before, ns.db.uiScale, "the setting changed while dragging")
+    s:GetScript("OnMouseUp")(s)
+    assertEquals(1, fired, "letting go did not apply it once")
+    assertTrue(math.abs((ns.db.uiScale or 0) - 1.6) < 0.001, "not the value let go at")
+    -- the wheel or the keys (no drag): straight away
+    s:SetValue(1.2); assertEquals(2, fired)
+  end)
+  ns.Fire = sv
+  ns.db.uiScale = before; ns.Fire("FR_SETTINGS")
+  if ForeverRouteOptionsWindow then ForeverRouteOptionsWindow:Hide() end
+  if not ok then error(err, 0) end
+end)
+
+test("the card stays on the screen when the scale changes, an off-screen card comes back by itself, /fr card reset", function()
+  local sv = { pos = ns.db.cardPos, ui = ns.db.uiScale, sc = ns.db.scale }
+  local ok, err = pcall(function()
+    local f = ForeverRouteCard
+    f:Show(); ns.db.cardPos = { "ABS", 200, 500 }; ns.Card.ApplyPos() -- (room to grow: at the right edge the screen clamp moves it)
+    ns.Card.AnchorTop()
+    assertEquals("ABS", ns.db.cardPos[1], "the place is not kept in screen units")
+    local s0 = f:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    local left0 = f:GetLeft() * s0
+    -- a bigger scale: the same place on the screen, still on it
+    ns.db.uiScale = 1.2; ns.Fire("FR_SETTINGS"); ns.Style.ApplyScale(); ns.Card.ApplyPos()
+    local s1 = f:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    assertTrue(math.abs(f:GetLeft() * s1 - left0) < 2, "the card moved on the screen when the scale changed")
+    assertTrue(ns.Card.OnScreen(), "the card went off the screen")
+    -- a saved place that is off the screen: back at the default place
+    ns.db.cardPos = { "ABS", 99999, 99999 }; ns.Card.ApplyPos()
+    assertTrue(ns.Card.OnScreen(), "an off-screen card stayed off the screen")
+    -- /fr card reset: normal size, default place, shown
+    f:Hide(); ns.db.hidden = true
+    SlashCmdList["FOREVERROUTE"]("card reset")
+    assertTrue(f:IsShown(), "/fr card reset did not show the card"); assertNil(ns.db.uiScale); assertNil(ns.db.cardPos)
+  end)
+  ns.db.cardPos, ns.db.uiScale, ns.db.scale = sv.pos, sv.ui, sv.sc; ns.Fire("FR_SETTINGS")
+  if not ok then error(err, 0) end
 end)

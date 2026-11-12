@@ -278,9 +278,9 @@ local function build()
   f:SetScript("OnHide", function() if InCombatLockdown() then Card.needPlace = true else cur.target:Hide(); cur.item:Hide() end end)
   f:SetScript("OnShow", function() C_Timer.After(0, function() Card.PlaceSecure() end) end)
 
-  if ns.db.cardPos then local p = ns.db.cardPos; f:ClearAllPoints(); f:SetPoint(p[1], UIParent, p[2], p[3], p[4]) end
   Style.Scaled(f, "scale") -- the Forever Route scale x the card's own
-  C_Timer.After(0, function() Card.AnchorTop() end)
+  Card.ApplyPos() -- at its saved place for this scale, or the default place if that's off the screen
+  C_Timer.After(0, function() Card.ApplyPos() end)
 end
 
 function Card.Hover(on)
@@ -659,13 +659,50 @@ end
 -- The card hangs from its top-left corner: anchored by its middle (as it was, and as a drag can leave it), every
 -- change of height moved its top - and the Target button, which can't move in combat, was left off the card. Out of
 -- combat only (the card's anchor is ours, but it carries the secure buttons' place with it).
+-- Its place is kept in the game's own units (what it measures at scale 1), never in the card's scaled ones: the game
+-- multiplies a frame's offsets by its scale, so a place saved at one scale and set again at a bigger one put the card
+-- off the screen ("I fucked with the scale and now the card is just gone"). { "ABS", left, top } in UIParent units.
 function Card.AnchorTop()
   if not f or InCombatLockdown() then return end
   local l, t = f:GetLeft(), f:GetTop()
   if not (l and t) then return end
-  f:ClearAllPoints(); f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", l, t)
-  ns.db.cardPos = { "TOPLEFT", "BOTTOMLEFT", l, t }
+  local s = f:GetScale() or 1
+  ns.db.cardPos = { "ABS", l * s, t * s }
+  Card.ApplyPos()
 end
+-- set the card at its saved place for its current scale; off the screen (or no place yet), the default place
+Card.DEFAULT_POS = { "RIGHT", "RIGHT", -60, 120 }
+function Card.ApplyPos()
+  if not f or InCombatLockdown() then return end
+  local p, s = ns.db.cardPos, f:GetScale() or 1
+  f:ClearAllPoints()
+  if type(p) == "table" and p[1] == "ABS" and tonumber(p[2]) and tonumber(p[3]) then
+    f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", p[2] / s, p[3] / s)
+  elseif type(p) == "table" and p[1] and p[2] then
+    f:SetPoint(p[1], UIParent, p[2], tonumber(p[3]) or 0, tonumber(p[4]) or 0) -- an older save: as it was
+  else
+    local d = Card.DEFAULT_POS; f:SetPoint(d[1], UIParent, d[2], d[3], d[4])
+  end
+  if not Card.OnScreen() then Card.ResetPos(true) end
+end
+-- is enough of the card on the screen to grab? (a corner of it, in screen units)
+function Card.OnScreen()
+  local l, t, r, b = f:GetLeft(), f:GetTop(), f:GetRight(), f:GetBottom()
+  if not (l and t and r and b) then return true end
+  local s = f:GetEffectiveScale() / UIParent:GetEffectiveScale()
+  local W, H = UIParent:GetWidth(), UIParent:GetHeight()
+  return r * s > 40 and l * s < W - 40 and t * s > 40 and b * s < H - 20
+end
+-- back to the default place (/fr card reset; or by itself when it was off the screen)
+function Card.ResetPos(quiet)
+  if not f or InCombatLockdown() then return end
+  ns.db.cardPos = nil
+  f:ClearAllPoints(); local d = Card.DEFAULT_POS; f:SetPoint(d[1], UIParent, d[2], d[3], d[4])
+  if not quiet then f:Show(); ns.Print("Card back at its place, at the normal size.") elseif ns.Why then ns.Why("card", "the card was off the screen: put back at its place") end
+  C_Timer.After(0, Card.PlaceSecure)
+end
+-- the scale changed: the same place on the screen at the new scale
+ns.On("FR_SETTINGS", function() C_Timer.After(0, function() if f then Card.ApplyPos(); Card.PlaceSecure() end end) end)
 
 function Card.PlaceSecure()
   if not f then return end

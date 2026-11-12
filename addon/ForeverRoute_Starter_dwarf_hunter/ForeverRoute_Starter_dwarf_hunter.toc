@@ -4,5 +4,7 @@
 ## Dependencies: ForeverRoute
 ## Group: ForeverRoute
 ## LoadOnDemand: 1
+## Version: plans 2026-11-12
+## X-Plans: plans 2026-11-12 · QuestieDB 1.0.15 · planner f210eaf
 
 Plan.lua

@@ -19,7 +19,24 @@ const steps = require('./routefile').steps(text, wantId); // the shared plan-fil
 const issues = [];
 const accepted = new Set(), seen = new Set();
 let lastLvl = 0, lastMap = null;
-const mobLevelOf = (label) => { const n = Object.values(db.npcs).find((x) => x && x.name === label); return n ? n.maxLevel : null; };
+// the level of the mobs by that name that are actually somewhere: a second record with no spawns (Forever's Eastsea
+// Buccaneer: 41-42 in Riverglades, and a level-61 one that spawns nowhere) flagged every plan
+// the mobs the quest itself names (kill objectives, and the mobs an item objective drops from), by that name: name
+// alone also matched Molten Core's level-62 Magma Elementals for a level-47 Searing Gorge kill
+const questMobLevel = (q, label) => {
+  const quest = q && db.quests[q];
+  if (!quest) return null;
+  const ids = [];
+  for (const o of quest.objectives || []) { if (o.kind === 'kill' && o.npc) ids.push(o.npc); for (const d of o.npcDrops || []) ids.push(d); }
+  const levels = ids.map((id) => db.npcs[id]).filter((n) => n && n.name === label).map((n) => n.maxLevel || 0);
+  return levels.length ? Math.max(...levels) : null;
+};
+const mobLevelOf = (label) => {
+  const all = Object.values(db.npcs).filter((x) => x && x.name === label);
+  const placed = all.filter((x) => x.spawns && x.spawns.length);
+  const use = placed.length ? placed : all;
+  return use.length ? Math.max(...use.map((x) => x.maxLevel || 0)) : null;
+};
 // dungeon quests (objectives "... (in The Stockade)") are done in a group: a group handles mobs a few levels higher
 const dungeonQ = new Set(steps.filter((s) => s.k === 'obj' && / \(in [^)]+\)$/.test(s.text || '')).map((s) => s.q));
 // the character file (doneFile): a list of done quests, or { done: [...], log: [...] } - a quest already in your log
@@ -32,7 +49,7 @@ steps.forEach((s, i) => {
   // a quest's level only matters if it makes you fight or loot: a delivery or talk quest (The Hermit) is safe at any level you can take it
   const fights = q && (q.objectives || []).some((o) => o.kind === 'kill' || (o.npcDrops || []).length || (o.objectDrops || []).length);
   if (s.k === 'accept' && q && fights && lvl && q.level > lvl + above && !inLogAtStart.has(s.q)) issues.push(`#${n} accept ${s.name} (quest ${q.level}) at level ${lvl}`);
-  if (s.k === 'obj' && s.target && lvl) { const ml = mobLevelOf(s.target); if (ml && ml > lvl + above) issues.push(`#${n} kill ${s.target} (mobs up to ${ml}) at level ${lvl}`); }
+  if (s.k === 'obj' && s.target && lvl) { const ml = questMobLevel(s.q, s.target) ?? mobLevelOf(s.target); if (ml && ml > lvl + above) issues.push(`#${n} kill ${s.target} (mobs up to ${ml}) at level ${lvl}`); }
   if (s.k === 'accept') accepted.add(s.q);
   if (s.k === 'turnin' && s.q > 0 && !accepted.has(s.q) && !s.inserted) { /* may be in log already: fine */ }
   if (s.m && lastMap && s.m !== lastMap && !['fly', 'hearth', 'train'].includes(s.k)) {

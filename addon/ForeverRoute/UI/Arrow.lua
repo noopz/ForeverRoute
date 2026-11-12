@@ -1,6 +1,8 @@
 -- Waypoint tracking + arrow. A hidden driver tracks distance/arrival for the current step all the time (so goto steps
 -- complete and the card shows distance even with the arrow off); the arrow frame is purely visual: it eases its rotation,
 -- shifts green -> amber -> red as you turn away, shows distance + ETA, and pulses a ring when you arrive.
+-- Along a path it steers for a spot a little way ahead on the line (Nav.Aim), so it turns into a corner over the
+-- yards before it instead of swinging round on the corner itself.
 local _, ns = ...
 local Style = ns.Style
 local C = Style.C
@@ -26,32 +28,27 @@ local function buildPath(s, m, wx, wy)
   for k = #pts - 1, 1, -1 do rem[k] = rem[k + 1] + math.sqrt((pts[k + 1][1] - pts[k][1]) ^ 2 + (pts[k + 1][2] - pts[k][2]) ^ 2) end
   return { pts = pts, rem = rem, cursor = 1, z0 = s.z0, z1 = s.z }
 end
-local function segDist(px, py, a, b)
-  local dx, dy = b[1] - a[1], b[2] - a[2]; local L2 = dx * dx + dy * dy
-  local t = L2 > 0 and math.max(0, math.min(1, ((px - a[1]) * dx + (py - a[2]) * dy) / L2)) or 0
-  return math.sqrt((px - a[1] - t * dx) ^ 2 + (py - a[2] - t * dy) ^ 2), t
-end
 Arrow._buildPath = function(...) return buildPath(...) end
--- where to aim along the path: find the part of the path you're nearest to (from where you got to, onwards) and head
--- for its far end. Walk somewhere else and come out near a later part (a shortcut) and it carries on from there;
--- it never invents a shortcut of its own (a straight line could go through a wall or off a cliff).
-local function follow(P, px, py)
-  local pts, rem = P.pts, P.rem
-  local d1 = math.sqrt((pts[1][1] - px) ^ 2 + (pts[1][2] - py) ^ 2)
-  local best, bestD, bestT = 0, d1, 0 -- segment 0 = "not on the path yet": head for its first point
-  for j = math.max(1, P.cursor), #pts - 1 do
-    local d, t = segDist(px, py, pts[j], pts[j + 1])
-    if d < bestD - 0.01 then best, bestD, bestT = j, d, t end
-  end
-  if best > 0 then P.cursor = best end
-  local ai = best + 1
-  if ai < #pts and math.sqrt((pts[ai][1] - px) ^ 2 + (pts[ai][2] - py) ^ 2) < 7 then ai = ai + 1 end
-  local aim = pts[ai]
-  local walk = math.sqrt((aim[1] - px) ^ 2 + (aim[2] - py) ^ 2) + rem[ai]
-  local zHere = P.z0
-  if best > 0 and pts[best][3] and pts[best + 1][3] then zHere = pts[best][3] + (pts[best + 1][3] - pts[best][3]) * bestT end
-  return aim, walk, bestD, zHere
+-- How far ahead along the path the arrow looks, in yards: about Arrow.LOOK_SEC seconds of travel (so further on a
+-- mount than on foot), within what the place allows. Open country (a walk map of 8-yd squares or more): 12 to 24.
+-- A city's walk map (4-yd squares, walls): 8 to 10. The planner's own path: 8 to 12. Inside a building: 6.
+-- Measured on real lines (docs/research/navigation-paths.md, "The arrow"): someone who follows the arrow strays
+-- from the line by up to half of this at a sharp corner (the old arrow: 4 to 5 yd).
+Arrow.LOOK_SEC = 1.5
+Arrow.TURN = 8 -- how fast the drawn arrow follows its direction (1/s; it was 12)
+local function lookFor(P, speed)
+  if Arrow.Indoors() then return 6 end
+  local lo, hi = 8, 12
+  if P.nav then if (P.cell or 8) >= 8 then lo, hi = 12, 24 else hi = 10 end end
+  return math.max(lo, math.min(hi, (speed or 7) * Arrow.LOOK_SEC))
 end
+Arrow._lookFor = lookFor
+-- where to aim along the path: the spot on it `look` yards from you, ahead of where you are on it (Nav.Aim). Walk
+-- somewhere else and come out near a later part (a shortcut) and it carries on from there; the spot is always on
+-- the path, so the arrow never invents a shortcut longer than its look-ahead (a straight line could go through a
+-- wall or off a cliff).
+-- -> the spot { x, y }, yards to walk, how far off the path you are, the path's height where you are
+local function follow(P, px, py, look) return ns.Nav.Aim(P, px, py, look or 10) end
 Arrow._follow = follow
 local function colorFor(diff)
   local t = math.abs(diff) / math.pi
@@ -142,7 +139,7 @@ local function build()
     local live = ns.Nav and target.key and ns.Nav.PathFor(target.key)
     local P = live or target.path
     if P and dist > (target.r or 12) then
-      local aim, walk, off, zHere = follow(P, px, py)
+      local aim, walk, off, zHere = follow(P, px, py, lookFor(P, moveSpeed))
       -- the planned path runs from the previous stop; you may well have come from somewhere else. Use it only while
       -- you're on it (or still at its start); otherwise point straight at the target and hide the line.
       local St = P.start
@@ -193,7 +190,7 @@ local function build()
     if not facing or not angle then return end
     local want = angle - facing
     local d = (want - rot + math.pi) % (2 * math.pi) - math.pi
-    rot = rot + d * math.min(1, el * 12)
+    rot = rot + d * math.min(1, el * Arrow.TURN)
     f.arrow:SetRotation(rot)
     local r, g, b = colorFor((want + math.pi) % (2 * math.pi) - math.pi)
     f.arrow:SetVertexColor(r, g, b); f.arrow:SetAlpha(1)

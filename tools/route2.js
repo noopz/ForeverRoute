@@ -1058,7 +1058,9 @@ function writeRoute(seq, locs) {
   for (const c of cands) c.value = hearthValue(c);
   const bindChoice = cands.sort((a, b) => b.value - a.value)[0] || null;
   if (cands.length) console.error('hearthstone: ' + cands.map((c) => `${c.name}${c.current ? ' (now)' : ''} saves ${Math.round(c.value / 60)} min`).join(', ') + ' -> ' + (bindChoice ? bindChoice.name : 'none'));
-  // hearth tracking: where you're bound (once the route binds you) and a rough clock along the route
+  // hearth tracking: where you're bound (once the route binds you) and a rough clock along the route. This clock (the
+  // steps in their final order), not the simulation's, is the one the cooldown is kept on: hearth steps carry it as tm
+  // (whole minutes, rounded down) and the leg hands its length on as clockMin, so legs add up to one clock
   let lastZoneW = null; // the leg itself starts with its own travel step (added when legs are joined)
   let hearthAt = bindChoice && bindChoice.current ? cfg.hearth : null, hearthClock = 0, hearthReady = cfg.hearthCdLeft || 0, here = cfg.start || null;
   const atHearth = (q) => hearthAt && homeTest(hearthAt)(q);
@@ -1069,7 +1071,7 @@ function writeRoute(seq, locs) {
       const walk = travelSec(here, p);
       if (walk >= HEARTH_MIN_WALK) {
         const where = (h && h.name) || zname(p.zone);
-        steps.push({ k: 'hearth', text: where, dest: where, note: 'Hearth back to ' + where + ' - saves about ' + Math.round(walk / 60) + ' min of travel.', bindMap: uiMap[hearthAt.zone], sec, tm: Math.round(hearthClock / 60) });
+        steps.push({ k: 'hearth', text: where, dest: where, note: 'Hearth back to ' + where + ' - saves about ' + Math.round(walk / 60) + ' min of travel.', bindMap: uiMap[hearthAt.zone], sec, tm: Math.floor(hearthClock / 60) });
         hearthReady = hearthClock + HEARTH_CD; here = hearthAt;
       }
     }
@@ -1113,7 +1115,7 @@ function writeRoute(seq, locs) {
       if (!(TRAINERS.length && trainNow(due, here && TRAINERS.some((tr) => tr.zone === here.zone)))) due = [];
       const trainer = due.length ? nearestTrainer(here) : null;
       if (due.length && trainer && hearthAt && hearthAt.zone === trainer.zone && here && here.zone !== trainer.zone && hearthClock >= hearthReady) {
-        steps.push({ k: 'hearth', text: zname(trainer.zone), dest: zname(trainer.zone), note: 'Hearth to ' + zname(trainer.zone) + ' for your new spells, then fly back.', bindMap: uiMap[hearthAt.zone], sec, tm: Math.round(hearthClock / 60) });
+        steps.push({ k: 'hearth', text: zname(trainer.zone), dest: zname(trainer.zone), note: 'Hearth to ' + zname(trainer.zone) + ' for your new spells, then fly back.', bindMap: uiMap[hearthAt.zone], sec, tm: Math.floor(hearthClock / 60) });
         hearthReady = hearthClock + HEARTH_CD;
       }
       if (due.length && trainer) lastZoneW = trainer.zone; // training takes you to the trainer's city: the next stop elsewhere gets a travel step
@@ -1128,7 +1130,11 @@ function writeRoute(seq, locs) {
   try {
     if (cfg.stateOut && fs.existsSync(cfg.stateOut)) {
       const st0 = JSON.parse(fs.readFileSync(cfg.stateOut, 'utf8'));
-      st0.hearthCdLeft = Math.max(0, Math.round(hearthReady - hearthClock));
+      // the leg's length on the clock the cooldown was kept on (the simulation's minutes, before optimizing, ran up to
+      // 4 min shorter: the next leg's hearth then came 57 min after this leg's by the route's clock), in whole minutes
+      // rounded down, and the cooldown left measured from there - so tm adds up across legs without rounding an hour short
+      st0.clockMin = Math.floor(hearthClock / 60);
+      st0.hearthCdLeft = Math.max(0, Math.ceil(hearthReady - st0.clockMin * 60));
       st0.trainedAt = trained; // ranks still waiting are trained in a later leg
       // where the stone is set when the leg ends: the inn the steps bound you at, else where you came in bound
       chosenHearth = bound ? bindChoice.at : (cfg.hearth || null);

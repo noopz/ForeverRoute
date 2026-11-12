@@ -35,8 +35,10 @@ for cfg in "$ROOT"/routes/campaign-*.json; do
   esac
 done
 cd "$SRC" && find . -type f ! -name 'Route.lua' | while read f; do mkdir -p "$DEST/$(dirname "$f")"; cp "$f" "$DEST/$f"; done
-# the built-in plans, one load-on-demand addon per race and class
-for P in "$ROOT"/addon/ForeverRoute_Starter_*; do [ -d "$P" ] || continue; N=$(basename "$P"); mkdir -p "$GAME/Interface/AddOns/$N"; cp "$P"/* "$GAME/Interface/AddOns/$N/"; done
+# the built-in plans: one load-on-demand addon per faction (tools/bundle-plans.js)
+node "$ROOT/tools/bundle-plans.js" "$GAME/Interface/AddOns" >/dev/null || { echo "NOT installed (bundling the plans)"; exit 1; }
+# (the one-addon-per-plan folders this replaced: ours, gone)
+rm -rf "$GAME/Interface/AddOns"/ForeverRoute_Starter_*
 # (a Starter.lua left from before the plans moved out would still load: gone)
 rm -f "$DEST/Starter.lua"
 echo "installed"

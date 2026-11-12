@@ -29,13 +29,13 @@ Install, log in, and follow the card. Open any flight master's map once so the a
 | `/fr why` | Why the addon did what it just did |
 | `/fr report` | Copy an anonymous bug report |
 | `/fr news` | What changed in recent versions |
-| `/fr options` | Settings, including size |
+| `/fr options` | Settings, including size and quest automation |
 
 **Key binding:** Options › Keybindings › AddOns › "Forever Route Targeting" targets the step's NPC and marks it.
 
 ## Coverage
 
-All Alliance races and classes now; **Horde plans are coming next**.
+**Every race and class, Alliance and Horde,** including Forever's new zones (Riverglades, Shen'dralas).
 
 ## Found a problem?
 

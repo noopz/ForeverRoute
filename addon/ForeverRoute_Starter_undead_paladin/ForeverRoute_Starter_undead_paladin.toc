@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: Forever Route - built-in plan: undead paladin
+## Notes: Loaded by Forever Route only for a undead paladin with no plan of its own.
+## Dependencies: ForeverRoute
+## Group: ForeverRoute
+## LoadOnDemand: 1
+## Version: plans 2026-11-12
+## X-Plans: plans 2026-11-12 · QuestieDB 1.0.15 · planner e643586
+
+Plan.lua

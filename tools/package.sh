@@ -16,15 +16,16 @@ rm -f dist/pkg/ForeverRoute/Route.lua
 T=dist/pkg/ForeverRoute/ForeverRoute.toc; grep -v '^Route[.]lua' "$T" > "$T.new" && mv "$T.new" "$T"
 if grep -q '^Route.lua' dist/pkg/ForeverRoute/ForeverRoute.toc; then echo "package: Route.lua still in the TOC"; exit 1; fi
 sed -i "s/^## Version: .*/## Version: $VER/" dist/pkg/ForeverRoute/ForeverRoute.toc
-for d in addon/ForeverRoute_Starter_*/; do cp -r "$d" dist/pkg/; done
+# the built-in plans as two addons, one per faction (tools/bundle-plans.js): 51 one-per-plan addons filled the addon list
+node tools/bundle-plans.js dist/pkg >/dev/null || { echo "package: bundling the plans failed"; exit 1; }
 # every built-in plan nests under Forever Route in the game's addon list (## Group), or 51 entries fill it
-missing=$(grep -L '^## Group: ForeverRoute' dist/pkg/ForeverRoute_Starter_*/*.toc 2>/dev/null); if [ -n "$missing" ]; then echo "package: built-in plans without ## Group: $missing"; exit 1; fi
+missing=$(grep -L '^## Group: ForeverRoute' dist/pkg/ForeverRoute_Plans_*/*.toc 2>/dev/null); if [ -n "$missing" ]; then echo "package: built-in plans without ## Group: $missing"; exit 1; fi
 # the licenses (NOTICE says which is which): the addon is CC BY-NC-SA with a few GPL quest-data files; each built-in
 # plan is all quest data, so GPL
 cp LICENSE dist/pkg/ForeverRoute/LICENSE
 cp LICENSES/GPL-3.0.txt dist/pkg/ForeverRoute/LICENSE-GPL-3.0.txt
 cp NOTICE dist/pkg/ForeverRoute/NOTICE
-for d in dist/pkg/ForeverRoute_Starter_*/; do cp LICENSES/GPL-3.0.txt "$d/LICENSE-GPL-3.0.txt"; cp NOTICE "$d/NOTICE"; done
+for d in dist/pkg/ForeverRoute_Plans_*/; do cp LICENSES/GPL-3.0.txt "$d/LICENSE-GPL-3.0.txt"; cp NOTICE "$d/NOTICE"; done
 if command -v zip >/dev/null; then (cd dist/pkg && zip -qr "../ForeverRoute-$VER.zip" .)
 else powershell -NoProfile -Command "Compress-Archive -Path 'dist/pkg/*' -DestinationPath 'dist/ForeverRoute-$VER.zip'"; fi
 echo "dist/ForeverRoute-$VER.zip: $(ls dist/pkg | wc -l) addon folders"

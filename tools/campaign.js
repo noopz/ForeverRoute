@@ -715,9 +715,10 @@ async function beamSearch() {
     legs[k].from = steps.length;
     const off = sections.length;
     sections.push(...leg.sections);
-    // tm (hearth steps): minutes since this leg began -> since the route began (the legs' planned minutes, the same
-    // clock the hearth cooldown is carried on), so the audit can see two hearths less than an hour apart
-    const clockOff = legs.slice(0, k).reduce((a, l) => a + ((l.state && l.state.minutes) || 0), 0);
+    // tm (hearth steps): minutes since this leg began -> since the route began, on the clock the hearth cooldown is
+    // carried on: each leg's own step clock (state.clockMin, route2.js writeRoute), so the audit can see two hearths
+    // less than an hour apart. A leg with no steps of its own clock (a grind, a dungeon run) counts its planned minutes
+    const clockOff = legs.slice(0, k).reduce((a, l) => a + ((l.state && (l.state.clockMin ?? l.state.minutes)) || 0), 0);
     for (const s of leg.steps) steps.push({ ...s, sec: s.sec + off, ...(s.tm !== undefined ? { tm: s.tm + clockOff } : {}) });
     // the choice point is a step, not a number: later passes (carried deliveries, repeated pick-ups below, the safety
     // net in paths.js) insert and remove steps, and a number taken here ended up deep inside the next zone

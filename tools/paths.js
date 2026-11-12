@@ -307,9 +307,12 @@ function specialRoutes() {
       const have = new Set(p.steps.slice(0, at).filter((x) => x.q).map((x) => x.k + ':' + x.q));
       const add = r.steps.filter((x) => !(x.q && have.has(x.k + ':' + x.q)));
       if (!add.some((x) => x.q)) continue; // already in the path (or done)
-      // the path's own later steps for the same quests would now be done twice: drop them
+      // the path's own later steps for the same quests would now be done twice: drop them - and every later step of a
+      // quest the trip hands in (its objectives too: the trip names a common drop on the hand-in, 'Bring Linen Cloth',
+      // with no objective step of its own, and the path's 'Loot 10 Linen Cloth' was left behind the hand-in)
       const mine = new Set(add.filter((x) => x.q).map((x) => x.k + ':' + x.q));
-      for (let i = p.steps.length - 1; i >= at; i--) if (p.steps[i].q && mine.has(p.steps[i].k + ':' + p.steps[i].q)) {
+      const handed = new Set(add.filter((x) => x.q && x.k === 'turnin').map((x) => x.q));
+      for (let i = p.steps.length - 1; i >= at; i--) if (p.steps[i].q && (mine.has(p.steps[i].k + ':' + p.steps[i].q) || handed.has(p.steps[i].q))) {
         const [gone] = p.steps.splice(i, 1);
         if (gone._choice !== undefined && p.steps[i] && p.steps[i]._choice === undefined) p.steps[i]._choice = gone._choice; // keep the zone-boundary mark
       }
