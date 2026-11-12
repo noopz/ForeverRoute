@@ -21,6 +21,9 @@ Next.BEHIND_YD = 2000   -- yards: a pick-up the built-in plan passed as behind y
 Next.BEHIND_MAX = 6     -- ...the nearest this many
 Next.HOLD_NEAR = 400    -- yards: a prize this close can come before the plan's trip or grind step
 Next.BEHIND_WORK = 150  -- seconds: the work one of its objectives is taken to be (and the way to it)
+Next.DISMISS_SECS = 900 -- "not now" on a while-you're-here stop: it stays off for this long...
+Next.DISMISS_YD = 500    -- ...or until you are this far from where you said it
+Next.dismissed = {}      -- step index -> { t, x, y, inst }: where and when
 Next.RESOLVE = 2        -- seconds: re-solve at least this often while things change
 Next.SERVICE = { accept = 8, turnin = 10, obj = 90, fp = 15, train = 40, bind = 15, ["goto"] = 5 }
 -- (a "go to" step - a dungeon run, a place to be - is a commitment, not a stop to fit in: it stays where the plan has it)
@@ -162,6 +165,15 @@ function Next.BehindPrize(list, s, L)
 end
 
 local last -- { sig, at, pick, res }
+-- a stop you said "not now" to, while it holds: you are still about where you said it, and not long after
+local function isDismissed(j, px, py, pinst)
+  local d = Next.dismissed[j]
+  if not d then return false end
+  local now = GetTime and GetTime() or 0
+  if now - d.t > Next.DISMISS_SECS or d.inst ~= pinst or (d.x - px) ^ 2 + (d.y - py) ^ 2 > Next.DISMISS_YD ^ 2 then Next.dismissed[j] = nil; return false end
+  return true
+end
+Next.IsDismissed = isDismissed
 -- -> the step index to show, or nil (the plan's own next step stands)
 function Next.Pick(planned)
   local E, St = ns.Engine, ns.State
@@ -189,8 +201,12 @@ function Next.Pick(planned)
   local now = GetTime and GetTime() or 0
   if last and last.sig == sig and now - last.at < Next.RESOLVE and last.pick and list[last.pick] and E.Status(last.pick) == "todo" then return last.pick end
 
+  -- (a "not now" ends when you move on: checked every solve, not only when that stop is a candidate again)
+  for j in pairs(Next.dismissed) do isDismissed(j, px, py, pinst) end
   local stops, byStep, count, scanEnd = {}, {}, 0, planned
   local function add(j, extra)
+    -- (a stop you said "not now" to stays out while you're still here: a plan step waits for its own place in the plan)
+    if extra and extra.opt and isDismissed(j, px, py, pinst) then return nil end
     local s = list[j]
     local w = wpos(s)
     -- (an objective takes what the planner expects it to - s.work, its kills and drops at their rates; the flat guess
@@ -397,6 +413,27 @@ function Next.Reason(i)
   if st.early then return "while you're here - it saves coming back for it later" end
   if st.opt then return "a quest you picked up on the way, handed in where it costs least" end
   return "on the way - the whole route from here is shorter this way"
+end
+
+-- can the card's step be put off ("not now")? Only a stop the solver took in from where you are - a hand-in while
+-- you're here, a quest right behind you, one you picked up on the way - never the plan's own next step.
+function Next.CanDismiss(i)
+  for _, s in ipairs((Next.res and Next.res.seq) or {}) do if s.step == i then return (s.opt and true) or false end end
+  return false
+end
+-- "not now": the stop leaves the card until you move on or a while passes, and the plan's order stands
+function Next.Dismiss(i)
+  if not Next.CanDismiss(i) then return false end
+  -- (where you are: the position the once-a-second check measured, as the solve uses it)
+  local ep = ns.Engine and ns.Engine.pos
+  local px, py, pinst
+  if ep then px, py, pinst = ep[1], ep[2], ep[3] else px, py, pinst = HBD:GetPlayerWorldPosition() end
+  if not px then return false end
+  Next.dismissed[i] = { t = GetTime and GetTime() or 0, x = px, y = py, inst = pinst }
+  last = nil
+  if ns.Engine and ns.Engine.focus == i then ns.Engine.focus, ns.Engine.focusWhy = nil, nil end
+  if ns.Engine and ns.Engine.Refresh then ns.Engine.Refresh() end
+  return true
 end
 
 -- the finished quests left for later (the card's "later" line): their names

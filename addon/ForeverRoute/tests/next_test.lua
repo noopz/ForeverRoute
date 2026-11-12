@@ -288,3 +288,28 @@ test("next: why not that step? - the route list says what doing it first would c
     assertNil(ns.Next.WhyNot(99))
   end)
 end)
+
+test("next: \"not now\" on a while-you're-here hand-in - the plan's step comes back; walk on and it's offered again", function()
+  inWorld(function()
+    local list = { { id = 1, k = "accept", q = 901, name = "Far Planned", m = 1437, x = 0.60, y = 0.30, r = 6, sec = 1 } }
+    for k = 2, 40 do list[k] = { id = k, k = "accept", q = 1000 + k, name = "Filler " .. k, m = 1437, x = 0.62, y = 0.32, r = 6, sec = 1 } end
+    list[41] = { id = 41, k = "turnin", q = 98221, name = "From the Ashes", npc = "Captain Stoutfist", m = 1437, x = 0.0986, y = 0.5749, r = 6, sec = 1 }
+    for k = 42, 45 do list[k] = { id = k, k = "accept", q = 2000 + k, name = "Town " .. k, m = 1437, x = 0.099, y = 0.576, r = 6, sec = 1 } end
+    ForeverRouteData = { id = "n9", title = "n9", sections = { { title = "x" } }, steps = list }
+    quests({ [98221] = true }, {})
+    ns.Next.dismissed = {}
+    at(0.0986, 0.5749, 3)
+    assertEquals(41, ns.Engine.current, "the hand-in next to you")
+    assertTrue(ns.Next.CanDismiss(41))
+    assertTrue(not ns.Next.CanDismiss(1), "the plan's own step can't be put off")
+    assertTrue(ns.Next.Dismiss(41))
+    assertEquals(1, ns.Engine.current, "not now: the plan's step")
+    at(0.0990, 0.5752, 3)
+    assertEquals(1, ns.Engine.current, "still here: it stays off")
+    -- walk away (out of DISMISS_YD) and come back: offered again
+    at(0.40, 0.45)
+    at(0.0986, 0.5749, 3)
+    assertEquals(41, ns.Engine.current, "back after moving on: offered again")
+    ns.Next.dismissed = {}
+  end)
+end)

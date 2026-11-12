@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.4 - 2026-11-12
+- A trip with an extra change (a boat, the tram, a portal) has to save real time to win: Refuge Pointe to Stormwind is the flight to Stormwind again, not a flight to Ironforge and the tram for 3 seconds less. The walk off the tram no longer reads "from Stormwind to Stormwind".
+- "Not now" on the card for a stop the route fitted in from where you are (a hand-in while you're here, a quest just behind you): it goes back to the plan's next step, and offers the stop again once you've moved on.
+- Every built-in plan rebuilt with each quest's expected time to do, so the next step weighs a quick quest nearby against a long one properly; each plan played from 1 to 60 by simulated players, none broke a check.
+
 ## 1.4.3 - 2026-11-12
 - No more walking over the mountains from Dun Morogh into the Wetlands: the way there is through Loch Modan and Dun Algaz, and the arrow takes it.
 - The Dalaran portal to Stormwind is one way: trips no longer count on a portal from the Mage Tower to Dalaran.

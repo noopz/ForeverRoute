@@ -494,7 +494,10 @@ function flags(r, s) {
   if (st.min && st.min > lv) hard(`TOO-HIGH: needs level ${st.min}`);
   if (st.lvl && Math.abs(st.lvl - lv) > 3) note(`PLAN-LEVEL: the plan does this step at level ${st.lvl}, you are ${lv}`);
   const far = st.yd === -1 || st.yd > 1500;
-  if (st.ins && far) hard('ADDED-FIRST: the step shown is a stop added at login, far away (' + st.k + ' ' + st.name + ' @' + st.zone + ')');
+  // (an added hand-in at the NPC the plan's own next step goes to anyway rides along: not a detour)
+  const plannedNext = (r.next || []).find((d) => !d.ins && d.st === 'todo' && d.i !== st.i);
+  const alongside = st.ins && plannedNext && st.npc && plannedNext.npc === st.npc && plannedNext.m === st.m;
+  if (st.ins && far && !alongside) hard('ADDED-FIRST: the step shown is a stop added at login, far away (' + st.k + ' ' + st.name + ' @' + st.zone + ')');
   else if (st.ins) note('ADDED-FIRST: the step shown is a stop added at login (' + st.k + ' ' + st.name + ')');
   if (st.yd === -1) note('OTHER-CONTINENT: the step is on another continent');
   else if (st.yd > 4000) note(`FAR: the step is ${st.yd} yd away`);

@@ -687,5 +687,7 @@
       1426,
       1437
     ]
-  ]
+  ],
+  "_TRANSFER": "Seconds added to every boat, tram, zeppelin and portal hop on top of its own time: getting off one thing and onto the next is a step to read and a chance to miss it, so a trip with an extra change has to save more than this to win. Refuge Pointe to Stormwind: fly to Ironforge and take the tram won by 3 s over the flight to Stormwind (a Skyborne tester, Nov 2026).",
+  "TRANSFER": 30
 }

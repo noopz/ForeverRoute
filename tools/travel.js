@@ -151,7 +151,8 @@ function plan(from, to, opts = {}) {
     if (races && !((opts.race && races.includes(opts.race)) || (opts.class && races.includes(opts.class)))) continue;
     const u = idx['dock-' + a], v = idx['dock-' + b];
     if (u === undefined || v === undefined) continue;
-    if (oneway) adj[u].push([v, cost, 'boat']); else edge(u, v, cost, 'boat');
+    const c = cost + (F.TRANSFER || 0); // a change of transport: a near tie goes to the trip with fewer legs
+    if (oneway) adj[u].push([v, c, 'boat']); else edge(u, v, c, 'boat');
   }
   // a class spell that takes you somewhere from anywhere (Teleport: Moonglade): one way, from where you stand
   for (const s of F.SPELLS || []) if (opts.class === s.class && level >= s.level && forSide(s.faction, opts.faction) && idx['dock-' + s.dock] !== undefined && N[idx['dock-' + s.dock]].m !== from.m) adj[0].push([idx['dock-' + s.dock], s.cast || 10, 'spell']);

@@ -182,6 +182,7 @@ ns.TravelData = {
   },
   SPELLS = { { class = "druid", level = 10, dock = "moongladeDruid", cast = 10, say = "Cast Teleport: Moonglade" }, { class = "mage", level = 20, dock = "mageStormwind", cast = 10, say = "Cast Teleport: Stormwind", faction = "alliance" }, { class = "mage", level = 20, dock = "mageIronforge", cast = 10, say = "Cast Teleport: Ironforge", faction = "alliance" }, { class = "mage", level = 30, dock = "mageDarnassus", cast = 10, say = "Cast Teleport: Darnassus", faction = "alliance" }, { class = "mage", level = 20, dock = "mageOrgrimmar", cast = 10, faction = "horde", say = "Cast Teleport: Orgrimmar" }, { class = "mage", level = 20, dock = "mageUndercity", cast = 10, faction = "horde", say = "Cast Teleport: Undercity" }, { class = "mage", level = 30, dock = "mageThunderBluff", cast = 10, faction = "horde", say = "Cast Teleport: Thunder Bluff" } },
   NO_CROSS = { { 1426, 1437 } },
+  TRANSFER = 30,
   HOSTILE = {
     alliance = {
       { m = 1416, x = 0.6396, y = 0.579, r = 97, name = "a Horde camp" },

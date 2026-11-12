@@ -5,6 +5,6 @@
 ## Group: ForeverRoute
 ## LoadOnDemand: 1
 ## Version: plans 2026-11-12
-## X-Plans: plans 2026-11-12 · QuestieDB 1.0.15 · planner 6372514
+## X-Plans: plans 2026-11-12 · QuestieDB 1.0.15 · planner 37c765b
 
 Plan.lua

@@ -1485,7 +1485,7 @@ function Engine.UpdateFocus(px, py, pinst)
   do
     local best, bestD
     for j, s in ipairs(list) do
-      if s.k == "turnin" and s.q and s.q > 0 and j ~= planned and State.QuestReady(s.q) then
+      if s.k == "turnin" and s.q and s.q > 0 and j ~= planned and State.QuestReady(s.q) and not (ns.Next and ns.Next.IsDismissed and ns.Next.IsDismissed(j, px, py, pinst)) then
         local d = distTo(s, px, py, pinst)
         if d and d <= (s.r or 6) + 12 and (not bestD or d < bestD) and Engine.Status(j) == "todo" then best, bestD = j, d end
       end

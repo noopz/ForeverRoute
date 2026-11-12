@@ -319,7 +319,8 @@ function Travel.Plan(from, to, opts)
     if not forSide(bt[6], side) then allowed = false end
     if u and v and allowed and not ground then
       -- the kind rides along (a portal reads "take the portal"); a 7th entry true: one way (no portal back)
-      local c = bt[3] or Travel.BOAT
+      -- (plus a change of transport: a near tie goes to the trip with fewer legs)
+      local c = (bt[3] or Travel.BOAT) + (TD.TRANSFER or 0)
       if bt[7] then adj[u][#adj[u] + 1] = { v, c, "boat", bt[4] }
       else edge(u, v, c, "boat"); adj[u][#adj[u]][4] = bt[4]; adj[v][#adj[v]][4] = bt[4] end
     end
@@ -388,7 +389,7 @@ function Travel.Plan(from, to, opts)
         for _, x in ipairs(c.via) do if x.w and f.w and d(f, x) > Travel.AHEAD_YD then first = x; break end end
         local crossings = {}
         for _, x in ipairs(c.via) do if x.kind == "cross" or x.gate then crossings[#crossings + 1] = placeName(x) end end
-        local text = ns.RideWord() .. " " .. (f.town and ("from " .. f.town .. " ") or "") .. "to " .. placeName(n) .. (#crossings > 0 and (" (through " .. table.concat(crossings, ", ") .. ")") or "")
+        local text = ns.RideWord() .. " " .. ((f.town and f.town ~= placeName(n)) and ("from " .. f.town .. " ") or "") .. "to " .. placeName(n) .. (#crossings > 0 and (" (through " .. table.concat(crossings, ", ") .. ")") or "")
         local tgt = first or n
         local tm, tx, ty = tgt.m, tgt.x, tgt.y
         if first and first.m2 == f.m then tm, tx, ty = first.m2, first.x2, first.y2 end

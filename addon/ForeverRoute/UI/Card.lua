@@ -118,6 +118,11 @@ local function build()
   cur.notOffered = Style.Button(cur, "giver doesn't offer it", 112, 14, function() ns.Engine.NotOffered() end, "The quest giver has nothing for you: this quest leaves your route until your next level (a level or a quest you haven't done can be the reason), then it's tried again. Turned down a second time, it stays off until the game offers it. Its chain stays.")
   cur.notOffered.label:SetFontObject(Style.Font(10)); cur.notOffered.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3])
   cur.notOffered:SetScript("OnLeave", function(self) self.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3]); GameTooltip:Hide() end)
+  -- "not now": a stop the route took in from where you are (a hand-in while you're here) leaves the card until you move
+  -- on; the plan's own next step comes back
+  cur.notNow = Style.Button(cur, "not now", 60, 14, function() if ns.Next and ns.Next.Dismiss then ns.Next.Dismiss(ns.Engine.Shown and ns.Engine.Shown()) end end, "Skip this stop for now: the route goes back to its planned next step. It's offered again once you've moved on, or in 15 minutes.")
+  cur.notNow.label:SetFontObject(Style.Font(10)); cur.notNow.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3])
+  cur.notNow:SetScript("OnLeave", function(self) self.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3]); GameTooltip:Hide() end)
   cur.bars = {}
   cur.heads = {} -- the dungeon state's quest names, one above each quest's bars
   cur.note = Style.Text(cur, 11, C.sub)
@@ -486,7 +491,7 @@ function Card.Fill()
   cur.dungeon = nil
   cur.nbars = 0
   cur.choice = nil; for _, r in ipairs(cur.optRows or {}) do r:Hide() end
-  cur.map:Hide(); cur.nope:Hide(); cur.notOffered:Hide()
+  cur.map:Hide(); cur.nope:Hide(); cur.notOffered:Hide(); cur.notNow:Hide()
   local function bar() cur.nbars = cur.nbars + 1; local b = cur.bars[cur.nbars]; if not b then b = Style.Bar(cur); cur.bars[cur.nbars] = b end; return b end
   local function look(color, glyph)
     cur.disc:SetVertexColor(color[1], color[2], color[3]); cur.halo:SetVertexColor(color[1], color[2], color[3], 0.35)
@@ -538,6 +543,7 @@ function Card.Fill()
   cur.detail:SetText(table.concat(bits, "  ·  "))
   cur.map:SetShown((s.m and s.x and not s.unknown) or s.k == "fly" or false)
   cur.nope:SetShown((s.q and s.q > 0 and not ns.Engine.view) and true or false)
+  cur.notNow:SetShown((not ns.Engine.view and ns.Engine.planned and i ~= ns.Engine.planned and ns.Next and ns.Next.CanDismiss and ns.Next.CanDismiss(i)) and true or false)
   cur.notOffered:SetShown((s.k == "accept" and s.q and s.q > 0 and not ns.Engine.view and not ns.State.OnQuest(s.q)) and true or false)
   if s.k == "obj" and s.unknown then
     -- work the quest data lists none of: the game's own lines for the quest, as the quest log has them (none: one bar
@@ -822,7 +828,7 @@ function Card.Layout()
   -- both. (Nothing of the Target / use-item buttons here: they float above the card - Card.PlaceSecure.)
   cur.linkRows = 0
   local lx = x0
-  for _, b in ipairs({ cur.nope, cur.notOffered }) do
+  for _, b in ipairs({ cur.notNow, cur.nope, cur.notOffered }) do
     if b:IsShown() then
       local sw = b.label:GetStringWidth() or 0
       local w = math.min(inner - x0, sw > 0 and math.ceil(sw) + 14 or 112)
