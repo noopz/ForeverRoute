@@ -91,6 +91,35 @@ local function logIDs()
   return ids
 end
 State.LogIDs = logIDs
+-- every quest seen in your log, kept (ns.char.hadQuest): one that is gone from it and not completed was abandoned.
+-- The quest log check needs that to say whose items are left over (UI/LogCheck.lua)
+function State.NoteLog()
+  if not ns.char then return end
+  ns.char.hadQuest = ns.char.hadQuest or {}
+  for id in pairs(logIDs()) do ns.char.hadQuest[id] = true end
+end
+ns.On("FR_STATE", function() pcall(State.NoteLog) end)
+-- what is in your bags: [itemID] = how many (the backpack and your bags, not the bank). nil when the game won't say
+function State.BagItems()
+  local C = type(C_Container) == "table" and C_Container or nil
+  local slots = (C and C.GetContainerNumSlots) or GetContainerNumSlots
+  local idAt = (C and C.GetContainerItemID) or GetContainerItemID
+  if not (slots and idAt) then return nil end
+  local out = {}
+  for bag = 0, NUM_BAG_SLOTS or 4 do
+    local n = call(slots, bag)
+    for slot = 1, type(n) == "number" and n or 0 do
+      local id = call(idAt, bag, slot)
+      if type(id) == "number" and id > 0 then
+        local count = 1
+        local info = C and C.GetContainerItemInfo and call(C.GetContainerItemInfo, bag, slot)
+        if type(info) == "table" and type(info.stackCount) == "number" and info.stackCount > 0 then count = info.stackCount end
+        out[id] = (out[id] or 0) + count
+      end
+    end
+  end
+  return out
+end
 
 function State.Position()
   local HBD = LibStub("HereBeDragons-2.0", true)
@@ -287,4 +316,6 @@ ns.On("PLAYER_LEVEL_UP", function() refreshSoon(); C_Timer.After(1, function() S
 ns.On("PLAYER_XP_UPDATE", function() ns.Fire("FR_XP") end)
 ns.On("BAG_UPDATE_DELAYED", function() local i = ns.Engine and ns.Engine.current; local s = i and ForeverRouteData and ForeverRouteData.steps[i]; if s and s.k == "bonus" then ns.Fire("FR_STATE") end end)
 -- the cache is kept here: it holds the last live reads, and asking the game again during logout can return nothing
-ns.On("PLAYER_LOGOUT", function() pcall(ns.Perf); State.Snapshot("logout") end)
+-- (memory only at logout: timing ten route rebuilds there ran past the game's script limit on long plans - "State.lua:25:
+-- script ran too long" at PLAYER_LOGOUT in a tester's report - and the snapshot after it never got written)
+ns.On("PLAYER_LOGOUT", function() State.Snapshot("logout"); pcall(ns.Perf, true) end)

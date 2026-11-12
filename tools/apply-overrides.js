@@ -20,6 +20,17 @@ const ENDS = new Set(["starters", "finishers"]);
 function apply(db) {
   const o = JSON.parse(fs.readFileSync(OVERRIDES, 'utf8'));
   const done = [];
+  // NPCs Forever renamed (npcNames: id -> name, from tools/npc-names.js): the NPC record and every quest's copy of it
+  // as giver or ender - the addon finds NPCs by name ("Comar Villard" is Corma Villard in Forever)
+  const renamed = {};
+  for (const [id, name] of Object.entries(o.npcNames || {})) {
+    const n = db.npcs && db.npcs[id];
+    if (n && n.name !== name) { done.push(`npc ${id}: ${n.name} -> ${name}`); n.name = name; }
+    if (n) renamed[id] = name;
+  }
+  if (Object.keys(renamed).length) for (const q of Object.values(db.quests)) for (const e of [...q.starters, ...q.finishers]) {
+    if (e.type === 'npc' && renamed[e.id] && e.name !== renamed[e.id]) e.name = renamed[e.id];
+  }
   for (const [id, fields] of Object.entries(o.quests || {})) {
     const q = db.quests[id];
     if (!q) continue;

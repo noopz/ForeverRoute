@@ -14,7 +14,7 @@ const leg = mine[(+legNo || 1) - 1];
 if (!leg) throw new Error('no such leg');
 const stops = []; const elsewhere = [];
 for (const s of leg.steps) {
-  if (s.m === +mapId && s.x) stops.push({ n: s.n, x: s.x * 100, y: s.y * 100, k: s.k, label: (s.k === 'obj' ? s.text : (s.k + ' ' + (s.name || s.text || ''))).slice(0, 60), level: s.lvl });
+  if (s.m === +mapId && s.x && !s.unknown) stops.push({ n: s.n, x: s.x * 100, y: s.y * 100, k: s.k, label: (s.k === 'obj' ? s.text : (s.k + ' ' + (s.name || s.text || ''))).slice(0, 60), level: s.lvl });
   else if (s.k !== 'fly') elsewhere.push({ n: s.n, k: s.k, label: s.name || s.text, zone: s.zone });
 }
 const segs = []; let yards = 0;

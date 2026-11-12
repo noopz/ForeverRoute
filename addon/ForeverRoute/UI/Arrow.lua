@@ -30,16 +30,16 @@ local function buildPath(s, m, wx, wy)
 end
 Arrow._buildPath = function(...) return buildPath(...) end
 -- How far ahead along the path the arrow looks, in yards: about Arrow.LOOK_SEC seconds of travel (so further on a
--- mount than on foot), within what the place allows. Open country (a walk map of 8-yd squares or more): 12 to 24.
+-- mount than on foot), within what the place allows. Open country (a walk map of 8-yd squares or more): 16 to 40.
 -- A city's walk map (4-yd squares, walls): 8 to 10. The planner's own path: 8 to 12. Inside a building: 6.
 -- Measured on real lines (docs/research/navigation-paths.md, "The arrow"): someone who follows the arrow strays
 -- from the line by up to half of this at a sharp corner (the old arrow: 4 to 5 yd).
-Arrow.LOOK_SEC = 1.5
+Arrow.LOOK_SEC = 3 -- (1.5 followed every bend of the line: the arrow should give the way, the line the detail)
 Arrow.TURN = 8 -- how fast the drawn arrow follows its direction (1/s; it was 12)
 local function lookFor(P, speed)
   if Arrow.Indoors() then return 6 end
   local lo, hi = 8, 12
-  if P.nav then if (P.cell or 8) >= 8 then lo, hi = 12, 24 else hi = 10 end end
+  if P.nav then if (P.cell or 8) >= 8 then lo, hi = 16, 40 else hi = 10 end end
   return math.max(lo, math.min(hi, (speed or 7) * Arrow.LOOK_SEC))
 end
 Arrow._lookFor = lookFor
@@ -48,7 +48,10 @@ Arrow._lookFor = lookFor
 -- the path, so the arrow never invents a shortcut longer than its look-ahead (a straight line could go through a
 -- wall or off a cliff).
 -- -> the spot { x, y }, yards to walk, how far off the path you are, the path's height where you are
-local function follow(P, px, py, look) return ns.Nav.Aim(P, px, py, look or 10) end
+-- far: open country (a walk map of 8-yd squares, outdoors), where it may aim as far as the line runs nearly straight
+local function follow(P, px, py, look, far) return ns.Nav.Aim(P, px, py, look or 10, far) end
+local function openCountry(P) return P.nav and (P.cell or 8) >= 8 and not Arrow.Indoors() end
+Arrow._openCountry = openCountry
 Arrow._follow = follow
 local function colorFor(diff)
   local t = math.abs(diff) / math.pi
@@ -139,7 +142,7 @@ local function build()
     local live = ns.Nav and target.key and ns.Nav.PathFor(target.key)
     local P = live or target.path
     if P and dist > (target.r or 12) then
-      local aim, walk, off, zHere = follow(P, px, py, lookFor(P, moveSpeed))
+      local aim, walk, off, zHere = follow(P, px, py, lookFor(P, moveSpeed), openCountry(P))
       -- the planned path runs from the previous stop; you may well have come from somewhere else. Use it only while
       -- you're on it (or still at its start); otherwise point straight at the target and hide the line.
       local St = P.start
@@ -249,6 +252,9 @@ function Arrow.SetTarget(i, force)
   -- quests instead). Walking out re-targets (FR_DUNGEON).
   local inDungeon = ns.Dungeon and ns.Dungeon.Inside()
   if inDungeon then s = nil end
+  -- work the quest data has no place for (s.unknown): its spot is only its place in the order, nothing to point at
+  local unknown = s and s.unknown
+  if unknown then s = nil end
   local m, x, y, label = s and s.m, s and s.x, s and s.y, nil
   local leg -- how you travel from the waypoint the arrow points at ("fly", "boat", ...), when it is not the step itself
   if s and not x then
@@ -311,7 +317,7 @@ function Arrow.SetTarget(i, force)
   else
     target = nil; f:Hide(); ns.Fire("FR_DISTANCE", nil)
     if ns.Nav then ns.Nav.Want(nil) end
-    noteHidden(not step and "no step" or inDungeon and ("inside " .. inDungeon .. " (no coordinates in a dungeon)") or ns.Is(UnitOnTaxi, "player") and "on a flight" or (trip and trip.how == "aboard") and "aboard (boat or tram, or somewhere no trip starts from)" or step.k == "hearth" and "hearth step (nowhere to walk)" or ("no position for this step: " .. tostring(step.k) .. " " .. tostring(step.text)))
+    noteHidden(not step and "no step" or unknown and "where to do this isn't in the quest data" or inDungeon and ("inside " .. inDungeon .. " (no coordinates in a dungeon)") or ns.Is(UnitOnTaxi, "player") and "on a flight" or (trip and trip.how == "aboard") and "aboard (boat or tram, or somewhere no trip starts from)" or step.k == "hearth" and "hearth step (nowhere to walk)" or ("no position for this step: " .. tostring(step.k) .. " " .. tostring(step.text)))
   end
 end
 

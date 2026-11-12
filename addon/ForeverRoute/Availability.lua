@@ -29,20 +29,36 @@ function Avail.Seen(q)
   A.seen[q] = { t = time(), lvl = level() }
   if A.no[q] then A.no[q] = nil; if ns.Why then ns.Why("avail", "quest " .. q .. " is offered after all: back on your route") end end
 end
--- the game did not offer this quest at its giver (q: quest id, npc: who you talked to)
-function Avail.NotOffered(q, npc, name)
+-- the game did not offer this quest at its giver (q: quest id, npc: who you talked to, step: the route's pick-up, if
+-- known). A level up brings it back only when a level could be the reason. Refused at or above the level it needs, with
+-- every quest before it done, it stays off until the game offers it (a giver lists it, or the map's "!" shows it):
+-- Captain Stoutfist turned down This Land Was Their Land (needs 22) at 29, and the card sent you back at 30, 31, 32.
+-- Where the level it needs isn't known, a second refusal at a higher level says the same.
+function Avail.NotOffered(q, npc, name, step)
   local A = store()
-  if A.no[q] and A.no[q].lvl == level() then return end
-  A.no[q] = { t = time(), lvl = level(), npc = npc }
-  if ns.Why then ns.Why("avail", (name or ("quest " .. q)) .. ": " .. tostring(npc) .. " doesn't offer it to you - left off your route until you level up") end
-  ns.Print((name or ("Quest " .. q)) .. ": " .. tostring(npc) .. " doesn't offer it to you, so it's off your route for now.")
+  local old, lvl = A.no[q], level()
+  if old and old.lvl == lvl then return end
+  local waits = {}
+  for _, p in ipairs((ns.Engine and ns.Engine.PrereqsOf and ns.Engine.PrereqsOf(q)) or {}) do
+    if not (ns.State and ns.State.IsCompleted(p)) then waits[#waits + 1] = p end
+  end
+  local req = step and step.minLevel
+  local tries = ((old and (old.tries or 1)) or 0) + 1
+  local stay = (#waits == 0 and ((req and lvl >= req) or tries >= 2)) or nil
+  A.no[q] = { t = time(), lvl = lvl, npc = npc, tries = tries, stay = stay, req = req, waits = #waits > 0 and waits or nil }
+  local what = stay and "left off your route until the game offers it" or "left off your route until you level up"
+  if ns.Why then ns.Why("avail", (name or ("quest " .. q)) .. ": " .. tostring(npc) .. " doesn't offer it to you - " .. what) end
+  ns.Print((name or ("Quest " .. q)) .. ": " .. tostring(npc) .. " doesn't offer it to you, so it's off your route" .. (stay and "." or " for now."))
 end
--- left off the route: the game didn't offer it at this level (and hasn't since). A quest you have or did is never this.
+-- left off the route: the game didn't offer it (and hasn't since), and nothing that could change that has happened -
+-- a level, where a level could be the reason, or a quest before it handed in. A quest you have or did is never this.
 function Avail.Unavailable(q)
   local n = q and ForeverRouteChar and ForeverRouteChar.avail and ForeverRouteChar.avail.no and ForeverRouteChar.avail.no[q]
   if not n then return false end
-  if level() > (n.lvl or 0) then return false end
-  return true
+  if n.stay then return true end
+  for _, p in ipairs(n.waits or {}) do if ns.State and ns.State.IsCompleted(p) then return false end end
+  if n.waits and n.req and (n.lvl or 0) >= n.req then return true end -- it waits on that quest, not on a level
+  return level() <= (n.lvl or 0)
 end
 
 -- the quests a giver you're talking to offers: ids, or nil when the game didn't say
@@ -71,7 +87,7 @@ local function expectedFrom(npc)
   if not (list and npc) then return out end
   for _, s in ipairs(list) do
     if s.k == "accept" and s.q and s.npc == npc and not (s.minLevel and level() < s.minLevel)
-      and not ns.State.OnQuest(s.q) and not ns.State.IsCompleted(s.q) then out[s.q] = s.name or true end
+      and not ns.State.OnQuest(s.q) and not ns.State.IsCompleted(s.q) then out[s.q] = s end
   end
   return out
 end
@@ -83,8 +99,8 @@ function Avail.OnGiver(event)
   if partial then return end
   local npc = call(UnitName, "npc")
   if not (plain(npc) and type(npc) == "string") then return end
-  for q, name in pairs(expectedFrom(npc)) do
-    if not offered[q] then Avail.NotOffered(q, npc, type(name) == "string" and name or nil) end
+  for q, s in pairs(expectedFrom(npc)) do
+    if not offered[q] then Avail.NotOffered(q, npc, s.name, s) end
   end
   if ns.Engine then ns.Engine.Refresh() end
 end

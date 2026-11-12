@@ -254,6 +254,8 @@ function Pins.LineDots(where)
 end
 
 local planned -- draws the planned path where no live line is coming (defined with the events at the end)
+-- the planned path's dots now on the maps (for tests)
+function Pins.PathDots() return #dotsUsed end
 
 
 -- the minimap only shows steps near you (a few hundred yards): a step in another zone has no business there, and
@@ -289,9 +291,12 @@ function Pins.Update(force)
     -- opened by a pinned step at the same spot (hand in to Jorgen, take the next part from him): it is part of that
     -- stop, which has its pin - a second, grey one on top of it says nothing
     local o = opener and ForeverRouteData.steps[opener]
-    if o and s.x and o.m == s.m and math.abs((o.x or 9) - s.x) < 0.01 and math.abs((o.y or 9) - s.y) < 0.01 then
+    -- (not an opener with no pin of its own: work whose place the quest data doesn't have, s.unknown)
+    if o and not o.unknown and s.x and o.m == s.m and math.abs((o.x or 9) - s.x) < 0.01 and math.abs((o.y or 9) - s.y) < 0.01 then
       for k = 1, n - 1 do if list[k] == opener then s = nil end end
     end
+    -- work the quest data has no place for (s.unknown): its spot is only its place in the order - no pin
+    if s and s.unknown then s = nil end
     local m, x, y = s and s.m, s and s.x, s and s.y
     if s and not x and n == 1 then m, x, y = ns.Engine.TravelTarget(s) end
     -- standing at it: no minimap pin (it would sit on your own arrow - "a marker on me"; the arrow says Here)
@@ -299,8 +304,12 @@ function Pins.Update(force)
     if s and m and x then spots[n] = { m = m, x = x, y = y, near = n == 1 and Pins.Near(m, x, y) and not onIt }; near[n] = (onIt and "2" or spots[n].near and "1" or "0") .. (notYet[n] and "n" or "")
     else near[n] = "-" end
   end
-  local pathKey = table.concat(list, ",") .. ":" .. tostring((ns.State.Position()))
-  -- the path line only when the step or zone changes (not when a pin comes near: that would undo its trimming)
+  -- (what the arrow points at is part of it: the step itself or a stop on the way there, and nothing on a flight -
+  -- the planned path is judged against that)
+  local at = ns.Arrow and ns.Arrow.Current and ns.Arrow.Current()
+  local pathKey = table.concat(list, ",") .. ":" .. tostring((ns.State.Position())) .. ":" .. tostring(at and at.key or nil)
+  -- the path line only when the step, the zone or the arrow's target changes (not when a pin comes near: that would
+  -- undo its trimming)
   if pathKey ~= lastPathKey or force then
     lastPathKey = pathKey
     if list[1] ~= arrivedAt then arrivedAt = nil end
@@ -361,12 +370,61 @@ ns.On("FR_SETTINGS", function() Pins.Update(true) end)
 ns.On("FR_ROUTE_CHANGED", function() Pins.Update(true) end)
 ns.On("ZONE_CHANGED_NEW_AREA", function() C_Timer.After(1.5, function() Pins.Update() end) end)
 
--- the planned path of a step, where no live line is coming (no walk map for this zone, or no way found on it)
+-- Is a live line (Nav.lua) on its way, or drawn, for what the arrow points at? Then the planned path stays off the
+-- map: it was drawn for the seconds the live line took to be found and then replaced by it ("a random path that
+-- flashes for a few seconds"). A line that waits for your position (a loading screen: the game has none for a
+-- moment) is on its way too; one that waits because the target is in another world is not.
+function Pins.LiveComing()
+  local N = ns.Nav
+  if not N then return false end
+  if N.Coming and N.Coming() then return true end
+  local L = N.Live and N.Live()
+  if L and L.waiting and not L.none and not L.failedAt then
+    local px, _, pinst = HBD:GetPlayerWorldPosition()
+    return not px or pinst == L.inst
+  end
+  return false
+end
+-- Where you are on the shown step's planned path, as the arrow judges it (Arrow.lua: within 45 yd of it, or still
+-- at the stop it starts from): the stretch you are on, -1 when you are not on it (or not walking at all: a flight, a
+-- boat), nil when the arrow points at something else on the way there (the flight master, a zone crossing) or the
+-- step is in another world - the path is then a look at what is planned over there, whole.
+-- The planned path starts where the plan expected you to come from. Drawn from that start whenever a step came up,
+-- it showed a path from somewhere you never were until the arrow's first word on it, a second or two later, took
+-- it away again.
+Pins.PLANNED_OFF_YD = 45
+function Pins.OnPlanned(i)
+  local t = ns.Arrow and ns.Arrow.Current and ns.Arrow.Current()
+  if not t or t.index ~= i then return -1 end -- nothing to walk to (a flight), or the arrow hasn't turned to this step yet
+  local P = t.path
+  if not (P and P.pts and #P.pts >= 2) then return nil end
+  local px, py, pinst = HBD:GetPlayerWorldPosition()
+  if not px then return -1 end -- no position yet (a loading screen): nothing until there is one
+  if pinst ~= t.winst then return nil end
+  local best, bd = nil, math.huge
+  for j = math.max(1, P.cursor or 1), #P.pts - 1 do
+    local a, b = P.pts[j], P.pts[j + 1]
+    local dx, dy = b[1] - a[1], b[2] - a[2]
+    local L2 = dx * dx + dy * dy
+    local u = L2 > 0 and math.max(0, math.min(1, ((px - a[1]) * dx + (py - a[2]) * dy) / L2)) or 0
+    local d = math.sqrt((px - a[1] - u * dx) ^ 2 + (py - a[2] - u * dy) ^ 2)
+    if d < bd - 0.01 then best, bd = j, d end
+  end
+  if not best then return -1 end
+  local St = P.start
+  local atStart = St and math.sqrt((px - St[1]) ^ 2 + (py - St[2]) ^ 2) <= (P.startR or 40) + 25
+  return (bd <= Pins.PLANNED_OFF_YD or atStart) and best or -1
+end
+-- the planned path of a step, where no live line is coming (no walk map for this zone, or no way found on it):
+-- only what is still ahead of you, and only while you are on it. seg: the arrow's word on where you are on it
+-- (FR_PATHPROGRESS), nil to work it out here.
 planned = function(seg)
   local i = ns.Engine.Shown()
   local s = shownStep()
-  if ns.Nav and ns.Nav.Coming and ns.Nav.Coming() then drawPath(nil, nil) return end
-  if seg == -1 or (arrivedAt and arrivedAt == i) then drawPath(nil, nil) return end
+  if Pins.LiveComing() then drawPath(nil, nil) return end
+  if arrivedAt and arrivedAt == i then drawPath(nil, nil) return end
+  if seg == nil then seg = Pins.OnPlanned(i) end
+  if seg == -1 then drawPath(nil, nil) return end
   drawPath(s, s and Style.Kind(s).color or { 1, 1, 1 }, seg)
 end
 

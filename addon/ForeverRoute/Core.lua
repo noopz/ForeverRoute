@@ -365,30 +365,65 @@ function ns.QuestIds(r)
   return r._qids
 end
 function ns.RouteById(id) for _, r in ipairs(ns.Routes()) do if r.id == id then return r end end end
+-- a path's zones in order, each once ("Wetlands > Ashenvale > Wetlands" -> Wetlands, Ashenvale)
+local function zoneOrder(legs)
+  local out, seen = {}, {}
+  for z in (legs or ""):gmatch("[^>]+") do
+    z = z:gsub("^%s+", ""):gsub("%s+$", "")
+    if z ~= "" and not seen[z] then seen[z] = true; out[#out + 1] = z end
+  end
+  return out
+end
+-- how well a path (its zones) continues the one you followed (old zones): the zones the two have in common in the same
+-- order, over the next PATH_LOOK zones of each, and more for starting in the same zone - what you do next counts most.
+-- "Wetlands > Duskwood > Ashenvale > Desolace" is continued by "Wetlands > Ashenvale > Arathi > Desolace" (3 in order,
+-- same start), not by "Duskwood > Ashenvale > Stranglethorn > Wetlands" (2 in order): matching only from the old second
+-- zone on once took a player standing in the Wetlands off to Ashenvale.
+ns.PATH_LOOK = 6
+function ns.PathContinuity(old, legs)
+  local n, m = math.min(#old, ns.PATH_LOOK), math.min(#legs, ns.PATH_LOOK)
+  if n == 0 or m == 0 then return 0 end
+  local prev = {}; for j = 0, m do prev[j] = 0 end
+  for i = 1, n do
+    local row = { [0] = 0 }
+    for j = 1, m do
+      if old[i] == legs[j] then row[j] = prev[j - 1] + 1 else row[j] = math.max(prev[j], row[j - 1]) end
+    end
+    prev = row
+  end
+  local score = prev[m]
+  if score > 0 and old[1] == legs[1] then score = score + 1.5 end
+  return score
+end
 -- the route a saved id or title stands for, without switching to it. -> route, exact (false: matched by zone order)
--- A replan can rename your path (its zones changed a little): then it is the one that starts in the same zone and
--- shares the most of what came next, rather than a different path.
+-- A replan can rename your path (its zones changed a little), and a plan made from an older save does not know the
+-- path you switched to since: then it is the path that best continues your zone order (ns.PathContinuity), the one
+-- the planner marked as yours on a tie, rather than a different path.
 function ns.ResolvePath(title)
   if not title then return nil end
   for _, r in ipairs(ns.Routes()) do if r.id == title or r.title == title then return r, true end end
   if not ns.char.routeLegs then return nil end
-  local old = {}; for z in ns.char.routeLegs:gmatch("[^>]+") do old[#old + 1] = z:gsub("^%s+", ""):gsub("%s+$", "") end
-  -- the same path, or its continuation once the zone you were in is done (Westfall > Redridge > ... becomes
-  -- Redridge > ...): longest run of matching zones, starting at your old first zone or the one after it
+  local old = zoneOrder(ns.char.routeLegs)
   local best, bestScore = nil, 0
   for _, r in ipairs(ns.MainRoutes()) do
-    local legs = {}; for z in ((r.meta and r.meta.legs) or ""):gmatch("[^>]+") do legs[#legs + 1] = z:gsub("^%s+", ""):gsub("%s+$", "") end
-    for shift = 0, 1 do
-      if legs[1] and legs[1] == old[1 + shift] then
-        local score = 1; for k = 2, math.min(#legs, #old - shift) do if legs[k] == old[k + shift] then score = score + 1 else break end end
-        score = score * 2 - shift -- a same-start match beats a continuation of equal length
-        if score > bestScore then best, bestScore = r, score end
-      end
-    end
+    local score = ns.PathContinuity(old, zoneOrder(r.meta and r.meta.legs))
+    if score > 0 and r.continues then score = score + 0.25 end
+    if score > bestScore then best, bestScore = r, score end
   end
-  -- the planner marks the path it planned as the continuation of yours: take that one if nothing matched better
+  -- the planner marks the path it planned as the continuation of yours: take that one if nothing matched
   if not best then for _, r in ipairs(ns.MainRoutes()) do if r.continues then best = r; break end end end
   return best, false
+end
+-- your saved path is not in this plan and the one you continue on goes somewhere else next (its next three zones
+-- differ): said once, in chat and in /fr why - a path never changes under you without a word. -> the text, or nil
+function ns.PathSwitchNote(title, pick)
+  if not (pick and ns.char and ns.char.routeLegs and pick.meta and pick.meta.legs) then return nil end
+  local old, now = zoneOrder(ns.char.routeLegs), zoneOrder(pick.meta.legs)
+  local same = true
+  for k = 1, 3 do if old[k] ~= now[k] then same = false end end
+  if same then return nil end
+  local function head(t) local o = {}; for k = 1, math.min(3, #t) do o[k] = t[k] end; return table.concat(o, " > ") end
+  return "The new plan does not have the path you were on (" .. head(old) .. "). You are now on the closest one: " .. head(now) .. ". The Paths window (/fr paths) has the others."
 end
 -- pick by id or by title (titles from older saves); a renamed path is found by its zone order (ns.ResolvePath);
 -- nothing at all falls back to the first main path
@@ -396,7 +431,14 @@ function ns.SelectRoute(title, quiet)
   local list = ns.Routes()
   local pick, exact = ns.ResolvePath(title)
   pick = pick or ns.MainRoutes()[1] or list[1]
-  if not exact and title and ns.char.routeLegs and ns.Why and pick then ns.Why("path", "your path " .. tostring(title) .. " is not in the new plan; continuing on " .. tostring(pick.id) .. " (closest match to your zone order)") end
+  if not exact and title and ns.char.routeLegs and pick then
+    if ns.Why then ns.Why("path", "your path " .. tostring(title) .. " is not in the new plan; continuing on " .. tostring(pick.id) .. " (closest match to your zone order)") end
+    -- your own pick (Paths window, a zone choice) follows the path to its new name
+    if ns.char.pinnedPath == title and pick.id and not pick.branch and not pick.dungeon then ns.char.pinnedPath = pick.id end
+    local note = ns.PathSwitchNote(title, pick)
+    ns.pathSwitch = note and { from = title, to = pick.id, text = note } or nil
+    if note and C_Timer and C_Timer.After then C_Timer.After(5, function() ns.Print(note) end) end
+  end
   -- leaving a packed route: drop its unpacked steps (they come back from the string if picked again)
   local old = ForeverRouteData
   if old and old ~= pick and old.packed then old.steps = nil end
@@ -501,7 +543,7 @@ SlashCmdList.FOREVERROUTE = function(msg)
   elseif msg == "save" then if ns.Card and ns.Card.Save then ns.Card.Save() else ReloadUI() end
   elseif msg == "dungeons" or msg == "dungeon" or msg == "trips" or msg == "bag" then ns.Fire("FR_TOGGLE_DUNGEONS")
   elseif msg == "card reset" then ns.db.uiScale, ns.db.scale = nil, 1; ns.Fire("FR_SETTINGS"); ns.db.hidden = nil; if ns.Card and ns.Card.ResetPos then ns.Card.ResetPos() end
-  elseif msg == "target reset" then ns.db.targetPos = nil; if ns.Card and ns.Card.PlaceSecure then ns.Card.PlaceSecure() end; ns.Print("Target button back on the card.")
+  elseif msg == "target reset" then if ns.Card and ns.Card.ResetTarget then ns.Card.ResetTarget() else ns.db.targetPos = nil end
   elseif msg == "storage" then ns.Storage.Print()
   elseif msg == "scale" or msg:find("^scale ") then ns.Style.SlashScale(msg:sub(7))
   elseif msg == "news" then ns.Fire("FR_NEWS")
@@ -538,9 +580,16 @@ SlashCmdList.FOREVERROUTE = function(msg)
 end
 
 -- /fr perf: what the addon costs in your game (memory, time per refresh), also saved with the snapshot
-function ns.Perf()
+-- memOnly (at logout): just the memory, keeping the last timing - the timing runs ten route rebuilds, too long there
+function ns.Perf(memOnly)
   if UpdateAddOnMemoryUsage then pcall(UpdateAddOnMemoryUsage) end
   local mem = GetAddOnMemoryUsage and select(2, pcall(GetAddOnMemoryUsage, ADDON)) or nil
+  if memOnly then
+    local p = ns.char.perf or {}
+    p.memoryKB, p.at = type(mem) == "number" and math.floor(mem) or nil, time and time()
+    ns.char.perf = p
+    return p
+  end
   local t = debugprofilestop
   local refresh, progress
   if t then

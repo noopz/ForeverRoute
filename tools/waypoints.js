@@ -70,6 +70,7 @@ async function addWaypoints(routes, opts) {
     for (const s of r.steps) {
       if (s.k === 'fly' || s.k === 'hearth') { prev = null; continue; }
       if (!(s.m && s.x)) continue;
+      if (s.unknown) continue; // a "do the work" step with no known place (route2: unknownWork): no walk to it
       const area = areaOf[s.m];
       const here = { x: s.x * 100, y: s.y * 100 };
       let from = prev && prev.area === area ? prev.p : null;

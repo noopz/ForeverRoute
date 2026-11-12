@@ -36,6 +36,7 @@ Nav\Nav1453.lua
 Nav.lua
 Drops.lua
 FunCandidates.lua
+QuestData.lua
 Learn.lua
 Availability.lua
 UI\Style.lua

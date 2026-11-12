@@ -125,7 +125,10 @@ function makeEnsure(db, conv) {
     // escorts: the NPC walks off with whoever takes the quest, so it often isn't there to give it
     for (const s of out) {
       const q = s.q && Q[s.q];
-      const escort = q && ((q.special & 2) || q.objectives.some((o) => /escort|protect|accompany/i.test(o.text || "")));
+      // the quest's words say escort. (The scripted-event flag, special & 2, is on escorts, fights and explorations
+      // alike: The Missing Diplomat's fight with Tapoke Jahn got "keep them alive", and so did The Master's Glaive)
+      const words = ((q && q.text) || []).join(" ") + " " + ((q && q.objectives) || []).map((o) => o.text || "").join(" ");
+      const escort = q && /\b(escort|protect|accompany|safely)\b|keep .{0,30}\balive|show .{0,30}\bthe way/i.test(words);
       if (!escort) continue;
       if (s.k === "accept") {
         const who = s.npc || (q.starters[0] && q.starters[0].name) || "the NPC";

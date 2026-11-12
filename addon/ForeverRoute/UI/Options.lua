@@ -8,7 +8,7 @@ local panel
 local function check(parent, label, key, y, tip)
   local b = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
   b:SetPoint("TOPLEFT", 16, y); b:SetSize(24, 24)
-  local t = Style.Text(parent, 12, C.text); t:SetPoint("LEFT", b, "RIGHT", 4, 0); t:SetText(label); t:SetJustifyV("MIDDLE")
+  local t = Style.Text(parent, 12, C.text); t:SetPoint("LEFT", b, "RIGHT", 4, 0); t:SetText(label); t:SetJustifyV("MIDDLE"); t:SetWidth(370); t:SetJustifyH("LEFT")
   b:SetScript("OnShow", function(self) self:SetChecked(ns.db[key]) end)
   b:SetScript("OnClick", function(self) ns.db[key] = self:GetChecked() and true or false; ns.Fire("FR_SETTINGS") end)
   if tip then b:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetText(tip, 1, 1, 1, 1, true); GameTooltip:Show() end); b:SetScript("OnLeave", GameTooltip_Hide) end
@@ -58,7 +58,7 @@ local function build()
   check(panel, "Show the walking path on the maps", "pathLine", -200)
   check(panel, "Record where I walk (improves the planner's walking paths)", "trails", -226)
   check(panel, "Targeting the step's NPC also marks it with a star", "markTarget", -252)
-  check(panel, "Accept and hand in quests automatically (not when there's a reward to choose; hold Shift to skip)", "autoQuest", -278)
+  check(panel, "Accept and hand in quests automatically", "autoQuest", -278, "Accepts the quests your route picks up and hands in finished ones. Never when there's a reward to choose. Hold Shift while talking to an NPC to do it yourself.")
   -- one scale for everything of ours (card, arrow, route list, every window), on top of the game's UI scale; the
   -- card and the arrow keep their own as a fine adjustment. The line under it says what it comes to on this screen
   local all = slider(panel, "Forever Route scale (everything)", "uiScale", Style.SCALE_MIN, Style.SCALE_MAX, 0.05, -324, nil, 1)
@@ -97,7 +97,8 @@ local host
 local function openStandalone()
   if not host then
     host = CreateFrame("Frame", "ForeverRouteOptionsWindow", UIParent)
-    host:SetSize(440, 656); host:SetPoint("CENTER"); host:SetFrameStrata("DIALOG")
+    host:SetSize(440, 690) -- the panel is 672 tall: at 620 the credit line fell below the window
+    host:SetPoint("CENTER"); host:SetFrameStrata("DIALOG")
     host:SetClampedToScreen(true); host:SetMovable(true); host:EnableMouse(true); host:RegisterForDrag("LeftButton")
     host:SetScript("OnDragStart", host.StartMoving); host:SetScript("OnDragStop", host.StopMovingOrSizing)
     Style.Panel(host, C.bg2); Style.Scaled(host, nil, true)

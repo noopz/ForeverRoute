@@ -87,6 +87,7 @@ function get(url, binary) {
   node('vendors.js', db, conv, path.join(addon, 'Vendors.lua'));
   node('dungeon-quests.js', db, path.join(QDB, 'support', 'Forever', 'Zones', 'dungeons.lua'), path.join(QDB, 'client'), path.join(addon, 'DungeonQuests.lua'), conv); // (qdb/client: Map.csv + AreaTable.csv - node tools/dungeon-quests.js --fetch)
   node('gen-breadcrumbs.js');
+  node('gen-quest-data.js'); // quest items and the quests no plan can hold (QuestData.lua)
   node('hostile-towns.js');
   node('gen-travel-data.js');
   log('regenerated: flight masters, vendors, dungeon quests, breadcrumbs, hostile towns, travel data');

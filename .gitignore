@@ -32,3 +32,4 @@ qdb/questiedb/
 reports/simplay-cache/
 sim-wtf/
 companion/node.txt
+addon/ForeverRoute/tests/save_*_test.lua

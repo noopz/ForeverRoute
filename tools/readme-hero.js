@@ -87,19 +87,36 @@ if (mode === 'card') {
   console.log(`${out.steps.length} steps in ${out.zone}, kinds ${Object.keys(KIND).length}, icons ${Object.keys(icons).length}`);
 }
 
-// node tools/readme-hero.js grid <out.json>: every built-in plan's last check (reports/starters.md): hours to 60, the
-// audit, the simulated players
+// node tools/readme-hero.js grid <out.json>: every built-in plan's last check: hours to 60 and the simulated players
+// (reports/starters.md, each plan's last row), and the audit run again now on the plan as it stands
+// (paths-starter/<plan>/Route.lua with tools/lint-route.js - the report's own count can be older than the audit's fixes)
 if (mode === 'grid') {
   const out2 = key; // (one argument: the output file)
+  const { execFileSync } = require('child_process');
+  const audit = (k) => {
+    const f = path.join(ROOT, 'paths-starter', k, 'Route.lua');
+    if (!fs.existsSync(f)) return null;
+    const [race, cls] = k.split('-'); let n = 0;
+    for (const m of fs.readFileSync(f, 'utf8').matchAll(/^ {4}id = "(path:[^"]+)"/gm)) {
+      const a = execFileSync(process.execPath, [path.join(__dirname, 'lint-route.js'), f, path.join(ROOT, 'qdb', 'db.json'), m[1], cls + ',' + race], { encoding: 'utf8' });
+      n += a.split('\n').slice(1).filter((l) => l.trim() && !/no issues found/.test(l)).length;
+    }
+    return n;
+  };
   const rows = {};
   for (const l of fs.readFileSync(path.join(ROOT, 'reports', 'starters.md'), 'utf8').split('\n')) {
     const c = l.split('|').map((x) => x.trim());
     if (c.length > 7 && /^\w+-\w+$/.test(c[1])) { const p = c[7].match(/(\d+) persona.*?(\d+) broke/); rows[c[1]] = { level: +c[2], hours: +c[3], steps: +c[4], audit: +c[5], personas: p ? +p[1] : 0, broke: p ? +p[2] : 0 }; }
   }
-  const races = ['human', 'dwarf', 'nightelf', 'gnome', 'skyborne'], classes = ['warrior', 'paladin', 'hunter', 'rogue', 'priest', 'shaman', 'mage', 'warlock', 'druid'];
-  const out = { W: 1000, H: 560, races, classes, plans: rows };
+  for (const k of Object.keys(rows)) { const n = audit(k); if (n != null) rows[k].audit = n; }
+  const factions = [
+    { name: 'Alliance', races: ['human', 'dwarf', 'nightelf', 'gnome', 'skyborne'] },
+    { name: 'Horde', races: ['orc', 'undead', 'tauren', 'troll'] },
+  ];
+  const races = factions.flatMap((f) => f.races), classes = ['warrior', 'paladin', 'hunter', 'rogue', 'priest', 'shaman', 'mage', 'warlock', 'druid'];
+  const out = { W: 1000, H: 790, races, classes, factions, plans: rows };
   fs.writeFileSync(out2, JSON.stringify(out));
-  console.log(Object.keys(rows).length + ' plans');
+  console.log(Object.keys(rows).length + ' plans, ' + Object.values(rows).reduce((n, r) => n + r.audit, 0) + ' audit issues');
 }
 
 // node tools/readme-hero.js think <plan key> <out.json> [how many decisions=12]: the planner's zone choices

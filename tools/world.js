@@ -73,4 +73,29 @@ function droppers(o, npcs) {
 // each race's start zone (QuestieDB area ids): where it spawns and quests first
 const RACE_HOME = { human: 12, dwarf: 1, gnome: 1, nightelf: 141, skyborne: 16593, orc: 14, troll: 14, tauren: 215, undead: 85, skybornehorde: 16593 };
 const START_ZONES = new Set(Object.values(RACE_HOME));
-module.exports = { RACE_HOME, START_ZONES, droppers, raceOk, XP_TO_LEVEL, killXp, classicKillXp, setLearned, questXp, addXp, RACE_BIT, CLASS_BIT, canTake, CAPITAL_AREAS, CAPITAL_MAPS, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, TRAIN_BATCH, trainNow };
+// a quest with work to do that the data describes none of: given and handed in by the same NPC, no objectives, and
+// its text says there is work (Brewer's Trade: "Deliver the bottles of Fallrook Varietal to Dun Garok" - given and
+// handed in by Brewmeister Bilger). The instant ones are not ("Wait a moment, then speak with Sirra again", the class
+// spell quests with no text). route2.js keeps one that leads on as accept, one "do the work" step, hand-in;
+// gen-quest-data.js offers the others at their giver
+const INSTANT_RX = /^\s*(wait|speak|talk|watch|inspect|open|listen)\b/i;
+function unknownWork(q) {
+  if ((q.objectives || []).length) return false;
+  const ids = (l) => (l || []).map((s) => s.type + s.id).sort().join();
+  if (!(q.starters || []).length || ids(q.starters) !== ids(q.finishers)) return false;
+  const text = (q.text || []).join(' ').trim();
+  return text !== '' && !INSTANT_RX.test(text);
+}
+// the "do the work" label for such a quest: the first sentence of its text, at most ~70 characters
+function unknownWorkLabel(q) {
+  const first = ((((q.text || [])[0] || '').trim().split(/(?<=[.!?])\s/)[0]) || '').replace(/[.!]\s*$/, '').replace(/\s+/g, ' ').trim();
+  if (first.length <= 70) return first || q.name;
+  return first.slice(0, 69).replace(/\s+\S*$/, '').replace(/[,;:]$/, '') + '…';
+}
+// does this quest lead to another one (a quest lists it as a prerequisite, or it names the next in its chain)?
+let FOLLOW_SRC = null, FOLLOW = null;
+function leadsOn(q, quests) {
+  if (FOLLOW_SRC !== quests) { FOLLOW_SRC = quests; FOLLOW = new Set(); for (const o of Object.values(quests)) for (const p of [...(o.preSingle || []), ...(o.preGroup || [])]) FOLLOW.add(+p); }
+  return FOLLOW.has(+q.id) || !!(q.nextInChain && quests[q.nextInChain]);
+}
+module.exports = { unknownWork, unknownWorkLabel, leadsOn, RACE_HOME, START_ZONES, droppers, raceOk, XP_TO_LEVEL, killXp, classicKillXp, setLearned, questXp, addXp, RACE_BIT, CLASS_BIT, canTake, CAPITAL_AREAS, CAPITAL_MAPS, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, TRAIN_BATCH, trainNow };

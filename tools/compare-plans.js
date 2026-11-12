@@ -18,7 +18,7 @@ const snap = c.snapshot || {};
 const L = snap.level || 1;
 const done = new Set((snap.completed || []).map(Number));
 const inLog = new Set(Object.keys(snap.log || {}).map(Number));
-const notOffered = new Set(Object.entries((c.avail && c.avail.no) || {}).filter(([, v]) => (v.lvl || 0) >= L).map(([k]) => +k));
+const notOffered = new Set(Object.entries((c.avail && c.avail.no) || {}).filter(([, v]) => v.stay || (v.lvl || 0) >= L).map(([k]) => +k));
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
 const key = norm(snap.race) + '-' + norm(snap.class);
 const folder = path.basename(path.dirname(path.resolve(charDir))).replace(/\s/g, '');

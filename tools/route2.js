@@ -229,6 +229,12 @@ const booksDone = new Set();
 // dungeons we're willing to run (cfg.dungeons: list of dungeon area ids, or 'all')
 const DUNGEONS = cfg.dungeonFile ? require('./dungeons').loadDungeons(cfg.dungeonFile) : { list: {}, byArea: {} };
 const dungeonOn = (d) => d && (cfg.dungeons === 'all' || (cfg.dungeons || []).includes(d.id)) && zones.has(d.entrance.zone);
+// dungeons the data places no creature in (Forever's new ones: City of Dalaran, Excavation Site: Wetlands)
+let PEOPLED = null;
+const emptyDungeon = (d) => {
+  if (!PEOPLED) { PEOPLED = new Set(); for (const n of Object.values(N)) for (const sp of (n && n.spawns) || []) { const x = DUNGEONS.byArea[sp.zone]; if (x) PEOPLED.add(x.id); } }
+  return !PEOPLED.has(d.id);
+};
 const dungeonOf = (spawns) => { for (const sp of spawns) { const d = DUNGEONS.byArea[sp.zone]; if (d) return d; } return null; };
 const HOLIDAY_SORTS = new Set([-22, -284, -366, -364, -369, -370, -1001, -1002, -1003, -1004, -1005, -1006, -1007, -41, -376, -374, -375, -22, -101]);
 // quests already finished in your log: always worth handing in, whatever their level or how annoying they were
@@ -236,6 +242,24 @@ const HOLIDAY_SORTS = new Set([-22, -284, -366, -364, -369, -370, -1001, -1002, 
 let FOLLOW = null;
 const opensFollowUp = (id) => { if (!FOLLOW) { FOLLOW = new Set(); for (const o of Object.values(Q)) for (const p of [...(o.preSingle || []), ...(o.preGroup || [])]) FOLLOW.add(p); } return FOLLOW.has(+id); };
 const finishedInLog = (id) => { const a = (cfg.active || {})[id]; return !!(a && a.complete); };
+// a quest with work to do that the data describes none of (see the task loop; the rule is shared: world.js)
+const { unknownWork, unknownWorkLabel, leadsOn } = require('./world');
+module.exports.unknownWork = unknownWork;
+// what kill credit on a "friendly" NPC really asks: { kind: 'talk' } (Speak with Tirion Fordring), 'kill' (Subdue
+// Tapoke Jahn, Kill 12 Small Crag Boars) or 'do' with the quest's first sentence as the label (Free 6 Webbed Victims)
+const TALK_RX = /\b(speak|talk|listen|ask|question|hear)\b/i;
+const FIGHT_RX = /\b(kill|slay|slain|defeat|subdue|destroy|dispatch|hunt|cull|vanquish|eliminate|bounty|thin|wipe|exterminate|put down|murder|assassinate|execute)\b/i;
+function killCreditLabel(q, o) {
+  if (o.text && TALK_RX.test(o.text)) return { kind: 'talk' };
+  const first = (((q.text || [])[0] || '').split(/(?<=[.!])\s/)[0] || '').replace(/[.!]\s*$/, '').trim();
+  if (/^(speak|talk|listen|ask)\b/i.test(first)) return { kind: 'talk' };
+  if (FIGHT_RX.test(first)) return { kind: 'kill' };
+  if (first && first.length <= 60) return { kind: 'do', label: first };
+  const all = (o.text || '') + ' ' + (q.text || []).join(' ');
+  if (FIGHT_RX.test(all)) return { kind: 'kill' };
+  if (TALK_RX.test(all)) return { kind: 'talk' };
+  return { kind: 'kill' };
+}
 // breadcrumb -> the quests it leads to (the quest data lists each quest's breadcrumbs)
 const BREADCRUMB_OF = {};
 for (const t of Object.values(Q)) for (const b of t.breadcrumbs || []) (BREADCRUMB_OF[b] = BREADCRUMB_OF[b] || []).push(t.id);
@@ -274,6 +298,18 @@ for (const q of Object.values(Q)) {
   t.turnin = finisherIn ? { who: finisherIn.name, npc: finisherIn.id, spawns: finisherIn.spawns.filter(inZones) }
     : { who: finisherAny.name, npc: finisherAny.id, spawns: [], carry: finisherAny.spawns[0] };
   if (!finisherIn) t.flags.push('carry');
+  // a report-to quest (no objectives) doesn't end at a copy of its ender standing beside the giver when the data has
+  // others: An Alarming Request ("Report to the Image of Archmage Modera near the City of Dalaran") listed an Image
+  // next to Emissary Jacques in Southshore, and the card said to hand it in on the spot
+  if (!q.objectives.length && starter && finisherIn && finisherIn.id !== starter.id && t.accept.at) {
+    const beside = (sp) => sp.zone === t.accept.at.zone && straightDist(sp, t.accept.at) < 60;
+    const away = finisherIn.spawns.filter((sp) => !beside(sp));
+    if (away.length && away.length < finisherIn.spawns.length) {
+      const here = away.filter(inZones);
+      if (here.length) t.turnin.spawns = here;
+      else { t.turnin = { who: finisherIn.name, npc: finisherIn.id, spawns: [], carry: away[0] }; t.flags.push('carry'); }
+    }
+  }
   let elite = false, outside = false;
   for (const o of q.objectives) {
     let spawns = [], label = '', work = 0, mobs = [], kills = 0, buying = false;
@@ -281,10 +317,17 @@ for (const q of Object.values(Q)) {
       for (const id of o.kind === 'kill' ? [o.npc] : o.npcs) if (N[id]) { spawns.push(...N[id].spawns); mobs.push(N[id]); }
       const nm = o.text || (mobs[0] && mobs[0].name);
       const n = countFor(q, nm); label = `Kill ${n} ${nm}`; work = n * cfg.secPerKill; kills = n;
-      // a "kill" of someone friendly to you is a talk (Forever's "Speak with Illaya Amberwind and Coriella Calmbreeze"
-      // is stored as kill credit on a level-20 elder and an innkeeper): no fight, no mob level holding the quest back
+      // kill credit on someone the data calls friendly can be a talk (Forever's "Speak with Illaya Amberwind and Coriella
+      // Calmbreeze" is kill credit on an elder and an innkeeper) - but "friendly" there means "won't attack you", beasts
+      // too, and NPCs that turn on you in a scripted fight: plans said "Speak with Mottled Boar", and "Speak with Tapoke
+      // Jahn" for Subdue Tapoke Jahn. The quest's own words decide (killCreditLabel): a talk, a fight, or what it says
+      // to do (Free 6 Webbed Victims in Night's Web Hollow)
       const mine = cfg.faction === 'horde' ? 'H' : 'A';
-      if (mobs.length && mobs.every((m) => m.friendly === 'AH' || m.friendly === mine)) { label = `Speak with ${nm}`; work = 15; kills = 0; mobs = []; }
+      if (mobs.length && mobs.every((m) => m.friendly === 'AH' || m.friendly === mine)) {
+        const how = killCreditLabel(q, o);
+        if (how.kind === 'talk') { label = `Speak with ${nm}`; work = 15; kills = 0; mobs = []; }
+        else if (how.kind === 'do') { label = how.label; kills = 0; mobs = []; }
+      }
     } else if (o.kind === 'item') {
       // your measured rate for this item (ForeverRouteDB.drops, 15+ kills) beats the Classic data: Forever changed some
       const obs = (cfg.observedDrops || {})[o.name];
@@ -314,6 +357,12 @@ for (const q of Object.values(Q)) {
     const vend = buying && ref ? spawns.filter((sp) => sp.x >= 0).sort((a, b) => (a.zone === ref.zone ? 0 : 1) - (b.zone === ref.zone ? 0 : 1) || straightDist(a, ref) - straightDist(b, ref))[0] : null;
     let at = vend ? { ...vend, density: 1, total: 1, spread: 1 } : cluster(spawns);
     let dungeon = null;
+    // a quest the data files under one of Forever's new dungeons - ones it places no creature in - is done in there,
+    // wherever its mobs are said to stand: their bosses come placed in the open zone (Highland Horror, for Horrors in
+    // the Highland in Excavation Site: Wetlands, at 11,56 - Menethil Harbor), and a plan sent players to farm a dungeon
+    // boss in town. Not for the old dungeons: there the filing is often a chain's outdoor part (Agmond's Fate, Badlands)
+    const taggedIn = DUNGEONS.byArea[q.zone];
+    if (taggedIn && !vend && emptyDungeon(taggedIn) && !dungeonOf(spawns)) { at = null; spawns = [{ zone: taggedIn.id, x: -1, y: -1, instance: true }]; }
     if (at && allElite) {
       for (const d of Object.values(DUNGEONS.list)) if (dungeonOn(d) && d.entrance.zone === at.zone && straightDist(d.entrance, at) < 450) { at = null; spawns = [{ zone: d.id, x: -1, y: -1, instance: true }]; break; }
     }
@@ -344,6 +393,19 @@ for (const q of Object.values(Q)) {
   const totalKills = t.objs.reduce((s, o) => s + o.kills, 0);
   if (totalKills > cfg.maxKills && !(cfg.keep || []).includes(q.id) && !finishedInLog(q.id)) { skipped.push([q, `about ${totalKills} kills needed: not worth it`]); continue; }
   if (outside && !finishedInLog(q.id)) { skipped.push([q, 'objectives outside the planned zones (dungeon or other zone)']); continue; }
+  // given and handed in by the same NPC, its text says there is work, and the data lists none of it (Brewer's Trade:
+  // "Deliver the bottles to Dun Garok" - the plan had you hand it in the moment you took it; Destroy 5 Twilight Ritual
+  // Circles, Plant 5 saplings): where the work is isn't known, so it can't be routed. The instant ones stay ("Wait a
+  // moment, then speak with Sirra again", the class spell quests with no text). tools/forever-overrides.json can
+  // give such a quest its objectives. One that leads on (the first quest of a Forever chain: losing it lost the whole
+  // chain) stays, as accept, one "do the work" step (the quest's first sentence, a flat cfg.unknownWorkSec, placed at
+  // the giver only so the order and the costs work: the step file marks it unknown, and the addon draws no pin, line or
+  // arrow for it), then the hand-in. The others are offered at their giver in game (gen-quest-data.js: SIDE_QUESTS)
+  if (unknownWork(q) && !finishedInLog(q.id)) {
+    const where = t.accept.at || (t.turnin.spawns || [])[0];
+    if (!where || !(leadsOn(q, Q) || (cfg.keep || []).includes(q.id))) { skipped.push([q, 'the quest data lists none of its objectives: where its work is is unknown']); continue; }
+    t.objs.push({ label: unknownWorkLabel(q), at: { ...where, density: 1, total: 1, spread: 1, area: 0 }, work: cfg.unknownWorkSec ?? 300, kills: 0, mobLevel: undefined, mobIds: [], allSpawns: [], drop: null, dungeon: null, killsFor: null, unknown: true });
+  }
   // a pet class (warlock, hunter) soloes elites well below it - not by the quest's level: Forever's elite Dark Iron and
   // Dragonmaw camps (27-31) came with quests of level 27-29, and a level-29 warlock was sent into them
   const eliteMax = Math.max(0, ...t.objs.map((o) => o.mobLevel || 0));
@@ -549,10 +611,24 @@ function workLoners() {
   moveTo(sp);
   return workHere(sp, 15) > 0;
 }
+// a pick-up or hand-in spot that lies inside a hub without being one of its NPCs: an object (the Waterlogged Chest off
+// Menethil's shore: Lightforge Iron is handed in to it and The Lost Ingots starts from it; a wanted poster) or an NPC
+// the hub was not built from. The hub counts it as its own (inHub: within cfg.hubYards of one of its NPCs), so neither
+// the field loops nor the lone-NPC visits go there - and the hub visit only walked its NPCs: Lightforge Iron was picked
+// up and never handed in, and its whole chain (The Lost Ingots, Blessed Arm) fell out of every path
+function hubExtras(h) {
+  const out = [];
+  const add = (sp) => { if (sp && inHub(h, sp) && !h.pts.some((q) => dist(q, sp) < 15) && !out.some((q) => dist(q, sp) < 15)) out.push(sp); };
+  for (const t of Object.values(tasks)) {
+    if (accepted.has(t.q.id) && ready(t)) for (const sp of t.turnin.spawns || []) add(sp);
+    if (canAccept(t)) add(t.accept.at);
+  }
+  return out;
+}
 function workHub(h) {
-  // walk the hub's NPCs in order; repeat so follow-ups unlocked by turn-ins are picked up
+  // walk the hub's NPCs in order, then its other quest spots; repeat so follow-ups unlocked by turn-ins are picked up
   let total = 0;
-  for (let k = 0; k < 4; k++) { let n = 0; for (const p of h.pts) n += workHere(p, 15); total += n; if (!n) break; }
+  for (let k = 0; k < 4; k++) { let n = 0; for (const p of h.pts) n += workHere(p, 15); for (const p of hubExtras(h)) n += workHere(p, 15); total += n; if (!n) break; }
   return total;
 }
 // a hub that was visited and gave nothing (a giver the visit can't reach, a full log) is not picked again at this level:
@@ -1106,7 +1182,10 @@ function writeRoute(seq, locs) {
       continue;
     }
     const oInfo = e.kind === 'obj' && tasks[e.q] && tasks[e.q].objs.find((x) => x.label === e.label);
-    if (e.kind === 'obj') steps.push({ rate: oInfo && oInfo.dropPct, k: 'obj', text: e.label, match: matchOf(e.label), target: targetOf(e.label, level), item: itemOf(q), loot: /^(Collect|Loot)/.test(e.label) || undefined, r: Math.max(40, Math.min(220, (e.area || 0) + 15)), note: e.shared ? 'Drops from the mobs you are already killing here.' : undefined, ...base });
+    // the work of a quest the data lists no objectives for (route2's unknownWork): the giver's spot is only its place in
+    // the order - unknown = true, and the addon points nowhere for it; the card shows the quest log's own lines
+    if (e.kind === 'obj' && oInfo && oInfo.unknown) steps.push({ k: 'obj', unknown: true, text: e.label, r: 40, note: 'Where to do this isn\'t in the quest data: follow your quest log and map.', ...base });
+    else if (e.kind === 'obj') steps.push({ rate: oInfo && oInfo.dropPct, k: 'obj', text: e.label, match: matchOf(e.label), target: targetOf(e.label, level), item: itemOf(q), loot: /^(Collect|Loot)/.test(e.label) || undefined, r: Math.max(40, Math.min(220, (e.area || 0) + 15)), note: e.shared ? 'Drops from the mobs you are already killing here.' : undefined, ...base });
     if (e.kind === 'turnin') {
       steps.push({ k: 'turnin', npc: e.who, r: 6, note: tq && tq.rewardText ? 'Reward: ' + tq.rewardText : undefined, reward: (tq && tq.rewardItem) || undefined, ...base });
       levelUp(questXpAt(q, level));

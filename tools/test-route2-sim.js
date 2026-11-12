@@ -16,7 +16,7 @@ function sim(extra) {
   fs.writeFileSync(cfgFile, JSON.stringify({ race: 'gnome', class: 'warlock', faction: 'alliance', xp: 0, minQuestLevel: level - 6, maxQuestLevel: level + 5, targetLevel: 30, finishOpen: true, arrivalTour: true,
     flightSec: 120, completed: [], active: {}, terrainDir: rel(camp.terrainDir), conversion: rel(camp.conversion), trainLevels: camp.trainLevels, trainer: camp.trainer, itemsJson: rel(camp.itemsJson),
     dungeonFile: fs.existsSync(camp.dungeonFile || '') ? camp.dungeonFile : undefined, dungeons: camp.dungeons, dungeonRunMin: camp.dungeonRunMin, groupWaitMin: camp.groupWaitMin, title: 'test', stateOut: state, ...extra }));
-  execFileSync(process.execPath, ['--max-old-space-size=8000', path.join(__dirname, 'route2.js'), rel(camp.db), cfgFile, out], { cwd: ROOT, stdio: ['ignore', 'ignore', 'ignore'] });
+  execFileSync(process.execPath, ['--max-old-space-size=8000', path.join(__dirname, 'route2.js'), extra.dbFile || rel(camp.db), cfgFile, out], { cwd: ROOT, stdio: ['ignore', 'ignore', 'ignore'] });
   return { steps: JSON.parse(fs.readFileSync(out, 'utf8')), state: JSON.parse(fs.readFileSync(state, 'utf8')) };
 }
 let fails = 0;
@@ -46,6 +46,34 @@ const doneFor = (steps, q) => steps.filter((s) => s.type === 'do' && s.items.som
   const s2 = sim({ zones: [12], level: 6 });
   const fire = s2.steps.filter((x) => x.type === 'do').flatMap((x) => x.items).filter((i) => i.q === 95998);
   check('...without it, Elwynn plans it, with its campfire once', s2.steps.some((x) => x.type === 'accept' && x.q === 95998) && fire.length === 1, fire);
+}
+// a hand-in and pick-up spot inside a town that is not one of its NPCs: the Waterlogged Chest off Menethil's shore
+// (within the hub's reach, so no field loop went there, and the hub visit only walked its NPCs). Lightforge Iron was
+// picked up and never handed in, and The Lost Ingots, which starts from the chest, was in no path
+{
+  const { steps } = sim({ zones: [11, 1519], level: 32, completed: [270] });
+  const at = (k, q) => steps.findIndex((s) => s.type === k && s.q === q);
+  check('Lightforge Iron is handed in at the Waterlogged Chest', at('accept', 321) >= 0 && at('turnin', 321) > at('accept', 321), [at('accept', 321), at('turnin', 321)]);
+  check('...and The Lost Ingots starts there and is handed in to Glorin Steelbrow', at('accept', 324) > at('turnin', 321) && at('turnin', 324) > at('accept', 324), [at('accept', 324), at('turnin', 324)]);
+}
+// work the quest data lists none of (Brewer's Trade: Brewmeister Bilger in Southshore gives it and takes it back,
+// "Deliver the bottles ... to Dun Garok"): alone it is left out (the addon offers it at the giver); as the first quest
+// of a chain (a follow-up added here) it stays - pick-up, one "do the work" step with no known place, hand-in
+{
+  const plain = sim({ zones: [267, 1519], level: 27 });
+  check('Brewer\'s Trade, in no chain, is not planned', !plain.steps.some((s) => s.q === 98071), plain.steps.filter((s) => s.q === 98071).map((s) => s.type));
+  const db = JSON.parse(fs.readFileSync(rel(camp.db), 'utf8'));
+  db.quests[99990] = { ...JSON.parse(JSON.stringify(db.quests[98071])), id: 99990, name: 'Brewer\'s Trade, part two', text: ['Speak with Brewmeister Bilger again.'], preSingle: [98071], preGroup: [], xp: 1000 };
+  const dbFile = path.join(dir, 'db-chain.json'); fs.writeFileSync(dbFile, JSON.stringify(db));
+  const legOut = path.join(dir, 'leg-brew.json');
+  const { steps } = sim({ zones: [267, 1519], level: 27, dbFile, optimize: true, optimizeSeconds: 2, workers: 2, legOut, routeOut: path.join(dir, 'leg-brew.lua') });
+  const its = steps.filter((s) => s.q === 98071 || (s.items || []).some((i) => i.q === 98071)).map((s) => s.type);
+  check('...as the first of a chain it is planned: accept, its work, hand-in', JSON.stringify(its) === '["accept","do","turnin"]', its);
+  const leg = JSON.parse(fs.readFileSync(legOut, 'utf8')).steps.filter((s) => s.q === 98071);
+  const work = leg.find((s) => s.k === 'obj');
+  check('...in the step file: accept, one unknown step, hand-in', JSON.stringify(leg.map((s) => s.k)) === '["accept","obj","turnin"]' && work && work.unknown === true, leg);
+  check('...the step: the quest\'s first sentence, the note, no walking path', work && /^Deliver the bottles of Fallrook Varietal/.test(work.text) && work.text.length <= 71 && /isn't in the quest data/.test(work.note || '') && !work.wp && !work.walk && !work.target && !work.match, work);
+  check('...and the follow-up comes after its hand-in', steps.findIndex((s) => s.type === 'accept' && s.q === 99990) > steps.findIndex((s) => s.type === 'turnin' && s.q === 98071), steps.filter((s) => s.q === 99990).map((s) => s.type));
 }
 // The Stockade, on two real legs of Testchar's path (Redridge at 24, then Duskwood at 25 - Stormwind rides along with both)
 const fixture = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, 'test-fixtures', f), 'utf8'));

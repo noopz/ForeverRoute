@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.1 - 2026-11-11
+- The arrow points the way instead of herding you onto the dotted line: step off it and the line is redrawn from where you are, it looks further ahead along straight stretches, and roads only win when they're nearly on the way.
+- Forever Route Targeting now really marks the NPC with a star (it was blocked by the game).
+- Logging out is quick again: a timing check rebuilt the route ten times at logout and ran past the game's limit on long plans. The options window opens on screen again.
+- A quest its giver turned down once you had the level for it stays off your route, instead of coming back every level.
+- Hearth steps only when the game says you're bound there and the hearthstone is ready.
+- Good quests nearby that the plan can't hold (giver in a city, objectives elsewhere, or work the quest data doesn't describe, like Brewer's Trade) are offered when you're at the giver.
+- The quest log check lists quest items in your bags that are safe to delete.
+- The Target button floats just above the card; `/fr target reset` puts it back. "Not doing this quest" no longer covers the title.
+- Your path stays put when a new plan arrives, and a switch is announced in chat (`/fr paths`).
+- No more stray path flashing on the map.
+
 ## 1.4.0 - 2026-11-11
 - Horde: built-in plans for every Horde race and class.
 - Every Alliance plan rebuilt: through Forever's new zones (Riverglades, Shen'dralas), grinding a level where the quests run out instead of sending you into dungeons.

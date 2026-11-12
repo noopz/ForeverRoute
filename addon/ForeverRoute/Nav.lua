@@ -27,7 +27,9 @@ Nav.WEIGHT_RATED = 0.9 -- the same where the ground is rated (roads, mobs), coun
                        -- of the road yards of the cheapest line); at 0.9 its line costs within 3% of the cheapest,
                        -- for 30 to 70% of the squares an estimate that cannot miss (0.75) looks at
 Nav.BUDGET_MS = 2      -- CPU per frame while a zone unpacks or a search runs
-Nav.STRAY_YD = 30      -- this far off the line: a new line from where you are
+Nav.STRAY_YD = 12      -- this far off the line: a new line from where you are (read off the last search, so cheap).
+                       -- At 30 the arrow spent those yards steering you back onto the old line - the line is a
+                       -- hint, not a rail: step off it and it is redrawn from where you are
 Nav.SWIM = 1.5         -- swimming costs this much more than walking (the planner's factor)
 Nav.LOOK = 64          -- a straightened stretch spans at most this many squares
 Nav.SLACK = 1.02       -- ...and may cost this much more than the squares the search walked
@@ -35,13 +37,18 @@ Nav.SLACK_ROAD = 1.08  -- the same from a road square: more would cut the road's
 Nav.SLACK_OPEN = 1.2   -- ...and from open ground where the ground is rated (mobs)
 Nav.SNAP = 6           -- you (or the target) may be this many squares from the nearest ground the grid knows
 Nav.KEEP = 2           -- unpacked zones kept in memory
-Nav.ROAD = 0.75        -- a yard of road costs this much of a yard of open ground: up to a third further to stay on it
+Nav.ROAD = 0.9         -- a yard of road costs this much of a yard of open ground: about a tenth further to stay on it.
+                       -- (0.75, a third further, had the arrow dragging players onto every road; on foot a road is
+                       -- no faster, and the mobs beside the way are priced on their own)
 Nav.MOB_NEAR = 1.4     -- a yard of open ground within about 24 yd of a hostile spawn costs this much more...
 Nav.MOB_CLOSE = 2.2    -- ...and within about 12 yd this much (tools/navgrid.js MOB_NEAR, MOB_CLOSE)
 Nav.MOB_ROAD = 1.4     -- on a road only a spawn within 12 yd counts, and this much: roads run past camps, and what
                        -- stands 20 yd off one mostly leaves you alone. (Counting those sent the line off the road
                        -- and through the quiet woods beside it - the opposite of what a road is for.)
 Nav.MOB_GAP = 5        -- mobs this many levels under you (or more) are left out: they hardly notice you
+Nav.STRAIGHT_TOL = 5   -- the arrow aims as far along the line as a straight walk stays within this many yards of it
+Nav.STRAIGHT_MAX = 200 -- ...up to this far
+Nav.STRAIGHT_PTS = 24  -- ...over this many of its corners at most
 Nav.AIM_REACH = 1.25   -- off the line by more than the arrow's look-ahead, it looks this many times as far as you are off
 
 -- the 85 characters of the packed text -> 0..84 (tools/navgrid.js ALPHA)
@@ -621,7 +628,8 @@ end
 -- Where you are = the nearest stretch from P.cursor on (it only moves forward).
 -- -> the spot { x, y } (one table per line, reused), yards to walk (to the spot, then the rest of the line), how
 --    far off the line you are, the line's height where you are (when it has heights)
-function Nav.Aim(P, px, py, look)
+-- far: in open country, reach on along a nearly straight stretch (Nav.STRAIGHT_TOL)
+function Nav.Aim(P, px, py, look, far)
   local pts, rem = P.pts, P.rem
   local n = #pts
   local aim = P.aim; if not aim then aim = {}; P.aim = aim end
@@ -658,6 +666,51 @@ function Nav.Aim(P, px, py, look)
     j = j + 1; t0 = 0
   end
   local ax, ay = a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t
+  -- far (open country): where the line runs on nearly straight, aim at the furthest spot you can walk to in a
+  -- straight line without leaving it by more than Nav.STRAIGHT_TOL - a long, slightly wavy stretch gives one steady
+  -- direction far ahead, not a spot 20 yd on that wobbles with every kink. Coming up to a bend it slides onto the
+  -- next stretch bit by bit (the furthest spot that still fits), so it doesn't jump to its far end
+  -- It fades out as you get off the line, blended toward the near spot, rather than switching off (switched, the
+  -- arrow swung 30 degrees at once); that also keeps a follower from cutting a bend by more than the near spot does
+  local nj, nt = j, t
+  if far and bd < Nav.STRAIGHT_TOL then
+    local nx, ny = ax, ay
+    local tol, maxD2 = Nav.STRAIGHT_TOL, Nav.STRAIGHT_MAX * Nav.STRAIGHT_MAX
+    -- every corner between you and (qx, qy) within tol of the straight run there
+    local function fits(qx, qy, upto)
+      local dx, dy = qx - px, qy - py
+      local L2 = dx * dx + dy * dy
+      if L2 > maxD2 then return false end
+      if L2 < 1 then return true end
+      local L = sqrt(L2)
+      for v = best + 1, upto do
+        local w = pts[v]
+        if abs((w[1] - px) * dy - (w[2] - py) * dx) / L > tol then return false end
+      end
+      return true
+    end
+    for k = j + 1, min(n, j + Nav.STRAIGHT_PTS) do
+      local q = pts[k]
+      if fits(q[1], q[2], k - 1) then
+        ax, ay, j, t = q[1], q[2], k - 1, 1
+      else
+        -- part of the way along this stretch: the furthest part that fits
+        local s0, s1, e = pts[k - 1], q, k - 1
+        local lo, hi = (e == j) and t or 0, 1
+        for _ = 1, 8 do
+          local mid = (lo + hi) / 2
+          if fits(s0[1] + (s1[1] - s0[1]) * mid, s0[2] + (s1[2] - s0[2]) * mid, e) then lo = mid else hi = mid end
+        end
+        if e > j or lo > t then ax, ay, j, t = s0[1] + (s1[1] - s0[1]) * lo, s0[2] + (s1[2] - s0[2]) * lo, e, lo end
+        break
+      end
+    end
+    local w = 1 - bd / Nav.STRAIGHT_TOL
+    ax, ay = nx + (ax - nx) * w, ny + (ay - ny) * w
+    -- the yards to walk: along the line from the near spot (the blend is only where the arrow points)
+    aim[1], aim[2] = ax, ay
+    return aim, sqrt((nx - px) ^ 2 + (ny - py) ^ 2) + rem[nj + 1] + (1 - nt) * (rem[nj] - rem[nj + 1]), bd, zHere
+  end
   aim[1], aim[2] = ax, ay
   return aim, sqrt((ax - px) ^ 2 + (ay - py) ^ 2) + rem[j + 1] + (1 - t) * (rem[j] - rem[j + 1]), bd, zHere
 end
@@ -714,14 +767,16 @@ end
 
 function Nav.Want(t)
   if not (t and t.wx and t.inst) then
-    if live then local key, had = live.key, live.path; live = nil; frame:Hide(); if had then ns.Fire("FR_NAVPATH", key, nil) end end
+    if live then local key = live.key; live = nil; frame:Hide(); ns.Fire("FR_NAVPATH", key, nil) end -- (said with or without a line, as below)
     return
   end
   if live and live.key == t.key and abs(live.wx - t.wx) < 1 and abs(live.wy - t.wy) < 1 and live.inst == t.inst then return end
   local had = live and live.path
   local oldKey = live and live.key
   live = { key = t.key, wx = t.wx, wy = t.wy, inst = t.inst, z = t.z, m = t.m }
-  if had then ns.Fire("FR_NAVPATH", oldKey, nil) end
+  -- a new target: what is on the map for the old one goes now - its line, or the planned path drawn while there
+  -- was no line (said even when the old target had no line) - and nothing is drawn until the new line is ready
+  ns.Fire("FR_NAVPATH", oldKey, nil)
   start(live)
 end
 function Nav.Live() return live end

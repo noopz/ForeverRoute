@@ -4,6 +4,8 @@
 --   finished, but not on the route                           -> hand it in if you pass by
 --   on the route                                             -> keep (and when it comes up)
 -- Nothing is abandoned unless you click Abandon and confirm. Opened from the route list or /fr logcheck.
+-- Below the quests: the quest items in your bags that nothing needs any more (LogCheck.Leftovers) - a list of what is
+-- safe to delete. Deleting is yours to do: the addon never destroys an item.
 local _, ns = ...
 local Style = ns.Style
 local C = Style.C
@@ -104,6 +106,96 @@ function LogCheck.Classify()
   table.sort(list, function(a, b) if order[a.verdict] ~= order[b.verdict] then return order[a.verdict] < order[b.verdict] end return (a.e.zone or "") < (b.e.zone or "") end)
   return list
 end
+
+-- Quest items you still carry that nothing needs: "for the quests you won't do, figure out which ones have items you
+-- no longer need, and prompt people what they should delete". ns.QUEST_ITEMS (QuestData.lua) names every quest that
+-- uses a quest item - as an objective, handed to you by the giver, needed along the way, or the item that starts it.
+-- An item is left over only when EVERY quest of yours that uses it is out of the picture:
+--   handed in; or you said you won't do it; or it was in your log once, is gone from it, and your routes don't send
+--   you back for it (abandoned).
+-- A quest in your log keeps its items, always (also one you finished and chose not to hand in). A quest you never had
+-- and may still take keeps them too (the item that starts a quest you haven't started is not rubbish), so does one a
+-- route still plans. Quests of the other side or another class don't count. Anything that is not a quest item by the
+-- game's own filing (cloth, meat, a potion some quest also asks for) is never listed.
+-- bags: [itemID] = count (default: your bags) -> { { id, name, count, why, quests = { id... } } }, by name
+function LogCheck.Leftovers(bags)
+  local items = ns.QUEST_ITEMS
+  if not items then return {} end
+  bags = bags or (ns.State.BagItems and ns.State.BagItems())
+  if type(bags) ~= "table" then return {} end
+  local State, Engine = ns.State, ns.Engine
+  local nope, had = (ns.char and ns.char.nope) or {}, (ns.char and ns.char.hadQuest) or {}
+  local f = UnitFactionGroup and call(UnitFactionGroup, "player")
+  local side = f == "Horde" and "H" or f == "Alliance" and "A" or nil
+  local class = UnitClass and select(2, UnitClass("player"))
+  local function mine(q)
+    local who = ns.QUEST_FOR and ns.QUEST_FOR[q]
+    if not who then return true end
+    local s, cl = who:match("^(%a?):?(.*)$")
+    if s ~= "" and side and s ~= side then return false end
+    if cl ~= "" and class and not ("," .. cl .. ","):find("," .. class .. ",", 1, true) then return false end
+    return true
+  end
+  -- the quests a route still plans: a step of your route that is still to do, and whatever your other routes hold
+  local wanted
+  local function planned(q)
+    if not wanted then
+      wanted = {}
+      local here = ForeverRouteData
+      for i, s in ipairs((here and here.steps) or {}) do
+        if s.q and s.q > 0 and not wanted[s.q] and (Engine.Status(i) ~= "done" or (ns.Avail and ns.Avail.Unavailable(s.q))) then wanted[s.q] = true end
+      end
+      local path = here and (here.branch or here.dungeon) and ns.ResolvePath and ns.ResolvePath(here.dungeon and ns.char.returnTo or here.parent) or nil
+      for _, s in ipairs((path and path ~= here and path.steps) or {}) do if s.q and s.q > 0 then wanted[s.q] = true end end
+      for _, r in ipairs((ns.DungeonRoutes and ns.DungeonRoutes()) or {}) do for q2 in pairs((ns.QuestIds and ns.QuestIds(r)) or {}) do wanted[q2] = true end end
+    end
+    return wanted[q]
+  end
+  local out = {}
+  for id, count in pairs(bags) do
+    local e = items[id]
+    if e and type(count) == "number" and count > 0 then
+      local free, reasons, quests = true, {}, {}
+      for k = 2, #e do
+        local q = e[k]
+        if mine(q) then
+          local why
+          if State.OnQuest(q) then why = nil
+          elseif State.IsCompleted(q) then why = "handed in"
+          elseif nope[q] then why = "not doing"
+          elseif had[q] and not planned(q) then why = "abandoned" end
+          if not why then free = false; break end
+          quests[#quests + 1] = q
+          if #reasons < 2 then reasons[#reasons + 1] = Engine.QuestName(q) .. " (" .. why .. ")" end
+        end
+      end
+      -- the game's own word on it, when it has one: only a quest item
+      local classID = ns.GetItemInfo and select(12, ns.GetItemInfo(id))
+      if type(classID) == "number" and classID ~= 12 then free = false end
+      if free and #quests > 0 then
+        local name = (ns.GetItemInfo and ns.GetItemInfo(id)) or e[1]
+        out[#out + 1] = { id = id, name = type(name) == "string" and name or e[1], count = count, quests = quests,
+          why = "From " .. table.concat(reasons, ", ") .. (#quests > 2 and (" and " .. (#quests - 2) .. " more") or "") }
+      end
+    end
+  end
+  table.sort(out, function(a, b) return a.name < b.name end)
+  return out
+end
+-- said once in chat for each item, when it turns up (you dropped a quest, or handed one in with spares in your bags)
+function LogCheck.TellLeftovers()
+  local ok, list = pcall(LogCheck.Leftovers)
+  if not ok or not ns.char then return end
+  ns.char.leftTold = ns.char.leftTold or {}
+  local now, new = {}, {}
+  for _, x in ipairs(list) do now[x.id] = true; if not ns.char.leftTold[x.id] then ns.char.leftTold[x.id] = true; new[#new + 1] = x.name .. (x.count > 1 and (" x" .. x.count) or "") end end
+  for id in pairs(ns.char.leftTold) do if not now[id] then ns.char.leftTold[id] = nil end end -- gone from your bags: said again if it comes back
+  if #new == 0 then return end
+  local names = table.concat(new, ", ", 1, math.min(#new, 4)) .. (#new > 4 and (" and " .. (#new - 4) .. " more") or "")
+  ns.Print("Still in your bags: " .. names .. ". Nothing on your route or in your log needs " .. (#new == 1 and "it" or "them") .. " any more - safe to delete (the quest log check lists them: /fr logcheck).")
+end
+ns.On("FR_NOPE", function() C_Timer.After(1, LogCheck.TellLeftovers) end)
+ns.On("QUEST_TURNED_IN", function() C_Timer.After(1.5, LogCheck.TellLeftovers) end)
 
 -- only quests this check marks to drop get an Abandon button, so an abandon here also drops the quest from the route
 -- (otherwise the card would send you straight back to its quest giver until the next replan)
@@ -255,7 +347,30 @@ function LogCheck.Draw()
     r:ClearAllPoints(); r:SetPoint("TOPLEFT", f.content, "TOPLEFT", PAD, -y); r:Show()
     y = y + h + 2
   end
-  for k, r in ipairs(rows) do if k > #list + #extra then r:Hide() end end
+  -- quest items in your bags that nothing needs any more: what is safe to delete (yours to do - nothing is deleted here)
+  local okL, left = pcall(LogCheck.Leftovers)
+  if not okL then left = {} end
+  f.leftHdr = f.leftHdr or Style.Text(f.content, 12, C.gold, "OUTLINE")
+  f.leftSub = f.leftSub or Style.Text(f.content, 10, C.sub)
+  f.leftHdr:SetShown(#left > 0); f.leftSub:SetShown(#left > 0)
+  if #left > 0 then
+    f.leftHdr:ClearAllPoints(); f.leftHdr:SetPoint("TOPLEFT", f.content, "TOPLEFT", PAD, -y - 6); f.leftHdr:SetText("Safe to delete from your bags (" .. #left .. ")")
+    f.leftSub:ClearAllPoints(); f.leftSub:SetPoint("TOPLEFT", f.leftHdr, "BOTTOMLEFT", 0, -3); f.leftSub:SetWidth(W - 2 * PAD - 14); f.leftSub:SetJustifyH("LEFT"); f.leftSub:SetWordWrap(true)
+    f.leftSub:SetText("Quest items nothing on your route or in your log needs any more. Deleting is yours to do: drag one out of your bags.")
+    y = y + 26 + math.max(f.leftSub:GetStringHeight(), 12) + 4
+  end
+  for i, x in ipairs(left) do
+    local r = row(#list + #extra + i)
+    r.data, r.reason = nil, nil
+    r.edge:SetVertexColor(0.55, 0.58, 0.66, 0.9)
+    r.title:SetText(x.name .. (x.count > 1 and ("  |cff8e99adx" .. x.count .. "|r") or ""))
+    r.why:SetText("|cff8c94a8" .. x.why .. "|r")
+    r.btn:Hide(); r.keep:Hide(); r.back:Hide()
+    local h = math.max(ROW, r.title:GetStringHeight() + r.why:GetStringHeight() + 9); r:SetHeight(h)
+    r:ClearAllPoints(); r:SetPoint("TOPLEFT", f.content, "TOPLEFT", PAD, -y); r:Show()
+    y = y + h + 2
+  end
+  for k, r in ipairs(rows) do if k > #list + #extra + #left then r:Hide() end end
   -- the window: the header, then the list up to MAXH (scrolling beyond)
   local MAXH = math.min(560, (UIParent:GetHeight() or 800) / f:GetScale() - top - 140)
   local view = math.min(y, MAXH)

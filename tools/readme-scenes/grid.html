@@ -2,15 +2,17 @@
 <html><head><meta charset="utf-8"><style>html,body{margin:0;background:#0b1020}canvas{display:block}</style></head>
 <body><canvas id="c"></canvas>
 <script>
-// Every built-in plan: the race x class board fills in three at a time (as the batch builds them), each tile climbing
-// to 60 and showing its hours, its audit and its ten simulated players. Data: tools/readme-hero.js grid.
+// Every built-in plan, Alliance and Horde: the race x class board fills in a few at a time (as the batch builds
+// them), each tile climbing to 60 and showing its hours and whether its audit and its simulated players came out
+// clean. Data: tools/readme-hero.js grid.
 const C = document.getElementById('c'), g = C.getContext('2d');
 const FONT = '"Segoe UI", system-ui, sans-serif';
 const GOLD = '#ffd15c', INK = '#eef0f6', SUB = '#9ea8bd', DIM = '#5d6578', GOOD = '#5cdb7a';
 const CLASS_COLOR = { warrior: '#c79c6e', paladin: '#f58cba', hunter: '#abd473', rogue: '#fff569', priest: '#ffffff', shaman: '#0070de', mage: '#69ccf0', warlock: '#9482c9', druid: '#ff7d0a' };
-const RACE = { human: 'Human', dwarf: 'Dwarf', nightelf: 'Night Elf', gnome: 'Gnome', skyborne: 'Skyborne' };
+const RACE = { human: 'Human', dwarf: 'Dwarf', nightelf: 'Night Elf', gnome: 'Gnome', skyborne: 'Skyborne', orc: 'Orc', undead: 'Undead', tauren: 'Tauren', troll: 'Troll' };
+const FACTION = { Alliance: '#5b9bff', Horde: '#e0524a' };
 let D, order, F;
-const X0 = 128, Y0 = 118, TW = 92, TH = 74, BUILD = 16, SLOTS = 3;
+const X0 = 140, Y0 = 118, TW = 91, TH = 66, BUILD = 16, SLOTS = 5;
 
 window.init = (data) => {
   D = data; C.width = D.W; C.height = D.H;
@@ -25,13 +27,22 @@ window.init = (data) => {
 window.draw = (f) => {
   g.fillStyle = '#0b1020'; g.fillRect(0, 0, D.W, D.H);
   g.fillStyle = '#2a2350'; rr(40, 26, 112, 24, 12); g.fill(); g.fillStyle = '#c9b8ff'; g.font = '700 12px ' + FONT; g.fillText('FOREVERROUTE', 53, 42.5);
-  g.fillStyle = INK; g.font = '600 22px ' + FONT; g.fillText('Every Alliance race and class, planned to 60', 168, 45);
-  g.fillStyle = SUB; g.font = '14px ' + FONT; g.fillText('Each plan is built from the quest data, then played through by ten simulated players', 168, 68);
+  g.fillStyle = INK; g.font = '600 22px ' + FONT; g.fillText('Every race and class, Alliance and Horde, planned to 60', 168, 45);
+  g.fillStyle = SUB; g.font = '14px ' + FONT; g.fillText('Each plan is built from the quest data, audited, then played through by a simulated player', 168, 68);
   // column and row labels
   g.textAlign = 'center';
   D.classes.forEach((c, j) => { g.fillStyle = CLASS_COLOR[c]; g.font = '600 13px ' + FONT; g.fillText(c[0].toUpperCase() + c.slice(1), X0 + j * TW + TW / 2 - 4, Y0 - 10); });
   g.textAlign = 'right';
   D.races.forEach((r, i) => { g.fillStyle = INK; g.font = '600 15px ' + FONT; g.fillText(RACE[r] || r, X0 - 16, Y0 + i * TH + TH / 2 + 2); });
+  // the two factions: a coloured bar and the name down the side of their rows
+  let row0 = 0;
+  for (const fa of D.factions || []) {
+    const y0 = Y0 + row0 * TH, hh = fa.races.length * TH - 8;
+    g.fillStyle = FACTION[fa.name] || SUB; g.globalAlpha = 0.85; rr(40, y0, 4, hh, 2); g.fill(); g.globalAlpha = 1;
+    g.save(); g.translate(34, y0 + hh / 2); g.rotate(-Math.PI / 2); g.textAlign = 'center'; g.font = '700 11px ' + FONT; g.fillStyle = FACTION[fa.name] || SUB;
+    g.fillText(fa.name.toUpperCase(), 0, 0); g.restore();
+    row0 += fa.races.length;
+  }
   g.textAlign = 'left';
   let done = 0, hrs = 0, plays = 0, broke = 0, audit = 0;
   D.races.forEach((r, i) => D.classes.forEach((c, j) => {
@@ -41,22 +52,22 @@ window.draw = (f) => {
     g.fillStyle = t < 0 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)'; rr(x, y, w, h, 8); g.fill();
     if (t < 0) return;
     const cc = CLASS_COLOR[c];
-    g.fillStyle = cc; g.globalAlpha = 0.9; g.fillRect(x, y + 10, 3, h - 20); g.globalAlpha = 1;
+    g.fillStyle = cc; g.globalAlpha = 0.9; g.fillRect(x, y + 9, 3, h - 18); g.globalAlpha = 1;
     if (t < BUILD - 4) {
       // building: the level climbs
       const lv = Math.min(60, Math.max(1, Math.round(60 * (t / (BUILD - 6)))));
-      g.fillStyle = SUB; g.font = '11px ' + FONT; g.fillText('planning', x + 12, y + 22);
-      g.fillStyle = GOLD; g.font = '700 22px ' + FONT; g.fillText(String(lv), x + 12, y + 48);
-      g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(x + 12, y + 56, w - 24, 4); g.fillStyle = GOLD; g.fillRect(x + 12, y + 56, (w - 24) * lv / 60, 4);
+      g.fillStyle = SUB; g.font = '11px ' + FONT; g.fillText('planning', x + 12, y + 18);
+      g.fillStyle = GOLD; g.font = '700 21px ' + FONT; g.fillText(String(lv), x + 12, y + 41);
+      g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(x + 12, y + 48, w - 24, 4); g.fillStyle = GOLD; g.fillRect(x + 12, y + 48, (w - 24) * lv / 60, 4);
       return;
     }
     done++; hrs += p.hours; plays += p.personas; broke += p.broke; audit += p.audit;
     const glow = Math.max(0, 1 - (t - (BUILD - 4)) / 6);
     if (glow > 0) { g.strokeStyle = `rgba(92,219,122,${glow})`; g.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, 8); g.stroke(); }
-    g.fillStyle = INK; g.font = '700 19px ' + FONT; g.fillText(p.hours.toFixed(0) + ' h', x + 12, y + 30);
-    g.fillStyle = SUB; g.font = '11px ' + FONT; g.fillText('to level ' + p.level, x + 12, y + 45);
+    g.fillStyle = INK; g.font = '700 19px ' + FONT; g.fillText(p.hours.toFixed(0) + ' h', x + 12, y + 25);
+    g.fillStyle = SUB; g.font = '11px ' + FONT; g.fillText('to level ' + p.level, x + 12, y + 38);
     const ok = p.audit === 0 && p.broke === 0;
-    g.fillStyle = ok ? GOOD : '#ff8c5a'; g.font = '600 11px ' + FONT; g.fillText((ok ? '✓ ' : '! ') + p.personas + '/10 clean', x + 12, y + 60);
+    g.fillStyle = ok ? GOOD : '#ff8c5a'; g.font = '600 11px ' + FONT; g.fillText(ok ? '✓ clean' : '! ' + (p.audit + p.broke) + ' to fix', x + 12, y + 52);
   }));
   // the running totals
   const y = D.H - 44;

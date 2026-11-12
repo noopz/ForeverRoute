@@ -35,6 +35,7 @@ function Engine.ObjectiveFor(step, noElim)
   State = State or ns.State
   local q = State.Quest(step.q)
   if not q or not q.on then return nil end
+  if step.unknown then return nil end -- (the quest's own words, no objective's: the card shows all of the quest's lines)
   if step.match then
     -- the exact name first ("Murloc slain" for "Murloc"), then any objective containing it: "Murloc" alone matched
     -- "Murloc Streamrunner slain" and the card waited on the wrong objective
@@ -154,6 +155,52 @@ function Engine.BoundAt(s, b)
   if (s.bind and b == s.bind) or Engine.SamePlace(b, s.zone) then return true end
   local at = ns.char and ns.char.boundAt
   return at and at.name == b and at.m == s.m or false
+end
+-- Is your hearthstone set on map m, going by the name the game gives your bind (b)? The game names the place - the
+-- town or inn ("Darkshire", "Menethil Harbor"), a capital by its own name ("Stormwind City") - never the map, so:
+-- where you set it while the addon watched (ns.char.boundAt: that name on that map, and then no other map), else the
+-- names this map's inn goes by: the step's own, the zone's, a bind stop of the plan there, the flight point's town
+-- ("Darkshire, Duskwood"). No match is "not there": a hearth that isn't yours is never offered.
+function Engine.BoundOn(m, b, s)
+  if not (m and type(b) == "string" and b ~= "") then return false end
+  local at = ns.char and ns.char.boundAt
+  if at and at.m and at.name == b then return at.m == m end
+  if s and (s.dest == b or s.text == b) then return true end
+  local info = C_Map and C_Map.GetMapInfo and C_Map.GetMapInfo(m)
+  if info and info.name and Engine.SamePlace(b, info.name) then return true end
+  for _, t in ipairs(steps()) do if t.k == "bind" and t.m == m and Engine.BoundAt(t, b) then return true end end
+  for _, byMap in pairs(ns.FLIGHT_BY or {}) do
+    for _, f in ipairs(byMap[m] or {}) do if f[4] and f[4]:match("^(.-),") == b then return true end end
+  end
+  return false
+end
+-- Can you take this hearth step? Only when the game says so: your hearthstone is set where the step goes (the plan
+-- only assumed you set it at its bind stop - a level 31 was told "Hearth to Darkshire" while bound in Stormwind) and it
+-- is off cooldown. Otherwise the step is passed and the way to the stops after it is planned like any other trip
+-- (Engine.TravelFor). -> true, or false and why
+function Engine.HearthUsable(i)
+  local list = steps()
+  local s = list[i]
+  if not s then return false, "no such step" end
+  local okB, b = pcall(GetBindLocation)
+  if not okB or type(b) ~= "string" or b == "" then return false, "the game does not say where your hearthstone is set" end
+  -- where the step goes: the plan says (bindMap), else the bind stop before it (plans from before that field)
+  local m = s.bindMap
+  if not m then for j = i - 1, 1, -1 do if list[j].k == "bind" then m = list[j].m; break end end end
+  local there
+  if m then there = Engine.BoundOn(m, b, s) else there = s.dest == b or Engine.SamePlace(b, s.dest or s.text) end
+  if not there then return false, "your hearthstone is set in " .. b .. ", not there" end
+  local cd = ns.HearthCooldown and ns.HearthCooldown()
+  if type(cd) == "number" and cd > 0 then return false, "your hearthstone is on cooldown (" .. math.ceil(cd / 60) .. " min)" end
+  return true
+end
+-- (said once per step and reason, and only for a step the card is about to reach: the list asks about every step)
+local hearthSaid = setmetatable({}, { __mode = "k" })
+local function hearthPassed(i, s, why)
+  local c = Engine.current
+  if hearthSaid[s] == why or not (c and i >= c and i <= c + 3) then return end
+  hearthSaid[s] = why
+  if ns.Why then ns.Why("hearth", "passed \"Hearth to " .. tostring(s.dest or s.text or "your inn") .. "\": " .. why .. "; the way there is planned like any other trip") end
 end
 -- the level a training stop is for: "level 8/10 spells" -> 10
 function Engine.TrainLevel(s)
@@ -312,7 +359,7 @@ function Engine.StretchWorth(from, to)
     if q and not State.IsCompleted(q) and not Engine.Outlevelled(s) then
       if doable(q) then
         if not (s.k == "accept" and State.OnQuest(q)) then
-          spot = spot or (s.m and s.x and s) or nil
+          spot = spot or (s.m and s.x and not s.unknown and s) or nil
           secs = secs + (tonumber(s.walk) or 80) / speed + (s.k == "obj" and 120 or 10)
           if s.k == "turnin" and tonumber(s.level) and s.level > 0 then xp = xp + questXP(s.level, L); n = n + 1 end
         end
@@ -398,6 +445,7 @@ end
 function Engine.BehindYou(s)
   State = State or ns.State
   if Engine.noPlace or not (s and ns.planKey and ns.planKey.starter) then return false end
+  if s.side then return false end -- (a stop added for a quest giver next to you is where you are, wherever it lands in the plan)
   local c, list = planIndex()
   local i = c.idx[s]
   if not i then return false end
@@ -472,6 +520,7 @@ local function statusRaw(i)
   local id = key(i)
   if ns.char.manualDone[id] or ns.char.skipped[id] then return "done" end
   if s.q and ns.char.nope and ns.char.nope[s.q] then return "done" end -- you said you're not doing this quest
+  if s.side and s.away and s.k == "accept" then return "done" end -- a side quest offered at its giver, and you walked on (Engine.SideOffer)
   -- the game did not offer it to you (Availability.lua): off the route until you level up or it is offered
   if s.q and ns.Avail and ns.Avail.Unavailable(s.q) and not State.OnQuest(s.q) and not State.IsCompleted(s.q) then return "done" end
   -- far below you and not in your log: off the route (all its steps), the same cut the planner makes - so a plan made
@@ -479,6 +528,10 @@ local function statusRaw(i)
   -- and a trip to a zone with nothing left for you is passed too (the "went ahead" rule below)
   if Engine.Outlevelled(s) or Engine.GrayHandIn(s) or Engine.Breadcrumbed(s) or Engine.BehindYou(s) then return "done" end
   local k = s.k
+  if k == "hearth" then
+    local can, why = Engine.HearthUsable(i)
+    if not can then hearthPassed(i, s, why); return "done" end
+  end
   if k == "accept" then
     if State.OnQuest(s.q) or State.IsCompleted(s.q) then return "done" end
     if s.minLevel and UnitLevel("player") < s.minLevel then return "wait" end
@@ -489,14 +542,18 @@ local function statusRaw(i)
     if not State.OnQuest(s.q) then return "blocked" end
     if not State.QuestReady(s.q) then
       -- all that's unfinished is inside a dungeon you've run or skipped: it waits, the card moves on
-      local list, inside, outside = steps(), false, false
+      -- and so does one whose work the quest data has no place for (an unknown step) once you skipped that step: it
+      -- comes back when the quest is ready
+      local list, inside, outside, unknown = steps(), false, false, false
       for _, j in ipairs(Engine.ObjStepsOf(s.q)) do
         local t = list[j]
-        if j ~= i and Engine.Status(j) ~= "done" then
+        if t.unknown then
+          if ns.char.skipped[key(j)] or ns.char.manualDone[key(j)] then unknown = true elseif j ~= i and Engine.Status(j) ~= "done" then outside = true end
+        elseif j ~= i and Engine.Status(j) ~= "done" then
           if Engine.DungeonLater(Engine.InsideOf(t), j) then inside = true else outside = true end
         end
       end
-      if inside and not outside then return "later" end
+      if (inside or unknown) and not outside then return "later" end
       return "notready"
     end
     return "todo"
@@ -504,6 +561,9 @@ local function statusRaw(i)
     if State.IsCompleted(s.q) then return "done" end
     if not State.OnQuest(s.q) then return "blocked" end
     if State.QuestReady(s.q) then return "done" end
+    -- work the quest data has no place for (s.unknown): done only when the quest is ready - no live objective is
+    -- matched to it (its words are the quest text's, not an objective's). Skip passes it: the hand-in then waits
+    if s.unknown then return "todo" end
     local o = Engine.ObjectiveFor(s)
     if o and o.finished then return "done" end
     if Engine.DungeonLater(Engine.InsideOf(s), i) then return "later" end
@@ -774,10 +834,10 @@ end
 function Engine.Group(i)
   local list, out = steps(), {}
   local s = list[i]
-  if not s or s.k ~= "obj" then return out end
+  if not s or s.k ~= "obj" or s.unknown then return out end -- (work with no known place is not "here")
   for j = i + 1, math.min(#list, i + 8) do
     local t = list[j]
-    if t.k ~= "obj" or t.m ~= s.m or math.abs((t.x or 0) - (s.x or 0)) > 0.02 or math.abs((t.y or 0) - (s.y or 0)) > 0.02 then break end
+    if t.k ~= "obj" or t.unknown or t.m ~= s.m or math.abs((t.x or 0) - (s.x or 0)) > 0.02 or math.abs((t.y or 0) - (s.y or 0)) > 0.02 then break end
     if not Engine.IsDone(j) then out[#out + 1] = j end
   end
   return out
@@ -951,7 +1011,7 @@ local function firstStop(s)
   for j = i + 1, #list do
     local t = list[j]
     if t.k == "fly" or t.k == "hearth" then return nil end
-    if t.m and t.x and t.m == s.to then return t end
+    if t.m and t.x and not t.unknown and t.m == s.to then return t end
   end
 end
 function Engine.TravelPlan(s)
@@ -1028,7 +1088,7 @@ function Engine.TravelFor(s)
   return v
 end
 function Engine.TravelForUncached(s)
-  if not s or s.k == "hearth" then return nil end
+  if not s or s.k == "hearth" or s.unknown then return nil end -- (no known place: no trip to plan)
   -- on a flight the taxi is taking you: nothing to plan from the sky. (Crossing a zone mid-air would otherwise
   -- plan a fresh trip from wherever you are above the ground - "Ride to Wetlands", an arrow at some town below.)
   -- The way on is planned again when you land.
@@ -1135,6 +1195,23 @@ ns.On("HEARTHSTONE_BOUND", function()
   C_Timer.After(0.5, function() ns.char.boundAt.name = GetBindLocation and GetBindLocation() or ns.char.boundAt.name; Engine.Refresh() end)
   Engine.Refresh()
 end)
+-- standing in the place your hearthstone is set (the game's name for it is the name of where you are): that is the
+-- map it is on, whenever you set it - before the addon, or while it was off
+local function learnBind()
+  local okB, b = pcall(GetBindLocation)
+  if not okB or type(b) ~= "string" or b == "" or not ns.char then return end
+  local at = ns.char.boundAt
+  if at and at.name == b and at.m then return end
+  local okS, sub = pcall(GetSubZoneText); local okZ, zone = pcall(GetRealZoneText)
+  if not ((okS and sub == b) or (okZ and zone == b)) then return end
+  local m = ns.State.Position()
+  if not m then return end
+  ns.char.boundAt = { m = m, name = b }
+  if ns.Why then ns.Why("hearth", "your hearthstone is set here (" .. b .. "): noted") end
+end
+Engine.LearnBind = learnBind
+for _, ev in ipairs({ "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "ZONE_CHANGED_NEW_AREA" }) do ns.On(ev, function() pcall(learnBind) end) end
+ns.On("PLAYER_ENTERING_WORLD", function() C_Timer.After(2, function() pcall(learnBind) end) end)
 -- opening a flight map ticks a "get the flight path" step only at that flight master (same map) - not when you
 -- open the map somewhere else to fly toward it (the zone check in the step status covers learning it normally)
 ns.On("FR_TAXI_OPENED", function()
@@ -1191,7 +1268,7 @@ end)
 local HBD = LibStub("HereBeDragons-2.0")
 local worldOf = setmetatable({}, { __mode = "k" })
 local function wpos(s)
-  if not (s and s.m and s.x) then return nil end
+  if not (s and s.m and s.x) or s.unknown then return nil end -- (an unknown step's spot is only its place in the order)
   local w = worldOf[s]
   if w == nil then local x, y, inst = HBD:GetWorldCoordinatesFromZone(s.x, s.y, s.m); w = x and { x, y, inst } or false; worldOf[s] = w end
   return w or nil
@@ -1273,6 +1350,8 @@ function Engine.NotYet(i)
   if st == "later" then
     local name = Engine.InsideOf(s)
     if not name then for _, j in ipairs(Engine.ObjStepsOf(s.q)) do name = name or Engine.InsideOf(list[j]) end end
+    -- (no dungeon: a hand-in waiting on work the quest data has no place for, whose step you skipped)
+    if not name then for _, j in ipairs(Engine.ObjStepsOf(s.q)) do if list[j].unknown then return "objectives", j end end end
     return "dungeon", nil, name
   end
   if st == "notready" then
@@ -1316,6 +1395,7 @@ function Engine.WatchShortcut()
 end
 function Engine.UpdateFocus(px, py, pinst)
   Engine.WatchShortcut()
+  Engine.SideOffer(px, py, pinst)
   if Engine.view or not px then return end
   local planned = Engine.planned or Engine.current
   if not planned then return end
@@ -1461,6 +1541,8 @@ function Engine.OnFoot(am, ax, ay, bm, bx, by)
   return v
 end
 
+-- opts.at: at this step, no search (a quest giver you stand next to: now). opts.dry: nothing is added; -> where, cost
+-- opts.maxIndex: only before this step (a side quest's objective: while the quest still gives XP)
 function Engine.InsertStop(new, px, py, pinst, opts)
   opts = opts or {}
   local list = steps()
@@ -1469,7 +1551,7 @@ function Engine.InsertStop(new, px, py, pinst, opts)
   local from = math.max(cur, opts.minIndex or cur)
   local X = wpos(new); if not X then return nil end
   -- gaps: (you -> current step) when you're on the same map, then each pair of neighbouring stops after it
-  local best, bestCost
+  local best, bestCost = opts.at, nil
   local prev = nil -- the near end of the gap: { w = world position, m, x, y = its zone position }
   if px and pinst == X[3] and from == cur then local pm, zx, zy = ns.State.Position(); prev = { w = { px, py, pinst }, m = pm, x = zx, y = zy } end
   -- chained stops start after a given step: the gap right after it counts too
@@ -1496,7 +1578,7 @@ function Engine.InsertStop(new, px, py, pinst, opts)
     local riding = not trip or (trip.how == "ride" and not (trip.legs and #trip.legs > 1))
     if riding and plan and (plan.ride or not plan.via or plan.via == m) then ride = prev end
   end
-  for i = from, #list do
+  for i = from, opts.at and from - 1 or math.min(#list, opts.maxIndex or #list) do
     local s = list[i]
     if s.k == "fly" or s.k == "hearth" then prev = nil -- a flight in between: the gap doesn't count
     else
@@ -1520,10 +1602,11 @@ function Engine.InsertStop(new, px, py, pinst, opts)
     end
   end
   -- after the last stop on that map, as the next one (if there was a stretch there at all)
-  if not best and prev then best = #list + 1 end
+  if not best and prev and not opts.maxIndex then best = #list + 1 end
   if not best then return nil end
   Engine.lastInsertCost = bestCost
   if opts.maxCost and (bestCost or math.huge) > opts.maxCost then return nil end
+  if opts.dry then return best, bestCost end
   -- the current step stays current: a stop that goes "before the current step" becomes the step right after it,
   -- unless it\x27s cheapest to do first, in which case it\x27s inserted at the current position (shown next)
   -- the stop belongs to the stretch it lands in: the hub of the step it goes before (or the one before it, at the end).
@@ -1570,7 +1653,7 @@ function Engine.MergeSideTrips()
     if r.special and r.id ~= d.id and (UnitLevel("player") or 1) >= (tonumber(r.needsLevel) or 1) then
       local minI = Engine.current or 1
       for _, s in ipairs(ns.Steps(r)) do
-        local skip = s.k == "fly" or s.k == "hearth" or not (s.q and s.q > 0 and s.m and s.x)
+        local skip = s.k == "fly" or s.k == "hearth" or s.unknown or not (s.q and s.q > 0 and s.m and s.x)
           or State.IsCompleted(s.q) or (s.k == "accept" and State.OnQuest(s.q)) or onRoute[s.k .. ":" .. s.q]
         -- a chain step the route already has: the rest of the chain goes after it
         local there = s.q and onRoute[s.k .. ":" .. s.q]
@@ -1659,6 +1742,225 @@ ns.On("FR_LOADED", function() C_Timer.After(3, function() if applyInserts() then
 ns.On("FR_ROUTE_CHANGED", function() C_Timer.After(0.5, function() if applyInserts() then Engine.Refresh() end end) end)
 
 ----------------------------------------------------------------------------------------------------------------
+-- A quest giver right next to you with a quest your plan could not hold (ns.SIDE_QUESTS, QuestData.lua: the giver in
+-- a capital, or an objective in another zone than the giver - the planner takes a leg's quests from the givers in the
+-- leg's zones and drops one with an objective outside them). A Noble Brew: Zardeth stands by the warlock trainers in
+-- Stormwind, a Tear of Tilloa lies by Darkshire and a Musquash Root in the Wetlands, both on a level 31's route - and
+-- the card said nothing ("why doesn't this end up in my list since I'm right here?").
+-- The rule, kept small: you stand within SIDE_NEAR_YD of the giver; the quest is yours to take (side, class, level,
+-- what comes before it) and near your level; it is not on your route, not "not doing", not turned down by the giver;
+-- every objective lies within SIDE_OBJ_YD of a stop still ahead (while the quest is not gray there) and so does the
+-- hand-in, or it is where you are. One offer at a time: a pick-up as the next step, with the reason on the card and in
+-- the why log. Walk on (SIDE_HOLD_YD) and it is passed; come back and it is there again. Once it is in your log its
+-- objectives become stops where they cost least; the hand-in is added when it is finished (applyInserts).
+----------------------------------------------------------------------------------------------------------------
+Engine.SIDE_NEAR_YD = 60   -- the giver is this close: "right here"
+Engine.SIDE_HOLD_YD = 150  -- the offer stands while you are within this of the giver
+Engine.SIDE_OBJ_YD = 800   -- an objective (or the hand-in) is on your route within this of a stop ahead (the Musquash Root
+                           -- lies 740 yd from the Wetlands' nearest quest spots: about four minutes there and back on foot)
+Engine.SIDE_BELOW = 3      -- the quest at most this many levels below you (full XP, or close to)
+Engine.SIDE_ABOVE = 3      -- ... or above you
+Engine.SIDE_LATE = 4       -- a stop ahead counts while the plan has you at most this many levels above the quest
+Engine.SIDE_XP = 25        -- XP per quest level it must give: a 230 XP errand at 28 is not worth a line on the card
+local function sideMine(d)
+  local f = UnitFactionGroup and UnitFactionGroup("player")
+  if d.f and f and d.f ~= (f == "Horde" and "H" or "A") then return false end
+  if d.cl then local _, c = UnitClass("player"); if not (c and ("," .. d.cl .. ","):find("," .. c .. ",", 1, true)) then return false end end
+  if d.rc then local _, r = UnitRace("player"); if not (r and ("," .. d.rc .. ","):find("," .. r .. ",", 1, true)) then return false end end
+  return true
+end
+local sideIndex -- [map] = { quest ids whose giver stands there }
+local function sideOn(m)
+  if not sideIndex or sideIndex.src ~= ns.SIDE_QUESTS then
+    sideIndex = { src = ns.SIDE_QUESTS }
+    for q, d in pairs(ns.SIDE_QUESTS or {}) do local gm = d.g[2]; sideIndex[gm] = sideIndex[gm] or {}; table.insert(sideIndex[gm], q) end
+  end
+  return sideIndex[m] or {}
+end
+local function yardsOf(m, x, y, px, py, pinst)
+  local a, b, inst = HBD:GetWorldCoordinatesFromZone(x, y, m)
+  if not a or inst ~= pinst then return nil end
+  return math.sqrt((a - px) ^ 2 + (b - py) ^ 2), a, b
+end
+local function mapNameOf(m) local i = C_Map and C_Map.GetMapInfo and C_Map.GetMapInfo(m); return (i and i.name) or ("map " .. tostring(m)) end
+-- Does this quest fit your route? -> true, the zones its objectives are in; or false and why not
+function Engine.SideFits(q)
+  local d = ns.SIDE_QUESTS and ns.SIDE_QUESTS[q]
+  if not d then return false, "not a side quest" end
+  State = State or ns.State
+  local lvl = UnitLevel("player") or 1
+  if not sideMine(d) then return false, "not for you" end
+  if lvl < d.r then return false, "needs level " .. d.r end
+  if d.l < lvl - Engine.SIDE_BELOW or d.l > lvl + Engine.SIDE_ABOVE then return false, "not near your level" end
+  if d.xp < Engine.SIDE_XP * d.l then return false, "little XP" end
+  if State.IsCompleted(q) or State.OnQuest(q) then return false, "yours already" end
+  if ns.char.nope and ns.char.nope[q] then return false, "you are not doing it" end
+  if ns.Avail and ns.Avail.Unavailable(q) then return false, "the giver has nothing for you" end
+  if ns.char.skipped["accept:" .. q .. ":" .. d.n .. "#1"] then return false, "you skipped it" end
+  for _, p in ipairs(d.pre or {}) do if not State.IsCompleted(p) then return false, "something comes before it" end end
+  if d.any then
+    local one = false
+    for _, p in ipairs(d.any) do one = one or State.IsCompleted(p) end
+    if not one then return false, "something comes before it" end
+  end
+  for _, x in ipairs(d.ex or {}) do if State.IsCompleted(x) or State.OnQuest(x) then return false, "not with a quest you have or did" end end
+  if State.LogFull and State.LogFull() then return false, "your quest log is full" end
+  -- the stops still ahead of you, by zone - while the quest is not gray there
+  -- (from the plan's own next step: the card may be on a later one you happen to stand at)
+  local list, ahead, from = steps(), {}, Engine.planned or Engine.current or 1
+  for j = 1, from - 1 do if list[j].q == q then return false, "on your route" end end
+  for j = from, #list do
+    local s = list[j]
+    if s.q == q then return false, "on your route" end
+    local L = s.lvl or Engine.PlanLevel(j)
+    if s.m and s.x and not s.side and not s.unknown and (not L or L <= d.l + Engine.SIDE_LATE) and Engine.Status(j) ~= "done" then
+      local a, b, inst = HBD:GetWorldCoordinatesFromZone(s.x, s.y, s.m)
+      if a then ahead[s.m] = ahead[s.m] or {}; table.insert(ahead[s.m], { a, b, inst }) end
+    end
+  end
+  local function near(m, x, y)
+    for _, w in ipairs(ahead[m] or {}) do
+      local dd = yardsOf(m, x, y, w[1], w[2], w[3])
+      if dd and dd <= Engine.SIDE_OBJ_YD then return true end
+    end
+    return false
+  end
+  local zones, seen = {}, {}
+  for _, o in ipairs(d.o or {}) do
+    local at
+    for k = 3, #o do local p = o[k]; if near(p[1], p[2], p[3]) then at = p[1]; break end end
+    if not at then return false, o[2] .. " is nowhere near your route" end
+    if not seen[at] then seen[at] = true; zones[#zones + 1] = mapNameOf(at) end
+  end
+  -- the hand-in: where you are (nothing to fetch), or near a stop ahead
+  local here = State.Position()
+  if not ((not d.o and d.e[2] == here) or near(d.e[2], d.e[3], d.e[4])) then return false, "its hand-in (" .. d.e[1] .. ") is nowhere near your route" end
+  return true, zones
+end
+local sideSteps, sideAt, sideX, sideY = {}, -100, nil, nil -- the pick-ups offered on this step list; when and where you last looked around
+local sideNo = {} -- [quest] = when it last did not fit (asked again after SIDE_AGAIN s: the answer walks the whole route)
+Engine.SIDE_AGAIN = 30
+ns.On("FR_ROUTE_CHANGED", function() wipe(sideSteps); wipe(sideNo); sideAt = -100 end)
+-- called with the focus, about once a second with your position (force: look now)
+function Engine.SideOffer(px, py, pinst, force)
+  local d = ForeverRouteData
+  if not (ns.SIDE_QUESTS and px and Engine.current and d and d.steps) or d.dungeon or d.special or d.branch or Engine.view then return false end
+  local now = GetTime and GetTime() or 0
+  -- (again after 3 s, or as soon as you have moved 10 yd: walking up to a giver is noticed at once)
+  if not force and now - sideAt < 3 and sideX and (px - sideX) ^ 2 + (py - sideY) ^ 2 < 100 then return false end
+  sideAt, sideX, sideY = now, px, py
+  State = State or ns.State
+  if sideSteps.list ~= d.steps then wipe(sideSteps); wipe(sideNo); sideSteps.list = d.steps end -- (another step list: its own offers)
+  local changed, standing = false, false
+  for k = #sideSteps, 1, -1 do
+    local s = sideSteps[k]
+    if State.OnQuest(s.q) or State.IsCompleted(s.q) then table.remove(sideSteps, k)
+    else
+      local dd = yardsOf(s.m, s.x, s.y, px, py, pinst)
+      local away = not (dd and dd <= Engine.SIDE_HOLD_YD)
+      if away ~= (s.away or false) then s.away = away; changed = true end
+      standing = standing or not away
+    end
+  end
+  if not standing and not (ns.Is(UnitOnTaxi, "player") or ns.Is(UnitIsDeadOrGhost, "player") or ns.Is(IsInInstance)) then
+    local pm = State.Position()
+    local best, bestD, bestZones
+    for _, q in ipairs(sideOn(pm)) do
+      local g = ns.SIDE_QUESTS[q].g
+      local dd = yardsOf(g[2], g[3], g[4], px, py, pinst)
+      if dd and dd <= Engine.SIDE_NEAR_YD and (not bestD or dd < bestD) then
+        local offered = false
+        for _, s in ipairs(sideSteps) do offered = offered or s.q == q end
+        local ok, zones = false, nil
+        if not offered and (force or not sideNo[q] or now - sideNo[q] >= Engine.SIDE_AGAIN) then
+          ok, zones = Engine.SideFits(q)
+          sideNo[q] = not ok and now or nil
+          -- (why not, for the quests you could take: "why doesn't this end up in my list" has an answer in /fr why)
+          if not ok and zones ~= "not for you" and zones ~= "yours already" and zones ~= "not near your level" and ns.Why then
+            ns.Why("side", ns.SIDE_QUESTS[q].n .. " (" .. g[1] .. ", right here) is not offered: " .. tostring(zones))
+          end
+        end
+        if ok then best, bestD, bestZones = q, dd, zones end
+      end
+    end
+    if best then
+      local sq = ns.SIDE_QUESTS[best]
+      local where = #bestZones > 0 and ("what it asks for (" .. table.concat(bestZones, ", ") .. ") is on your route") or ("it is handed in right here (" .. sq.e[1] .. ")")
+      -- (sq.u: work the quest data lists none of - Brewer's Trade - so nothing can be said about where it is)
+      local note = sq.u and (sq.n .. " is offered here; where its work is isn't in the quest data (follow your quest log). " .. sq.xp .. " xp.")
+        or ("Not in your plan, but you are right here: " .. where .. ". " .. sq.xp .. " xp.")
+      if sq.u then where = "where its work is isn't in the quest data" end
+      local step = { k = "accept", q = best, name = sq.n, level = sq.l, npc = sq.g[1], m = sq.g[2], x = sq.g[3], y = sq.g[4], r = 6, inserted = true, side = true, note = note }
+      local why = string.format("%s is %d yd away and %s; a plan cannot hold a quest like this (the giver in a city, or an objective in another zone than the giver)", sq.g[1], bestD, where)
+      -- as the plan's next step (a step you are standing at and the card holds stays first)
+      if Engine.InsertStop(step, px, py, pinst, { at = Engine.planned or Engine.current, why = why }) then sideSteps[#sideSteps + 1] = step; changed = true end
+    end
+  end
+  if changed then Engine.Refresh() end
+  return changed
+end
+-- a side quest in your log (one this rule offered, or any other of that kind you picked up): a stop for each objective
+-- still open, where it costs least; and its hand-in when it is finished and the plan has no place for it
+local function sideStops()
+  local list = steps()
+  local d = ForeverRouteData
+  if not (ns.SIDE_QUESTS and d and #list > 0 and Engine.current) or d.dungeon or d.special or d.branch then return false end
+  State = State or ns.State
+  local added = false
+  local px, py, pinst = HBD:GetPlayerWorldPosition()
+  -- (also the ones in your log from before the addon knew about them: A Noble Brew, picked up by hand)
+  ns.char.side = ns.char.side or {}
+  for q in pairs(ns.SIDE_QUESTS) do if not ns.char.side[q] and State.OnQuest(q) then ns.char.side[q] = true end end
+  for q in pairs(ns.char.side) do
+    local sq = ns.SIDE_QUESTS[q]
+    if not sq or State.IsCompleted(q) then ns.char.side[q] = nil
+    elseif State.OnQuest(q) and not (ns.char.nope and ns.char.nope[q]) then
+      -- (a quest the plan has steps of its own for is the plan's)
+      local has, planned = {}, false
+      for _, s in ipairs(list) do if s.q == q then has[s.k .. ":" .. tostring(s.match or "")] = true; planned = planned or (s.k ~= "accept" and not s.side) end end
+      if planned then -- nothing to add
+      elseif State.QuestReady(q) then
+        if not has["turnin:"] and not (ForeverRouteEnders and ForeverRouteEnders[q]) then
+          local step = { k = "turnin", q = q, name = sq.n, level = sq.l, npc = sq.e[1], m = sq.e[2], x = sq.e[3], y = sq.e[4], r = 6, inserted = true, side = true, note = "Added: you finished this one on the way." }
+          if Engine.InsertStop(step, px, py, pinst) then added = true end
+        end
+      else
+        for _, o in ipairs(sq.o or {}) do
+          local open = Engine.ObjectiveFor({ q = q, match = o[2] }, true)
+          if not has["obj:" .. o[2]] and not (open and open.finished) then
+            local function stop(p)
+              return { k = "obj", q = q, name = sq.n, level = sq.l, text = o[1] .. " " .. o[2], match = o[2], loot = o[1] == "Collect" or nil, m = p[1], x = p[2], y = p[3], r = 60, inserted = true, side = true,
+                note = "For the side quest you picked up: here it costs least." }
+            end
+            -- (only while the quest is worth it: up to the last step the plan has you at most SIDE_LATE levels above it)
+            local last -- (a plan without levels: anywhere)
+            for j in ipairs(list) do local L = Engine.PlanLevel(j); if L then last = last or 0; if L <= sq.l + Engine.SIDE_LATE then last = j end end end
+            local best, bestCost
+            for k = 3, #o do
+              local at, cost = Engine.InsertStop(stop(o[k]), px, py, pinst, { dry = true, maxCost = 2.5 * Engine.SIDE_OBJ_YD, maxIndex = last })
+              if at and (not best or (cost or math.huge) < bestCost) then best, bestCost = o[k], cost or math.huge end
+            end
+            -- (never a long way round: with no place close to the route yet, it waits - asked again as you go)
+            if best and Engine.InsertStop(stop(best), px, py, pinst, { maxCost = 2.5 * Engine.SIDE_OBJ_YD, maxIndex = last, why = "a side quest in your log (" .. sq.n .. "): where it costs least" }) then
+              added = true
+            elseif ns.Why then ns.Why("side", sq.n .. ": no place on your route for " .. o[2] .. " yet") end
+          end
+        end
+      end
+    end
+  end
+  return added
+end
+Engine.SideStops = sideStops
+ns.On("QUEST_ACCEPTED", function(a, b)
+  local q = type(b) == "number" and b or a
+  if q and ns.SIDE_QUESTS and ns.SIDE_QUESTS[q] and ns.char then ns.char.side = ns.char.side or {}; ns.char.side[q] = true end
+end)
+ns.On("FR_STATE", function() if sideStops() then Engine.Refresh() end end)
+ns.On("FR_LOADED", function() C_Timer.After(3.2, function() if sideStops() then Engine.Refresh() end end) end)
+ns.On("FR_ROUTE_CHANGED", function() C_Timer.After(0.55, function() if sideStops() then Engine.Refresh() end end) end)
+
+----------------------------------------------------------------------------------------------------------------
 -- "Not doing this quest": drops it from the route (all its steps), from future plans (the planner reads the list),
 -- and from stop insertion. If later quests on the route need it (ForeverRouteUnlocks from the plan), you're warned
 -- first and they go too. Undo brings everything back.
@@ -1701,6 +2003,7 @@ function Engine.NopeNow(qs)
   table.insert(ns.char.history, { kind = "nope", ids = {}, nope = qs })
   Engine.view = nil
   Engine.Refresh()
+  ns.Fire("FR_NOPE", qs) -- (the quest log check says which of their items you still carry)
   ns.Print(questName(qs[1]) .. (#qs > 1 and (" and " .. (#qs - 1) .. " quest" .. (#qs > 2 and "s" or "") .. " after it") or "") .. ": not doing. Dropped from your route and future plans. Undo brings it back.")
 end
 -- you abandoned these on the quest log check's advice (not on your route, or gray by then): the route stops sending
@@ -1713,6 +2016,7 @@ function Engine.Abandoned(qs, why)
   table.insert(ns.char.history, { kind = "nope", ids = {}, nope = qs })
   if #ns.char.history > 50 then table.remove(ns.char.history, 1) end
   Engine.Refresh()
+  ns.Fire("FR_NOPE", qs)
 end
 -- taking a quest you had dropped means you want it after all
 ns.On("QUEST_ACCEPTED", function(a, b)
@@ -1742,7 +2046,8 @@ function Engine.NotOffered(q)
   local s = steps()[Engine.Shown() or 0]
   if not q then q = s and s.q end
   if not q or q <= 0 or not ns.Avail then return end
-  ns.Avail.NotOffered(q, (s and s.q == q and s.npc) or "the quest giver", s and s.q == q and s.name or nil)
+  local mine = s and s.q == q and s or nil
+  ns.Avail.NotOffered(q, (mine and mine.npc) or "the quest giver", mine and mine.name, mine)
   Engine.Refresh()
 end
 function Engine.Nope(q)

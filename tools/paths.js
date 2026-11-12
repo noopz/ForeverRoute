@@ -211,7 +211,7 @@ function specialRoutes() {
   paths.sort((a, b) => b.enjoy - a.enjoy);
   paths.forEach((p) => { p.id = 'path:' + uniq(p.legs).map(slug).join('-'); });
   // the path you follow keeps its id (unless another path happens to end up with exactly that id)
-  starts.forEach((r, k) => { const pp = paths.find((x) => x.slot === k); if (r.follow && pp && base.followId && !paths.some((x) => x !== pp && x.id === base.followId)) { pp.id = base.followId; pp.followed = true; } });
+  starts.forEach((r, k) => { const pp = paths.find((x) => x.slot === k); if (r.follow && pp) { pp.continues = true; if (base.followId && !paths.some((x) => x !== pp && x.id === base.followId)) { pp.id = base.followId; pp.followed = true; } } });
   if (requestedZ) for (const p of paths) if (p.legs[0] === convT.find((t) => t.area_id === requestedZ).target_name) p.requested = reqT.target_name;
   console.log(`main paths done in ${Math.round((Date.now() - t0) / 1000)}s`);
 
@@ -338,7 +338,9 @@ function specialRoutes() {
       }
       choices.push({ at: c.at, leg: c.leg, level: c.level, options: opts });
     }
-    emit(p, uniq(p.legs).slice(0, 4).join(' · '), p.id, { best: k === 0, requested: p.requested, story: p.fun.story, rewards: p.fun.rewards, dungeons: p.fun.dungeons, headsUp: p.fun.heads, revisits: p.fun.revisits, flights: p.fun.flights, enjoy: Math.round(p.enjoy) }, choices);
+    // continues: the path planned as the continuation of the one you follow (the addon prefers it on a tie when your
+    // saved path id is not in the plan: Core.lua ns.ResolvePath)
+    emit(p, uniq(p.legs).slice(0, 4).join(' · '), p.id, { best: k === 0, ...(p.continues ? { continues: true } : {}), requested: p.requested, story: p.fun.story, rewards: p.fun.rewards, dungeons: p.fun.dungeons, headsUp: p.fun.heads, revisits: p.fun.revisits, flights: p.fun.flights, enjoy: Math.round(p.enjoy) }, choices);
     for (const c of p.choices || []) for (const j of (c.alts || []).filter((x) => x.route)) {
       // a branch hands back the main path's choice once it rejoins; it just carries its own steps from the boundary on
       // (branchAt is the main path's choice step as written above, so the addon finds the choice from the branch)

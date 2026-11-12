@@ -69,12 +69,14 @@ local function setSecure(fn) if InCombatLockdown() then pendingSecure = fn; retu
 local function build()
   f = CreateFrame("Frame", "ForeverRouteCard", UIParent)
   f:SetSize(ns.db.cardWidth, 160)
-  f:SetPoint("RIGHT", UIParent, "RIGHT", -60, 120)
+  f:SetPoint("TOPRIGHT", UIParent, "RIGHT", -60, 230) -- (Card.DEFAULT_POS; Card.ApplyPos sets the real place)
   f:SetClampedToScreen(true); f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
   -- movable in combat too: the card itself is not protected (its secure target / item buttons are their own frames
-  -- on UIParent; moved in combat, they catch up when combat ends - Card.PlaceSecure)
-  f:SetScript("OnDragStart", function(self) if not ns.db.locked then self:StartMoving() end end)
-  f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing(); Card.AnchorTop(); Card.PlaceSecure() end)
+  -- on UIParent; moved in combat, they catch up when combat ends - Card.PlaceSecure). Out of combat they follow the
+  -- card while it is dragged.
+  f:SetScript("OnDragStart", function(self) if not ns.db.locked then self:StartMoving(); self.dragging = true end end)
+  f:SetScript("OnDragStop", function(self) self.dragging = nil; self:StopMovingOrSizing(); Card.AnchorTop(); Card.PlaceSecure() end)
+  f:SetScript("OnUpdate", function(self) if self.dragging and not InCombatLockdown() then Card.PlaceSecure() end end)
   Style.Panel(f)
 
   -- header
@@ -109,19 +111,21 @@ local function build()
   cur.nope = Style.Button(cur, "not doing this quest", 112, 14, function() ns.Engine.Nope() end, "Drop this quest from your route and from future plans. If later quests need it, you'll be asked first. Undo brings it back.")
   cur.nope.label:SetFontObject(Style.Font(10)); cur.nope.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3])
   cur.nope:SetScript("OnLeave", function(self) self.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3]); GameTooltip:Hide() end)
-  cur.nope:SetPoint("TOPRIGHT", cur.map, "BOTTOMRIGHT", 0, -3)
+  -- (placed by Card.Layout, on a row of its own under the objective bars: hung under the Map button it lay over a
+  -- two-line title, the detail line and the first bar's count - it is three times as wide as the room kept there)
   -- "not offered": the giver has nothing for you (no window opens, so the addon can't tell by itself - James Halloran,
   -- Argos Nightwhisper). Off your route until you level up, like a giver who lists other quests but not this one
   cur.notOffered = Style.Button(cur, "giver doesn't offer it", 112, 14, function() ns.Engine.NotOffered() end, "The quest giver has nothing for you: this quest leaves your route until your next level (a level or a quest you haven't done can be the reason), then it's tried again. Its chain stays.")
   cur.notOffered.label:SetFontObject(Style.Font(10)); cur.notOffered.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3])
   cur.notOffered:SetScript("OnLeave", function(self) self.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3]); GameTooltip:Hide() end)
-  cur.notOffered:SetPoint("TOPRIGHT", cur.nope, "BOTTOMRIGHT", 0, -2)
   cur.bars = {}
   cur.heads = {} -- the dungeon state's quest names, one above each quest's bars
   cur.note = Style.Text(cur, 11, C.sub)
 
-  -- target / use-item: secure buttons on UIParent, placed at the card's slot out of combat
-  -- on the card's own layer, just above the card (Card.PlaceSecure sets the level): what covers the card - the
+  -- target / use-item: secure buttons on UIParent, floating just above the card's top edge (Card.PlaceSecure, out of
+  -- combat). Not in a slot on the card: a secure button can't move in combat, the card's rows can (a step with more
+  -- objective bars mid-fight ran its bars under the button).
+  -- on the card's own layer, a level above it (Card.PlaceSecure sets the level): what covers the card - the
   -- character sheet, the map - covers these too (on "HIGH" they floated over every window)
   cur.target = CreateFrame("Button", "ForeverRouteTargetButton", UIParent, "SecureActionButtonTemplate"); cur.target:SetFrameStrata(f:GetFrameStrata())
   -- Ctrl+drag puts it wherever you like (ns.db.targetPos; /fr target reset brings it back); a Ctrl-click runs an empty
@@ -141,7 +145,7 @@ local function build()
   cur.target.icon = cur.target:CreateTexture(nil, "ARTWORK"); cur.target.icon:SetTexture(Style.MEDIA .. "icon-grind"); cur.target.icon:SetSize(12, 12); cur.target.icon:SetPoint("LEFT", 7, 0)
   cur.target.icon:SetVertexColor(1, 0.55, 0.5)
   cur.target.label = Style.Text(cur.target, 10, C.text); cur.target.label:SetPoint("LEFT", cur.target.icon, "RIGHT", 5, 0); cur.target.label:SetPoint("RIGHT", -6, 0); cur.target.label:SetWordWrap(false); cur.target.label:SetJustifyV("MIDDLE")
-  cur.target:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText("Click to target " .. (self.who or ""), 1, 1, 1); GameTooltip:AddLine("Works when they're close enough to see, in combat too.", 0.75, 0.8, 0.88, true); GameTooltip:AddLine("Want a key for it? Options > Keybindings, under AddOns: Forever Route Targeting.", 0.5, 0.55, 0.62, true); GameTooltip:AddLine("Ctrl+drag to move it (/fr target reset puts it back).", 0.5, 0.55, 0.62, true); GameTooltip:Show() end)
+  cur.target:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText("Click to target " .. (self.who or ""), 1, 1, 1); GameTooltip:AddLine("Works when they're close enough to see, in combat too.", 0.75, 0.8, 0.88, true); GameTooltip:AddLine("Want a key for it? Options > Keybindings, under AddOns: Forever Route Targeting.", 0.5, 0.55, 0.62, true); GameTooltip:AddLine("Ctrl+drag to move it (/fr target reset puts it back above the card).", 0.5, 0.55, 0.62, true); GameTooltip:Show() end)
   cur.target:SetScript("OnLeave", GameTooltip_Hide)
   cur.item = CreateFrame("Button", "ForeverRouteItemButton", UIParent, "SecureActionButtonTemplate"); cur.item:SetFrameStrata(f:GetFrameStrata())
   cur.item:SetSize(26, 26); cur.item:RegisterForClicks("AnyUp", "AnyDown"); cur.item:SetAttribute("type", "item")
@@ -524,17 +528,28 @@ function Card.Fill()
   local bits = {}
   if detail and not multi then bits[#bits + 1] = detail end
   if s.zone then bits[#bits + 1] = s.zone end
-  if s.x and s.y then bits[#bits + 1] = string.format("|cff8e99ad%.0f, %.0f|r", s.x * 100, s.y * 100) end
+  -- (an unknown step's spot is only its place in the order: no coordinates, no map button)
+  if s.x and s.y and not s.unknown then bits[#bits + 1] = string.format("|cff8e99ad%.0f, %.0f|r", s.x * 100, s.y * 100) end
   -- the walking path knows the floor heights: say when the stop is upstairs (a tower top) or below (a cellar, a cave)
   -- (only indoors - outdoors a height difference is a hill, the same rule as the arrow)
   if s.z and s.z0 and math.abs(s.z - s.z0) >= 6 and ns.Arrow and ns.Arrow.Indoors and ns.Arrow.Indoors() then
     bits[#bits + 1] = string.format("|cff8fd3ff%s %d yd|r", s.z > s.z0 and "up" or "down", math.floor(math.abs(s.z - s.z0) + 0.5))
   end
   cur.detail:SetText(table.concat(bits, "  ·  "))
-  cur.map:SetShown((s.m and s.x) or s.k == "fly" or false)
+  cur.map:SetShown((s.m and s.x and not s.unknown) or s.k == "fly" or false)
   cur.nope:SetShown((s.q and s.q > 0 and not ns.Engine.view) and true or false)
   cur.notOffered:SetShown((s.k == "accept" and s.q and s.q > 0 and not ns.Engine.view and not ns.State.OnQuest(s.q)) and true or false)
-  if s.k == "obj" then
+  if s.k == "obj" and s.unknown then
+    -- work the quest data lists none of: the game's own lines for the quest, as the quest log has them (none: one bar
+    -- that says to look there)
+    local q = ns.State.Quest(s.q)
+    local objs = q and q.on and q.objectives or {}
+    if #objs == 0 then local b = bar(); b:Set(0, kind.color, "See your quest log", ""); b:Show() end
+    for _, o in ipairs(objs) do
+      if o.need and o.need > 0 then objectiveBar(bar(), s, o, kind)
+      else local b = bar(); b:Set(o.finished and 1 or 0, kind.color, o.text, ""); b:Show() end
+    end
+  elseif s.k == "obj" then
     objectiveBar(bar(), s, ns.Engine.ObjectiveFor(s), kind)
     for _, j in ipairs(group) do local g = steps()[j]; objectiveBar(bar(), g, ns.Engine.ObjectiveFor(g), Style.Kind(g)) end
   elseif s.k == "grind" then
@@ -549,6 +564,9 @@ function Card.Fill()
       local q = ns.State.Quest(s.q)
       for _, o in ipairs(q and q.objectives or {}) do if not o.finished then left[#left + 1] = o.text end end
       return "Not finished: " .. (#left > 0 and table.concat(left, ", ") or "objectives left"), C.warn
+    elseif status == "later" and ns.Engine.NotYet(i) == "objectives" then
+      -- a hand-in whose work (no place in the quest data) you skipped: it comes back when the quest is ready
+      return "Waits until the quest is done (where its work is isn't in the quest data) - the route goes on, and this comes back when it's ready.", C.sub
     elseif status == "later" then
       return "Left for your next dungeon run (what's still to do is inside) - or skip it; the route goes on.", C.sub
     elseif status == "wait" then
@@ -627,19 +645,17 @@ function Card.Fill()
 end
 
 -- The Target button's macro (also its key, Options > Keybindings > AddOns): target the NPC by name, then put a star on
--- it - "/tm 1", but only when it isn't starred already (the button fires on key down and up, and /tm on a starred
--- target takes the star off). Marking is not protected, so it works solo and in combat.
+-- it with the game's own /tm - marking from addon code (/run ... SetRaidTarget) is a protected action on Forever
+-- (ADDON_ACTION_FORBIDDEN, no star). "/tm 0" then "/tm 1": /tm 1 alone toggles a star that's already there off, and
+-- the button fires on key down and up.
 Card.MARK = 1 -- the star
 function Card.TargetMacro(who)
-  return "/cleartarget\n/target " .. who .. "\n/targetexact " .. who .. "\n/run ForeverRoute.Card.MarkTarget()"
+  local m = "/cleartarget\n/target " .. who .. "\n/targetexact " .. who
+  if ns.db and ns.db.markTarget ~= false then m = m .. "\n/tm 0\n/tm " .. Card.MARK end
+  return m
 end
-function Card.MarkTarget()
-  if not (ns.db and ns.db.markTarget ~= false) then return false end
-  if not (UnitExists and UnitExists("target")) or ns.Is(UnitIsPlayer, "target") then return false end
-  local ok, cur = pcall(GetRaidTargetIndex, "target")
-  if ok and cur == Card.MARK then return false end
-  return (pcall(SetRaidTarget, "target", Card.MARK))
-end
+-- the option changed: the macro follows (out of combat; the card refills the button then)
+ns.On("FR_SETTINGS", function() if Card.SetButtons and ns.Engine and ns.Engine.Shown and ForeverRouteData then local i = ns.Engine.Shown(); if i then pcall(Card.SetButtons, ForeverRouteData.steps[i]) end end end)
 
 function Card.SetButtons(s)
   local cur = f.cur
@@ -656,9 +672,10 @@ function Card.SetButtons(s)
   end)
 end
 
--- The card hangs from its top-left corner: anchored by its middle (as it was, and as a drag can leave it), every
--- change of height moved its top - and the Target button, which can't move in combat, was left off the card. Out of
--- combat only (the card's anchor is ours, but it carries the secure buttons' place with it).
+-- The card hangs from its top: anchored by its middle (as it was, and as a drag can leave it), every change of
+-- height moved its top - and the Target button, which sits above that top and can't move in combat, was left out of
+-- place. Out of combat only (the card's anchor is ours, but it carries the secure buttons' place with it). A card
+-- never dragged hangs from its top too (Card.DEFAULT_POS), and a place saved by an older version is made one.
 -- Its place is kept in the game's own units (what it measures at scale 1), never in the card's scaled ones: the game
 -- multiplies a frame's offsets by its scale, so a place saved at one scale and set again at a bigger one put the card
 -- off the screen ("I fucked with the scale and now the card is just gone"). { "ABS", left, top } in UIParent units.
@@ -671,7 +688,7 @@ function Card.AnchorTop()
   Card.ApplyPos()
 end
 -- set the card at its saved place for its current scale; off the screen (or no place yet), the default place
-Card.DEFAULT_POS = { "RIGHT", "RIGHT", -60, 120 }
+Card.DEFAULT_POS = { "TOPRIGHT", "RIGHT", -60, 230 }
 function Card.ApplyPos()
   if not f or InCombatLockdown() then return end
   local p, s = ns.db.cardPos, f:GetScale() or 1
@@ -679,7 +696,8 @@ function Card.ApplyPos()
   if type(p) == "table" and p[1] == "ABS" and tonumber(p[2]) and tonumber(p[3]) then
     f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", p[2] / s, p[3] / s)
   elseif type(p) == "table" and p[1] and p[2] then
-    f:SetPoint(p[1], UIParent, p[2], tonumber(p[3]) or 0, tonumber(p[4]) or 0) -- an older save: as it was
+    f:SetPoint(p[1], UIParent, p[2], tonumber(p[3]) or 0, tonumber(p[4]) or 0) -- an older save: where it was...
+    if f:GetLeft() and f:GetTop() then return Card.AnchorTop() end -- ...hung from its top from now on
   else
     local d = Card.DEFAULT_POS; f:SetPoint(d[1], UIParent, d[2], d[3], d[4])
   end
@@ -704,29 +722,70 @@ end
 -- the scale changed: the same place on the screen at the new scale
 ns.On("FR_SETTINGS", function() C_Timer.After(0, function() if f then Card.ApplyPos(); Card.PlaceSecure() end end) end)
 
+-- Where the Target button goes when you haven't put it somewhere yourself: just above the card's top edge, its left
+-- side on the card's (the use-item button next to it). It is beside the card, never on it, so no row of the card can
+-- run under it, and it does not depend on how tall the card is. No room above (the card at the top of the screen):
+-- left of the card's top corner, or right of it.
+-- -> x, y of the Target button's bottom-left corner in UIParent units, and "above" / "left" / "right"
+Card.SECURE_GAP, Card.TARGET_W, Card.TARGET_H, Card.ITEM_SIZE = 4, 140, 20, 26
+function Card.SecureSpot(withItem)
+  if not f then return nil end
+  local l, t, r = f:GetLeft(), f:GetTop(), f:GetRight()
+  if not (l and t and r) then return nil end
+  -- the card's units -> the screen's (UIParent's): the buttons are UIParent's children, at the card's scale
+  local S = f:GetEffectiveScale() / UIParent:GetEffectiveScale()
+  local gap = Card.SECURE_GAP * S
+  local w = (Card.TARGET_W + (withItem and Card.SECURE_GAP + Card.ITEM_SIZE or 0)) * S
+  local h = (withItem and Card.ITEM_SIZE or Card.TARGET_H) * S
+  local W, H = UIParent:GetWidth() or 0, UIParent:GetHeight() or 0
+  l, t, r = l * S, t * S, r * S
+  if H <= 0 or t + gap + h <= H then return l, t + gap, "above" end
+  if l - gap - w >= 0 then return l - gap - w, t - h, "left" end
+  if W <= 0 or r + gap + w <= W then return r + gap, t - h, "right" end
+  return l, t + gap, "above" -- (nowhere beside it either: the screen clamp keeps it in sight)
+end
 function Card.PlaceSecure()
   if not f then return end
   local cur = f.cur
   if InCombatLockdown() then Card.needPlace = true; return end
   Card.needPlace = false
-  local left, top = cur:GetLeft(), cur:GetTop()
-  if not (f:IsShown() and not ns.db.collapsed and cur.btnY and left and not ns.Engine.view) then cur.target:Hide(); cur.item:Hide(); return end
-  cur.placedBtnY = cur.btnY
-  local x, y = left + 50, top - cur.btnY
-  -- just above the card and everything on it, on its layer
+  local x, y, where = Card.SecureSpot(cur.wantItem and true or false)
+  if not (f:IsShown() and not ns.db.collapsed and (cur.wantTarget or cur.wantItem) and x and not ns.Engine.view) then cur.target:Hide(); cur.item:Hide(); cur.secureAt = nil; return end
+  -- on the card's layer, a level above it and everything on it
   local lvl = f:GetFrameLevel() + 20
   for _, b in ipairs({ cur.item, cur.target }) do b:SetScale(f:GetScale()); b:SetFrameStrata(f:GetFrameStrata()); b:SetFrameLevel(lvl) end
-  if cur.wantItem then cur.item:ClearAllPoints(); cur.item:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y); cur.item:Show(); x = x + 32 else cur.item:Hide() end
-  -- where you dragged it (Ctrl+drag), else on the card
+  -- places are worked out in UIParent units; the game multiplies a frame's offsets by its scale, so they are set
+  -- divided by the buttons' own
+  local S = cur.target:GetEffectiveScale() / UIParent:GetEffectiveScale()
+  -- where you dragged it (Ctrl+drag: its top-left corner), else above the card
   local tp = ns.db.targetPos
-  local s = UIParent:GetEffectiveScale() / cur.target:GetEffectiveScale()
-  if cur.wantTarget then cur.target:ClearAllPoints(); if tp then cur.target:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", tp[1] * s, tp[2] * s) else cur.target:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y - 3) end; cur.target:Show() else cur.target:Hide() end
+  if type(tp) == "table" and tonumber(tp[1]) and tonumber(tp[2]) then x, y, where = tp[1], tp[2] - Card.TARGET_H * S, "dragged" end
+  cur.secureAt = where
+  cur.target:ClearAllPoints(); cur.target:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x / S, y / S)
+  cur.target:SetShown(cur.wantTarget and true or false)
+  -- the use-item button: next to the Target button, or in its place on a step with no one to target
+  local ix = cur.wantTarget and x + (Card.TARGET_W + Card.SECURE_GAP) * S or x
+  cur.item:ClearAllPoints(); cur.item:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", ix / S, y / S)
+  cur.item:SetShown(cur.wantItem and true or false)
+end
+-- /fr target reset: forget where you dragged the Target button; it goes back above the card. In combat it can't be
+-- moved (the game forbids it): it goes back when the fight ends, and says so - it used to say "back on the card" and
+-- stay where it was.
+function Card.ResetTarget()
+  ns.db.targetPos = nil
+  if not f then return end
+  if InCombatLockdown() then Card.needPlace = true; ns.Print("Target button: it can't move during a fight. It goes back above the card when the fight ends."); return end
+  Card.PlaceSecure()
+  local cur = f.cur
+  if cur.target:IsShown() or cur.item:IsShown() then ns.Print("Target button back above the card.")
+  else ns.Print("Target button: it will be above the card the next time a step has someone to target.") end
 end
 ns.On("PLAYER_REGEN_ENABLED", function()
   if pendingSecure then local fn = pendingSecure; pendingSecure = nil; fn() end
   if f and Card.needPlace then Card.PlaceSecure() end
 end)
 
+Card.LINK_H = 14 -- the height of the small quest links ("not doing this quest")
 function Card.Layout()
   if not f then return end
   local cur = f.cur
@@ -743,14 +802,23 @@ function Card.Layout()
     b:ClearAllPoints(); b:SetPoint("TOPLEFT", cur, "TOPLEFT", x0, -(y + 8)); b:SetPoint("RIGHT")
     y = y + 8 + 18
   end
-  cur.btnY = nil
-  if cur.wantTarget or cur.wantItem then
-    cur.btnY = y + 8
-    -- in combat the buttons can't move: their row stays where they were put (the step changed mid-fight and the
-    -- row moved up, away from the button)
-    if InCombatLockdown() and cur.placedBtnY and (cur.target:IsShown() or cur.item:IsShown()) then cur.btnY = cur.placedBtnY end
-    y = cur.btnY + 26
+  -- "not doing this quest" / "giver doesn't offer it": a row of their own under the title, detail and bars, from the
+  -- text's left edge, each as wide as its words; the second goes under the first where the card is too narrow for
+  -- both. (Nothing of the Target / use-item buttons here: they float above the card - Card.PlaceSecure.)
+  cur.linkRows = 0
+  local lx = x0
+  for _, b in ipairs({ cur.nope, cur.notOffered }) do
+    if b:IsShown() then
+      local sw = b.label:GetStringWidth() or 0
+      local w = math.min(inner - x0, sw > 0 and math.ceil(sw) + 14 or 112)
+      b:SetWidth(w)
+      if cur.linkRows == 0 then cur.linkRows = 1; y = y + 7
+      elseif lx + w > inner then cur.linkRows = cur.linkRows + 1; lx = x0; y = y + Card.LINK_H + 3 end
+      b:ClearAllPoints(); b:SetPoint("TOPLEFT", cur, "TOPLEFT", lx, -y)
+      lx = lx + w + 6
+    end
   end
+  if cur.linkRows > 0 then y = y + Card.LINK_H end
   if (cur.note:GetText() or "") ~= "" then
     cur.note:ClearAllPoints(); cur.note:SetPoint("TOPLEFT", cur, "TOPLEFT", x0, -(y + 7))
     y = y + 7 + cur.note:GetStringHeight()
@@ -940,7 +1008,7 @@ ns.On("PLAYER_CONTROL_GAINED", function() C_Timer.After(0.5, function() if f the
 -- isn't finished (where the work is, not the quest giver who won't take it yet), or the hand-in once it is ready
 function Card.SpecialNext(r)
   for _, s in ipairs(ns.Steps(r)) do
-    if s.q and s.q > 0 and s.m and s.x and not ns.State.IsCompleted(s.q) then
+    if s.q and s.q > 0 and s.m and s.x and not s.unknown and not ns.State.IsCompleted(s.q) then
       if s.k == "accept" and not ns.State.OnQuest(s.q) then return s end
       if ns.State.OnQuest(s.q) then
         local ready = ns.State.QuestReady(s.q)

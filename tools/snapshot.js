@@ -71,7 +71,8 @@ function loadCharState(dir, convPath) {
       // quests the game didn't offer you when you talked to their giver (the addon's Availability.lua), at your level
       // or above: left out until you level past it - the database lists some Forever doesn't give you
       notOffered: Object.entries((fr.ForeverRouteChar && fr.ForeverRouteChar.avail && fr.ForeverRouteChar.avail.no) || {})
-        .filter(([, n]) => n && (n.lvl || 0) >= (snap.level || 0)).map(([q]) => Number(q)),
+        // (stay: refused where a level is not the reason - out until the game offers it, however high you are)
+        .filter(([, n]) => n && (n.stay || (n.lvl || 0) >= (snap.level || 0))).map(([q]) => Number(q)),
     };
   }
   const jt = read('JourneyTracker.lua');

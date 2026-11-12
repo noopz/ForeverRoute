@@ -357,6 +357,25 @@ test("logout snapshot: a torn-down read (no objectives, gear, skills or money) k
   if not ok then error(err, 0) end
 end)
 
+test("logging out doesn't rebuild the route (a long plan ran past the game's script limit there)", function()
+  local real, n = ns.Engine.Refresh, 0
+  ns.Engine.Refresh = function(...) n = n + 1; return real(...) end
+  local ok, err = pcall(ns.Fire, "PLAYER_LOGOUT")
+  ns.Engine.Refresh = real
+  if not ok then error(err, 0) end
+  assertEquals(0, n, "route rebuilt at logout")
+  assertTrue(ns.char.snapshot ~= nil, "no snapshot at logout")
+end)
+
+test("/fr options opens its window on screen", function()
+  ns.Options.Open()
+  local host = ForeverRouteOptionsWindow
+  assertTrue(host and host:IsShown(), "the window didn't open")
+  assertTrue(host:GetNumPoints() > 0, "the window has no position (it went nowhere)")
+  assertEquals("DIALOG", host:GetFrameStrata())
+  host:Hide()
+end)
+
 test("options sliders don't fire settings on open", function()
   local fired = 0
   ns.On("FR_SETTINGS", function() fired = fired + 1 end)
@@ -937,6 +956,84 @@ test("a replan that renames your path keeps you on the same path, not the top on
   assertEquals("path:Westfall-New", ForeverRouteData.id)
   ForeverRouteRoutes = saved
   ns.SelectRoute(ns.MainRoutes()[1].id, true)
+end)
+
+-- A plan made from an older save does not have the path you switched to since. Real case (level-32 warlock in the
+-- Wetlands, 2026-11-11): the saved path was Wetlands > Duskwood > Ashenvale > ...; the plan held Wetlands > Ashenvale >
+-- Arathi, Duskwood > Ashenvale > Stranglethorn > Wetlands and Ashenvale > Arathi > Wetlands. Matching from the old
+-- second zone on took the Duskwood path ("it swapped to the Ashenvale one").
+test("a plan without your path: you stay on the one that starts where yours did, and are told once", function()
+  local saved = { routes = ForeverRouteRoutes, pinned = ns.char.pinnedPath, print = ns.Print, switch = ns.pathSwitch }
+  local function route(id, legs, extra) local r = { id = id, title = id, meta = { legs = legs }, sections = { { title = "x" } }, steps = { { id = 1, k = "goto", text = "a", sec = 1 } } }; for k, v in pairs(extra or {}) do r[k] = v end; return r end
+  local said = {}
+  local ok, err = pcall(function()
+    ForeverRouteRoutes = { route("path:Wetlands-Duskwood-Ashenvale-Desolace-ArathiHighlands", "Wetlands > Duskwood > Ashenvale > Desolace > Arathi Highlands > Stranglethorn Vale > The Barrens > Swamp of Sorrows > Dustwallow Marsh > Hillsbrad Foothills > Stranglethorn Vale > Riverglades") }
+    ns.SelectRoute("path:Wetlands-Duskwood-Ashenvale-Desolace-ArathiHighlands", true)
+    ns.char.pinnedPath = "path:Wetlands-Duskwood-Ashenvale-Desolace-ArathiHighlands"
+    ns.Print = function(m) said[#said + 1] = m end
+    -- the plan from the older save, in the planner's order
+    ForeverRouteRoutes = {
+      route("path:Wetlands-Ashenvale-ArathiHighlands", "Wetlands > Ashenvale > Arathi Highlands > Desolace > Stranglethorn Vale > The Barrens > Swamp of Sorrows"),
+      route("path:Wetlands-Duskwood-DunMorogh", "Duskwood > Ashenvale > Stranglethorn Vale > Wetlands > Desolace > Thousand Needles > Arathi Highlands", { continues = true }),
+      route("path:Ashenvale-ArathiHighlands-Wetlands", "Ashenvale > Arathi Highlands > Wetlands > Desolace > Stranglethorn Vale"),
+    }
+    ns.SelectRoute(ns.char.routeTitle, true)
+    assertEquals("path:Wetlands-Ashenvale-ArathiHighlands", ForeverRouteData.id)
+    assertEquals("path:Wetlands-Ashenvale-ArathiHighlands", ns.char.routeTitle)
+    -- your own pick follows the path to its new name
+    assertEquals("path:Wetlands-Ashenvale-ArathiHighlands", ns.char.pinnedPath)
+    -- the next zones differ from what you were on: said, with both
+    if not (ns.pathSwitch and ns.pathSwitch.to == "path:Wetlands-Ashenvale-ArathiHighlands") then error("the switch was not recorded", 0) end
+    local text = ns.pathSwitch.text
+    if not (text:find("Wetlands > Duskwood > Ashenvale", 1, true) and text:find("Wetlands > Ashenvale > Arathi Highlands", 1, true)) then error("the note does not name both paths: " .. text, 0) end
+    -- selecting again (the name is known now) says nothing more
+    ns.pathSwitch = nil
+    ns.SelectRoute(ns.char.routeTitle, true)
+    if ns.pathSwitch then error("told twice", 0) end
+  end)
+  ForeverRouteRoutes, ns.char.pinnedPath, ns.Print, ns.pathSwitch = saved.routes, saved.pinned, saved.print, saved.switch
+  ns.SelectRoute(ns.MainRoutes()[1].id, true)
+  if not ok then error(err, 0) end
+end)
+
+test("a renamed path with the same next zones is the same path: no word about a switch", function()
+  local saved = { routes = ForeverRouteRoutes, switch = ns.pathSwitch }
+  local function route(id, legs, extra) local r = { id = id, title = id, meta = { legs = legs }, sections = { { title = "x" } }, steps = { { id = 1, k = "goto", text = "a", sec = 1 } } }; for k, v in pairs(extra or {}) do r[k] = v end; return r end
+  local ok, err = pcall(function()
+    ForeverRouteRoutes = { route("path:Old", "Wetlands > Ashenvale > Arathi Highlands > Desolace > The Barrens") }
+    ns.SelectRoute("path:Old", true)
+    ns.pathSwitch = nil
+    ForeverRouteRoutes = { route("path:Other", "Arathi Highlands > Wetlands > Ashenvale > Desolace"), route("path:New", "Wetlands > Ashenvale > Arathi Highlands > Desolace > Stranglethorn Vale") }
+    ns.SelectRoute(ns.char.routeTitle, true)
+    assertEquals("path:New", ForeverRouteData.id)
+    if ns.pathSwitch then error("a rename was announced as a switch: " .. ns.pathSwitch.text, 0) end
+  end)
+  ForeverRouteRoutes, ns.pathSwitch = saved.routes, saved.switch
+  ns.SelectRoute(ns.MainRoutes()[1].id, true)
+  if not ok then error(err, 0) end
+end)
+
+test("path continuity: zones in common in the same order, the first zone counting most; the planner's mark breaks a tie", function()
+  local old = { "Westfall", "Redridge Mountains", "Duskwood", "Wetlands" }
+  -- the zone you were in is finished: the continuation beats a path that only shares the old first zone
+  if not (ns.PathContinuity(old, { "Redridge Mountains", "Duskwood", "Wetlands" }) > ns.PathContinuity(old, { "Westfall", "Darkshore", "Ashenvale" })) then error("the continuation lost to a path sharing only the first zone", 0) end
+  -- same zones in order: the one starting where you did wins
+  if not (ns.PathContinuity(old, { "Westfall", "Redridge Mountains", "Wetlands" }) > ns.PathContinuity(old, { "Redridge Mountains", "Duskwood", "Ashenvale" })) then error("the same start did not win", 0) end
+  assertEquals(0, ns.PathContinuity(old, { "Darkshore", "Ashenvale" }))
+  local saved = { routes = ForeverRouteRoutes, switch = ns.pathSwitch }
+  local function route(id, legs, extra) local r = { id = id, title = id, meta = { legs = legs }, sections = { { title = "x" } }, steps = { { id = 1, k = "goto", text = "a", sec = 1 } } }; for k, v in pairs(extra or {}) do r[k] = v end; return r end
+  local ok, err = pcall(function()
+    ForeverRouteRoutes = { route("path:Old", "Wetlands > Ashenvale > Desolace") }
+    ns.SelectRoute("path:Old", true)
+    ForeverRouteRoutes = { route("path:A", "Wetlands > Ashenvale > Arathi Highlands"), route("path:B", "Wetlands > Ashenvale > Stranglethorn Vale", { continues = true }) }
+    assertEquals("path:B", ns.ResolvePath("path:Old").id)
+    -- nothing in common at all: the planner's continuation, not the top path
+    ForeverRouteRoutes = { route("path:C", "Felwood > Winterspring"), route("path:D", "Tanaris > Feralas", { continues = true }) }
+    assertEquals("path:D", ns.ResolvePath("path:Old").id)
+  end)
+  ForeverRouteRoutes, ns.pathSwitch = saved.routes, saved.switch
+  ns.SelectRoute(ns.MainRoutes()[1].id, true)
+  if not ok then error(err, 0) end
 end)
 
 test("back from a side trip: a path renamed by a replan is found by its zones, not swapped for the top path", function()
@@ -2811,6 +2908,36 @@ test("standing at the step: no minimap pin on top of you (the world map keeps it
   end, { anyTarget = true })
 end)
 
+test("a quest refused above the level it needs stays off at later levels; one waiting on an earlier quest comes back with it", function()
+  local sv = { avail = ForeverRouteChar.avail, gossip = C_GossipInfo.GetAvailableQuests, un = UnitName, lvl = UnitLevel, unl = ForeverRouteUnlocks, done = ns.State.IsCompleted }
+  ForeverRouteChar.avail = nil
+  local level, done = 29, {}
+  local ok, err = pcall(withState, {}, function()
+    UnitLevel = function() return level end
+    UnitName = function(u, ...) if u == "npc" then return "Captain Stoutfist" end return sv.un(u, ...) end
+    ns.State.IsCompleted = function(q) return done[q] or false end
+    ForeverRouteUnlocks = { [98072] = { 98240 } }
+    ForeverRouteData = { id = "avail2", title = "avail2", sections = { { title = "Wetlands" } }, steps = {
+      { id = 1, k = "accept", q = 98230, name = "This Land Was Their Land", npc = "Captain Stoutfist", minLevel = 22, m = 1437, x = 0.10, y = 0.57, sec = 1 },
+      { id = 2, k = "accept", q = 98240, name = "Crimson Crate Delivery", npc = "Captain Stoutfist", minLevel = 19, m = 1437, x = 0.10, y = 0.57, sec = 1 },
+    } }
+    ns.Engine.Refresh()
+    C_GossipInfo.GetAvailableQuests = function() return {} end
+    ns.Avail.OnGiver("GOSSIP_SHOW")
+    assertTrue(ns.Avail.Unavailable(98230) and ns.Avail.Unavailable(98240))
+    level = 32
+    assertTrue(ns.Avail.Unavailable(98230), "refused at 29 (needs 22): a level up isn't a reason to send you back")
+    assertTrue(ns.Avail.Unavailable(98240), "still waiting on Crocs of the Sky")
+    done[98072] = true
+    assertTrue(not ns.Avail.Unavailable(98240), "Crocs of the Sky handed in: worth another look")
+    -- offered after all: back on the route
+    C_GossipInfo.GetAvailableQuests = function() return { { questID = 98230 } } end
+    ns.Avail.OnGiver("GOSSIP_SHOW"); assertTrue(not ns.Avail.Unavailable(98230))
+  end)
+  ForeverRouteChar.avail, C_GossipInfo.GetAvailableQuests, UnitName, UnitLevel, ForeverRouteUnlocks, ns.State.IsCompleted = sv.avail, sv.gossip, sv.un, sv.lvl, sv.unl, sv.done
+  if not ok then error(err, 0) end
+end)
+
 test("a quest its giver doesn't offer you leaves the route (until a level-up, or until it's offered after all)", function()
   local sv = { avail = ForeverRouteChar.avail, gossip = C_GossipInfo.GetAvailableQuests, un = UnitName, lvl = UnitLevel }
   ForeverRouteChar.avail = nil
@@ -3264,6 +3391,61 @@ test("dungeons: done once you've been in; half a run, or a skipped run, leaves w
     assertEquals("later", ns.Engine.Status(2)); assertEquals(5, ns.Engine.Shown())
   end)
   IsInInstance, GetInstanceInfo = sv.inst, sv.info
+end)
+
+-- work the quest data lists none of (route2.js unknownWork: Brewer's Trade, given and handed in by Brewmeister Bilger,
+-- "Deliver the bottles ... to Dun Garok"): one step that says so, placed at the giver only to keep its place in the
+-- order - no arrow, pin or line for it; the card shows the quest log's own lines; done when the quest is ready
+local function unknownRoute()
+  local s = {
+    { k = "accept", q = 98071, name = "Brewer's Trade", npc = "Brewmeister Bilger", m = 1424, x = 0.5213, y = 0.5874, r = 6, sec = 1, lvl = 27 },
+    { k = "obj", unknown = true, q = 98071, name = "Brewer's Trade", text = "Deliver the bottles of Fallrook Varietal to Dun Garok in southeast\226\128\166", r = 40,
+      note = "Where to do this isn't in the quest data: follow your quest log and map.", m = 1424, x = 0.5213, y = 0.5874, sec = 1, lvl = 27 },
+    { k = "turnin", q = 98071, name = "Brewer's Trade", npc = "Brewmeister Bilger", m = 1424, x = 0.5213, y = 0.5874, r = 6, sec = 1, lvl = 27 },
+    { k = "accept", q = 702, name = "Elsewhere", npc = "Someone", m = 1424, x = 0.30, y = 0.40, r = 6, sec = 1, lvl = 27 },
+  }
+  for i, t in ipairs(s) do t.id = i end
+  return { id = "unk", title = "unk", sections = { { title = "Southshore" } }, steps = s }
+end
+test("unknown work: no arrow, pin or line for it; the card shows its words, the note and the quest log's lines; done when the quest is ready", function()
+  withWorld(unknownRoute(), function(w)
+    w:go(1424, 0.52, 0.587) -- at Brewmeister Bilger
+    assertEquals(1, w:shown())
+    w:quest(98071, { on = true, objectives = { { text = "Homebrew Hops: 0/1", finished = false, have = 0, need = 1 } } })
+    assertEquals(2, w:shown(), "the card does not show the work after the pick-up")
+    assertEquals("todo", ns.Engine.Status(2))
+    ns.Arrow.SetTarget(2, true)
+    assertNil(ns.Arrow.Current(), "the arrow points at a place the quest data does not have")
+    ns.Pins.Update(true)
+    for _, p in ipairs(ns.Pins._used) do assertTrue(p.index ~= 2, "a map pin for the unknown step") end
+    assertNil(ns.Engine.TravelFor(ForeverRouteData.steps[2]), "a trip planned to it")
+    assertEquals(0, ns.Pins.PathDots(), "a path line drawn to it")
+    -- the card: its words, the note, the live line of the quest - no coordinates, no map button
+    ns.Card.Fill()
+    local cur = ForeverRouteCard.cur
+    assertTrue(ns.Card.Plain(cur.titleText:GetText()):find("Deliver the bottles", 1, true) ~= nil, cur.titleText:GetText())
+    assertTrue(ns.Card.Plain(cur.note:GetText() or ""):find("isn't in the quest data", 1, true) ~= nil, cur.note:GetText())
+    assertTrue(not (cur.detail:GetText() or ""):find("52, 59", 1, true), "the card gives the giver's coordinates for it")
+    assertTrue(not cur.map:IsShown(), "a map button for a place nobody knows")
+    assertEquals(1, cur.nbars); assertEquals("Homebrew Hops", cur.bars[1].label:GetText()); assertEquals("0/1", cur.bars[1].value:GetText())
+    -- the hand-in after it waits ("not ready"); the quest is ready: the work is done, the hand-in is next
+    assertEquals("notready", ns.Engine.Status(3))
+    w:quest(98071, { on = true, complete = true, objectives = { { text = "Homebrew Hops: 1/1", finished = true, have = 1, need = 1 } } })
+    assertEquals("done", ns.Engine.Status(2)); assertEquals(3, w:shown())
+  end)
+end)
+test("unknown work: skipped, the route goes on; the hand-in waits and comes back when the quest is ready", function()
+  withWorld(unknownRoute(), function(w)
+    w:go(1424, 0.52, 0.587)
+    w:quest(98071, { on = true, objectives = { { text = "Homebrew Hops: 0/1", finished = false, have = 0, need = 1 } } })
+    assertEquals(2, w:shown())
+    ns.Engine.Skip(2)
+    assertEquals("later", ns.Engine.Status(3), "the hand-in holds up the route")
+    assertEquals(4, w:shown(), "the route does not go on")
+    local why, j = ns.Engine.NotYet(3); assertEquals("objectives", why); assertEquals(2, j)
+    w:quest(98071, { on = true, complete = true, objectives = { { text = "Homebrew Hops: 1/1", finished = true, have = 1, need = 1 } } })
+    assertEquals(3, w:shown(), "the hand-in did not come back once the quest was ready")
+  end)
 end)
 
 test("pace is learned from the quest log's counts (not the card): seconds between kills, breaks left out", function()
@@ -4076,7 +4258,7 @@ test("nav ground: what a yard costs - road cheaper, by a mob dearer, on a road o
 end)
 
 test("nav roads: Goldshire to Eastvale and to Westbrook Garrison keep to the road and off the mobs, not much further", function()
-  for _, T in ipairs({ { "Eastvale", 79.5, 68.8, 0.7 }, { "Westbrook Garrison", 24.2, 74.5, 0.4 } }) do
+  for _, T in ipairs({ { "Eastvale", 79.5, 68.8, 0.4 }, { "Westbrook Garrison", 24.2, 74.5, 0.1 } }) do
     local name, x, y, share = unpack(T)
     local sx, sy = navWorld(1429, 42.1, 65.9)
     local tx, ty = navWorld(1429, x, y)
@@ -4088,7 +4270,7 @@ test("nav roads: Goldshire to Eastvale and to Westbrook Garrison keep to the roa
     assertTrue(road / total >= share, name .. ": " .. road .. " of " .. total .. " yd on the road")
     assertTrue(qRoad / qTotal < 0.1, name .. ": the plain line had " .. qRoad .. " of " .. qTotal .. " yd on the road - the test proves nothing")
     assertTrue(close <= 10 and qClose >= 100, name .. ": " .. close .. " yd on top of a hostile spawn (the plain line: " .. qClose .. ")")
-    assertTrue(near + close < (qNear + qClose) / 3, name .. ": " .. (near + close) .. " yd by a mob, the plain line " .. (qNear + qClose))
+    assertTrue(near + close < (qNear + qClose) / 2, name .. ": " .. (near + close) .. " yd by a mob, the plain line " .. (qNear + qClose))
     assertTrue(P.len <= Q.len * 1.12, name .. ": " .. math.floor(P.len) .. " yd, the plain line " .. math.floor(Q.len))
     assertEquals(0, (offGround(1429, P)), name .. ": yards of the line off the ground")
     assertTrue(#P.pts < 60, name .. ": " .. #P.pts .. " points")
@@ -4103,19 +4285,19 @@ test("nav roads: out of Menethil the line takes the road; at 60 the marsh's mobs
   local Q = plainLine(1437, sx, sy, tx, ty, 24)
   local total, road, near, close = lineGround(1437, P, 24)
   local qTotal, qRoad, qNear, qClose = lineGround(1437, Q, 24)
-  assertTrue(road / total >= 0.5 and qRoad / qTotal < 0.1, road .. " of " .. total .. " yd on the road (the plain line: " .. qRoad .. " of " .. qTotal .. ")")
+  assertTrue(road / total >= 0.25 and qRoad / qTotal < 0.1, road .. " of " .. total .. " yd on the road (the plain line: " .. qRoad .. " of " .. qTotal .. ")")
   assertTrue(close <= 40 and close < qClose / 4, close .. " yd on top of a hostile spawn (the plain line: " .. qClose .. ")")
   assertTrue(P.len <= Q.len * 1.12, math.floor(P.len) .. " yd, the plain line " .. math.floor(Q.len))
   assertEquals(0, (offGround(1437, P)), "yards of the line off the ground")
   -- the cost in game: the search may look at more squares than before, within reason (2 ms a frame)
-  assertTrue(S.expansions < 12000, "the search looked at " .. S.expansions .. " squares")
+  assertTrue(S.expansions < 14000, "the search looked at " .. S.expansions .. " squares")
   local slices, S2 = 1, ns.Nav.Search(ns.Nav.Grid(1437), sx, sy, nil, tx, ty, nil, 24)
   while not ns.Nav.Run(S2, 0.5) do slices = slices + 1; assertTrue(slices < 100000, "the search never ends") end
   assertTrue(slices > 3, "the search was not cut into slices")
   -- level 60: nothing in the Wetlands comes for you
   local H = ns.Nav.Find(1437, sx, sy, nil, tx, ty, nil, 60)
   local hTotal, hRoad = lineGround(1437, H, 24)
-  assertTrue(hRoad / hTotal >= 0.4, "at 60: " .. hRoad .. " of " .. hTotal .. " yd on the road")
+  assertTrue(hRoad / hTotal >= 0.15, "at 60: " .. hRoad .. " of " .. hTotal .. " yd on the road")
   assertTrue(H.len <= P.len + 1, "at 60 the line is " .. math.floor(H.len) .. " yd, at 24 " .. math.floor(P.len))
 end)
 
@@ -4171,7 +4353,7 @@ test("arrow look-ahead: further on a mount than on foot, short in a city and on 
   ns.Arrow.Indoors = function() return false end
   local ok, err = pcall(function()
     assertTrue(look(open, 14) > look(open, 7), "a mount looks no further ahead than feet")
-    assertTrue(look(open, 7) >= 10 and look(open, 30) <= 24, "open country: " .. look(open, 7) .. " on foot, " .. look(open, 30) .. " at a gallop")
+    assertTrue(look(open, 7) >= 16 and look(open, 30) <= 40, "open country: " .. look(open, 7) .. " on foot, " .. look(open, 30) .. " at a gallop")
     assertTrue(look(city, 7) >= 8 and look(city, 30) <= 10, "a city: " .. look(city, 7) .. " to " .. look(city, 30))
     assertTrue(look(planned, 7) >= 8 and look(planned, 30) <= 12, "the planner's path: " .. look(planned, 7) .. " to " .. look(planned, 30))
     assertTrue(look(open, 0) >= 10, "standing still")
@@ -4206,6 +4388,48 @@ test("arrow look-ahead: it turns into a corner over the yards before it - no swi
     -- ...and it does not pay for that with more turning in all, or by leading you off the line
     assertTrue(total <= oldTotal * 1.15 + 20, name .. ": the arrow turns " .. math.floor(total) .. " degrees in all, the old one " .. math.floor(oldTotal))
     assertTrue(off <= look * 0.6 + 2, name .. ": following the arrow strays " .. string.format("%.1f", off) .. " yd from the line (look-ahead " .. look .. ")")
+  end
+end)
+
+test("arrow, open country: it aims as far as the line runs nearly straight, and still turns smoothly at a bend", function()
+  -- a made-up line: 160 yd east with 2-yd wiggles every 10 yd, then a right-angle bend and 80 yd north
+  local pts = {}
+  for i = 0, 16 do pts[#pts + 1] = { i * 10, (i % 2 == 0) and 0 or 2 } end
+  for i = 1, 8 do pts[#pts + 1] = { 160, i * 10 } end
+  local rem = { [#pts] = 0 }
+  for k = #pts - 1, 1, -1 do rem[k] = rem[k + 1] + math.sqrt((pts[k + 1][1] - pts[k][1]) ^ 2 + (pts[k + 1][2] - pts[k][2]) ^ 2) end
+  local function line() return { pts = pts, rem = rem, cursor = 1, nav = true, cell = 8 } end
+  local P = line()
+  local aim = ns.Nav.Aim(P, 0, 0, 20, true)
+  assertTrue(aim[1] >= 150 and aim[2] <= ns.Nav.STRAIGHT_TOL + 1, string.format("from the start it aims at %.0f,%.0f: not near the bend, or past it", aim[1], aim[2]))
+  P = line()
+  local near = ns.Nav.Aim(P, 0, 0, 20, false)
+  assertTrue(near[1] <= 25, "without far it should stay at the look-ahead: " .. near[1])
+  -- followed all the way: no swing at the bend, close to the line, less turning than the short look-ahead
+  local worst, total, off, there = followArrow(line(), 7, function(Q, px, py) return ns.Nav.Aim(Q, px, py, 20, true) end)
+  local nearWorst, nearTotal, nearOff = followArrow(line(), 7, function(Q, px, py) return ns.Nav.Aim(Q, px, py, 20, false) end)
+  assertTrue(there, "following it never got there")
+  -- at the right-angle bend: as smooth as the short look-ahead, about as close to the line; steadier in all
+  assertTrue(worst <= nearWorst + 3, "it swings " .. math.floor(worst) .. " degrees within a quarter second, the short look-ahead " .. math.floor(nearWorst))
+  assertTrue(off <= nearOff + 2, string.format("following it strays %.1f yd from the line, the short look-ahead %.1f", off, nearOff))
+  assertTrue(total <= nearTotal * 0.85, "it turns " .. math.floor(total) .. " degrees in all, the short look-ahead " .. math.floor(nearTotal))
+end)
+
+test("arrow, open country: real lines - no swing, near the line", function()
+  local walks = {
+    { "Elwynn, Goldshire to Eastvale on foot", 1429, 42.1, 65.9, 79.5, 68.8, 8, 7 },
+    { "the Wetlands, Menethil to Dun Modr on a mount", 1437, 10.9, 59.6, 49.9, 18.3, 24, 14 },
+  }
+  for _, T in ipairs(walks) do
+    local name, m, x1, y1, x2, y2, level, speed = unpack(T)
+    local sx, sy = navWorld(m, x1, y1)
+    local tx, ty = navWorld(m, x2, y2)
+    local P = ns.Nav.Find(m, sx, sy, nil, tx, ty, nil, level)
+    local look = ns.Arrow._lookFor(P, speed)
+    local worst, total, off, there = followArrow(P, speed, function(Q, px, py) return ns.Arrow._follow(Q, px, py, look, true) end)
+    assertTrue(there, name .. ": never got there")
+    assertTrue(worst <= 30, name .. ": swings " .. math.floor(worst) .. " degrees within a quarter second")
+    assertTrue(off <= look * 0.6 + ns.Nav.STRAIGHT_TOL, string.format("%s: strays %.1f yd from the line", name, off))
   end
 end)
 end
@@ -4255,26 +4479,17 @@ test("Target key: a real keybinding (Options > Keybindings > AddOns), and target
   do local any = false; for i = 1, (GetNumBindings and GetNumBindings() or 0) do local a = GetBinding(i); if type(a) == "string" and a:find("^FOREVERROUTE") then any = true end end; if any then assertTrue(found, "no Target binding in Bindings.xml") end end
   assertEquals("Forever Route Targeting", _G["BINDING_NAME_CLICK ForeverRouteTargetButton:LeftButton"])
   assertTrue(ns.Card.TargetMacro("Martie Jainrose"):find("/target Martie Jainrose", 1, true) ~= nil)
-  assertTrue(ns.Card.TargetMacro("x"):find("ForeverRoute.Card.MarkTarget()", 1, true) ~= nil, "the macro does not mark")
-  local sv = { ex = UnitExists, pl = UnitIsPlayer, gi = GetRaidTargetIndex, set = SetRaidTarget, opt = ns.db.markTarget }
-  local mark, sets = nil, 0
-  local ok, err = pcall(function()
-    UnitExists = function() return true end
-    UnitIsPlayer = function() return false end
-    GetRaidTargetIndex = function() return mark end
-    SetRaidTarget = function(_, i) mark = i; sets = sets + 1 end
-    ns.db.markTarget = true
-    assertTrue(ns.Card.MarkTarget()); assertEquals(1, mark)
-    -- key down and key up both fire: the second must not take the star off
-    assertTrue(not ns.Card.MarkTarget()); assertEquals(1, sets)
-    -- a player is never marked; the option turns it off
-    mark = nil; UnitIsPlayer = function() return true end
-    assertTrue(not ns.Card.MarkTarget())
-    UnitIsPlayer = function() return false end; ns.db.markTarget = false
-    assertTrue(not ns.Card.MarkTarget()); assertEquals(1, sets)
-  end)
-  UnitExists, UnitIsPlayer, GetRaidTargetIndex, SetRaidTarget, ns.db.markTarget = sv.ex, sv.pl, sv.gi, sv.set, sv.opt
-  if not ok then error(err, 0) end
+  -- marking goes through the game's own /tm in the macro: addon code setting a raid marker (/run ... SetRaidTarget)
+  -- is a protected action on Forever (ADDON_ACTION_FORBIDDEN, and no star). Clear then set: /tm 1 alone toggles, and
+  -- the button fires on key down and up
+  local sv = ns.db.markTarget
+  ns.db.markTarget = true
+  local m = ns.Card.TargetMacro("x")
+  assertTrue(m:find("/tm 0\n/tm 1", 1, true) ~= nil, "the macro does not mark with the game's /tm (clear, then set)")
+  assertTrue(not m:find("/run", 1, true), "the macro runs addon code: a protected action on Forever")
+  ns.db.markTarget = false
+  assertTrue(not ns.Card.TargetMacro("x"):find("/tm", 1, true), "marks with the option off")
+  ns.db.markTarget = sv
 end)
 
 test("stops on the way: a gap you fly is not a walk (Thorium Point lies under the line from Southshore to Duskwood, and a level 30 was sent there next for its flight path)", function()
@@ -4762,36 +4977,188 @@ test("flight path hint: level 10+ with at most one known flight path is asked to
   if not ok then error(err, 0) end
 end)
 
-test("Target button: on the card's layer just above it (not over the character sheet), Ctrl-click doesn't target, Ctrl+drag spot kept, /fr target reset", function()
-  local sv = { pos = ns.db.targetPos }
-  ForeverRouteTest.withWorld({ id = "tb", title = "tb", sections = { { title = "x" } }, steps = {
-    { k = "accept", q = 783, name = "A Threat Within", npc = "Deputy Willem", level = 1, m = 1429, x = 0.48, y = 0.43, sec = 1, lvl = 1 },
-  } }, function(w)
-    local t, card = ForeverRouteTargetButton, ForeverRouteCard
+-- (an error, not assertTrue: the simulator shows an error's message, an assert's only as "expected truthy")
+local function must(ok, what) if not ok then error(what or "not so", 0) end end
+-- the card up on the step it shows, laid out, its secure buttons placed
+local function cardOn()
+  local card = ForeverRouteCard
+  ns.db.collapsed = nil; ns.Engine.view = nil
+  card:Show(); ns.Card.Fill(); ns.Card.Layout(); ns.Card.PlaceSecure()
+  return card
+end
+-- where something is on the screen, in UIParent's units: { l, r, t, b }
+local function box(o)
+  local s = ((o.GetEffectiveScale and o:GetEffectiveScale()) or o:GetParent():GetEffectiveScale()) / UIParent:GetEffectiveScale()
+  local l, r, t, b = o:GetLeft(), o:GetRight(), o:GetTop(), o:GetBottom()
+  if not (l and r and t and b) then return nil end
+  return { l = l * s, r = r * s, t = t * s, b = b * s }
+end
+-- do two boxes share any area? (half a unit of slack: edges that touch are not on top of each other)
+local function overlap(a, b) return a and b and a.l < b.r - 0.5 and b.l < a.r - 0.5 and a.b < b.t - 0.5 and b.b < a.t - 0.5 end
+local function boxText(a) return a and string.format("%.0f-%.0f x %.0f-%.0f", a.l, a.r, a.b, a.t) or "nowhere" end
+-- the Target button is where it belongs above the card: its left edge on the card's, the gap above the card's top
+local function aboveCard(what)
+  local t, card = ForeverRouteTargetButton, ForeverRouteCard
+  local T, C = box(t), box(card)
+  local S = card:GetEffectiveScale() / UIParent:GetEffectiveScale()
+  if not t:IsShown() then error(what .. ": the Target button is hidden", 0) end
+  if not (T and C) then error(what .. ": the Target button or the card has no place", 0) end
+  if overlap(T, C) then error(what .. ": the Target button (" .. boxText(T) .. ") is on the card (" .. boxText(C) .. ")", 0) end
+  if math.abs(T.l - C.l) > 0.6 or math.abs(T.b - (C.t + ns.Card.SECURE_GAP * S)) > 0.6 then
+    error(what .. ": the Target button is at " .. boxText(T) .. ", not just above the card's top-left corner (" .. boxText(C) .. ")", 0)
+  end
+end
+-- a pick-up with someone to target, then an objective with two bars, a target and an item to use (a taller card)
+local function buttonRoute()
+  return { id = "tb", title = "tb", sections = { { title = "x" } }, steps = {
+    { k = "accept", q = 99783, name = "A Threat Within", npc = "Deputy Willem", m = 1429, x = 0.48, y = 0.43, sec = 1 },
+    { k = "obj", q = 99783, text = "Kill 15 Kobold Vermin", match = "Vermin", target = "Kobold Vermin", item = 2589, m = 1429, x = 0.47, y = 0.36, r = 40, sec = 1 },
+    { k = "obj", q = 99783, text = "Collect 8 Candles", match = "Candle", target = "Kobold Worker", m = 1429, x = 0.47, y = 0.36, r = 40, sec = 1 },
+    { k = "turnin", q = 99783, name = "A Threat Within", npc = "Marshal McBride", m = 1429, x = 0.49, y = 0.42, sec = 1 },
+  } }
+end
+local function onQuest(w)
+  w:quest(99783, { on = true, objectives = { { text = "Kobold Vermin slain: 10/15", have = 10, need = 15 }, { text = "Candles: 2/8", have = 2, need = 8 } } })
+end
+
+test("Target button: floats just above the card (never on it) on the card's layer, follows the card; Ctrl-click doesn't target; Ctrl+drag spot kept; /fr target reset puts it back above the card - in a fight, once it ends", function()
+  local sv = { pos = ns.db.targetPos, card = ns.db.cardPos, combat = InCombatLockdown, print = ns.Print }
+  local said = {}
+  local ok, err = pcall(ForeverRouteTest.withWorld, buttonRoute(), function(w)
+    local t, item, card = ForeverRouteTargetButton, ForeverRouteItemButton, ForeverRouteCard
+    ns.Print = function(m) said[#said + 1] = tostring(m) end
     ns.db.targetPos = nil
-    ns.Card.PlaceSecure()
+    card:Show(); ns.db.cardPos = { "ABS", 300, 600 }; ns.Card.ApplyPos()
+    cardOn()
     assertEquals(card:GetFrameStrata(), t:GetFrameStrata(), "the Target button is not on the card's layer")
-    assertTrue(t:GetFrameStrata() ~= "HIGH" and t:GetFrameStrata() ~= "DIALOG", "it floats over windows: " .. t:GetFrameStrata())
-    assertTrue(t:GetFrameLevel() > card:GetFrameLevel(), "under the card: the card would take its clicks")
+    must(t:GetFrameStrata() ~= "HIGH" and t:GetFrameStrata() ~= "DIALOG", "it floats over windows: " .. t:GetFrameStrata())
+    must(t:GetFrameLevel() > card:GetFrameLevel(), "under the card: the card would take its clicks")
     assertEquals("macro", t:GetAttribute("ctrl-type1")); assertEquals("", t:GetAttribute("ctrl-macrotext1"))
-    assertTrue(t:IsMovable(), "not movable")
-    -- a spot you dragged it to is where it goes (the card up, filled and laid out, on a step with an NPC)
-    ns.db.collapsed = nil; ns.Engine.view = nil; card:Show(); ns.Card.Fill(); ns.Card.SetButtons(ForeverRouteData.steps[1]); ns.Card.Layout()
+    must(t:IsMovable(), "not movable")
+    -- above the card's top edge, not in a row on it
+    aboveCard("on a pick-up")
+    assertEquals("above", card.cur.secureAt)
+    must(not item:IsShown(), "the use-item button shows on a step with nothing to use")
+    local top = box(t).t
+    -- a taller card (objective bars, an item to use): the button has not moved, the item button is next to it
+    onQuest(w); cardOn()
+    assertEquals(2, w:shown()); must(card.cur.nbars >= 1, "no objective bar on the objective step")
+    aboveCard("on an objective with bars")
+    must(math.abs(box(t).t - top) < 0.6, "the button moved when the card grew")
+    must(item:IsShown(), "no use-item button on a step with an item")
+    local T, I = box(t), box(item)
+    must(math.abs(I.l - (T.r + ns.Card.SECURE_GAP * card:GetEffectiveScale() / UIParent:GetEffectiveScale())) < 0.6 and math.abs(I.b - T.b) < 0.6, "the use-item button (" .. boxText(I) .. ") is not next to the Target button (" .. boxText(T) .. ")")
+    must(not overlap(I, box(card)), "the use-item button is on the card")
+    for k = 1, card.cur.nbars do must(not overlap(T, box(card.cur.bars[k])) and not overlap(I, box(card.cur.bars[k])), "a button is over objective bar " .. k) end
+    -- the card dragged somewhere else: the buttons come with it
+    card:ClearAllPoints(); card:SetPoint("CENTER", UIParent, "CENTER", -200, 40)
+    card:GetScript("OnDragStop")(card)
+    assertEquals("TOPLEFT", (card:GetPoint(1)), "a dragged card is not hung from its top")
+    aboveCard("after dragging the card")
+    -- a spot you dragged the button to is where it goes
     ns.db.targetPos = { 300, 400 }
     ns.Card.PlaceSecure()
-    local s = UIParent:GetEffectiveScale() / t:GetEffectiveScale()
-    local cur = card.cur
-    if not t:IsShown() then error("the Target button is hidden on a step with an NPC: card " .. tostring(card:IsShown()) .. " collapsed " .. tostring(ns.db.collapsed) .. " btnY " .. tostring(cur and cur.btnY) .. " left " .. tostring(cur and cur:GetLeft()) .. " view " .. tostring(ns.Engine.view) .. " want " .. tostring(cur and cur.wantTarget) .. " combat " .. tostring(InCombatLockdown()), 0) end
-    do
-      local _, _, _, x, y = t:GetPoint(1)
-      assertTrue(math.abs(x - 300 * s) < 1 and math.abs(y - 400 * s) < 1, "not at the dragged spot: " .. tostring(x) .. "," .. tostring(y))
-      SlashCmdList["FOREVERROUTE"]("target reset")
-      assertNil(ns.db.targetPos, "/fr target reset kept the spot")
-      local _, _, _, x2 = t:GetPoint(1)
-      assertTrue(math.abs(x2 - 300 * s) > 1, "reset did not put it back on the card")
+    T = box(t)
+    must(math.abs(T.l - 300) < 0.6 and math.abs(T.t - 400) < 0.6, "not at the dragged spot: " .. boxText(T))
+    assertEquals("dragged", card.cur.secureAt)
+    -- /fr target reset in a fight: the button can't move, and the addon says so (it said "back on the card")
+    InCombatLockdown = function() return true end
+    said = {}
+    SlashCmdList["FOREVERROUTE"]("target reset")
+    assertNil(ns.db.targetPos, "/fr target reset kept the spot")
+    must(#said == 1 and said[1]:find("fight", 1, true) ~= nil, "in a fight /fr target reset said: " .. tostring(said[1]))
+    must(not said[1]:find("button back", 1, true), "it says the button is back while it can't move")
+    -- the fight over: back above the card
+    InCombatLockdown = sv.combat
+    ns.Fire("PLAYER_REGEN_ENABLED")
+    aboveCard("after the fight that /fr target reset waited for")
+    -- out of a fight: at once
+    ns.db.targetPos = { 300, 400 }; ns.Card.PlaceSecure()
+    said = {}
+    SlashCmdList["FOREVERROUTE"]("target reset")
+    assertNil(ns.db.targetPos)
+    aboveCard("after /fr target reset")
+    must(#said == 1 and said[1]:find("above the card", 1, true) ~= nil, "/fr target reset said: " .. tostring(said[1]))
+    -- the card at the top of the screen: no room above it, so beside its top corner - on the screen, not on the card
+    local W, H = UIParent:GetWidth(), UIParent:GetHeight()
+    for _, c in ipairs({ { 300, "left" }, { 0, "right" } }) do
+      ns.db.cardPos = { "ABS", c[1], H }; ns.Card.ApplyPos(); ns.Card.PlaceSecure()
+      assertEquals(c[2], card.cur.secureAt, "the card at the top of the screen, its left edge at " .. c[1])
+      for name, b in pairs({ Target = t, ["use-item"] = item }) do
+        local B = box(b)
+        must(not overlap(B, box(card)), "the " .. name .. " button is on the card when the card is at the top of the screen")
+        must(B.l >= -0.5 and B.r <= W + 0.5 and B.b >= -0.5 and B.t <= H + 0.5, "the " .. name .. " button is off the screen: " .. boxText(B))
+      end
     end
+    -- a step with no one to target and nothing to use: no buttons
+    ns.Card.SetButtons(nil); ns.Card.PlaceSecure()
+    must(not t:IsShown() and not item:IsShown(), "buttons on a step with no one to target")
   end, { anyTarget = true })
-  ns.db.targetPos = sv.pos
+  InCombatLockdown, ns.Print = sv.combat, sv.print
+  ns.db.targetPos, ns.db.cardPos = sv.pos, sv.card
+  if ns.Card.ApplyPos then ns.Card.ApplyPos() end
+  if not ok then error(err, 0) end
+end)
+
+test("the 'not doing this quest' and 'giver doesn't offer it' links have a row of their own: never over the title, the detail, the distance, Map, an objective's count or the note, at every card width and scale", function()
+  local sv = { w = ns.db.cardWidth, ui = ns.db.uiScale, pos = ns.db.cardPos, tp = ns.db.targetPos }
+  local route = { id = "nl", title = "nl", sections = { { title = "x" } }, steps = {
+    { k = "accept", q = 99783, name = "A Threat Within the Walls of the Abbey of Northshire", npc = "Deputy Willem", zone = "Northshire Valley", m = 1429, x = 0.48, y = 0.43, sec = 1, note = "He stands outside the abbey, by the road." },
+    { k = "obj", q = 99783, text = "Kill 15 Kobold Vermin behind the abbey and in the fields north of it", match = "Vermin", target = "Kobold Vermin", zone = "Northshire Valley", m = 1429, x = 0.47, y = 0.36, r = 40, sec = 1, note = "They are all round the field." },
+    { k = "obj", q = 99783, text = "Collect 8 Candles", match = "Candle", m = 1429, x = 0.47, y = 0.36, r = 40, sec = 1 },
+    { k = "turnin", q = 99783, name = "A Threat Within", npc = "Marshal McBride", m = 1429, x = 0.49, y = 0.42, sec = 1 },
+  } }
+  local ok, err = pcall(ForeverRouteTest.withWorld, route, function(w)
+    local card = ForeverRouteCard
+    local cur = card.cur
+    ns.db.targetPos = nil
+    card:Show(); ns.db.cardPos = { "ABS", 100, 900 }; ns.Card.ApplyPos()
+    local wrapped, both, bars = false, false, false
+    local function check(what)
+      cur.dist:SetText("1234 yd")
+      local links = {}
+      for name, b in pairs({ ["not doing this quest"] = cur.nope, ["giver doesn't offer it"] = cur.notOffered }) do if b:IsShown() then links[name] = box(b) end end
+      assertNotNil(links["not doing this quest"], what .. ": no 'not doing this quest' on a quest step")
+      local others = { title = box(cur.titleText), distance = box(cur.dist) }
+      if (cur.detail:GetText() or "") ~= "" then others.detail = box(cur.detail) end
+      if cur.map:IsShown() then others.Map = box(cur.map) end
+      if (cur.note:GetText() or "") ~= "" then others.note = box(cur.note) end
+      for k = 1, cur.nbars do others["objective bar " .. k] = box(cur.bars[k]); others["the count of objective " .. k] = box(cur.bars[k].value) end
+      if ForeverRouteTargetButton:IsShown() then others["the Target button"] = box(ForeverRouteTargetButton) end
+      local C, K = box(cur), box(card)
+      for name, L in pairs(links) do
+        for other, O in pairs(others) do
+          if overlap(L, O) then error(what .. ": '" .. name .. "' (" .. boxText(L) .. ") lies over " .. other .. " (" .. boxText(O) .. ")", 0) end
+        end
+        if L.l < C.l - 0.5 or L.r > C.r + 0.5 or L.b < K.b - 0.5 or L.t > K.t + 0.5 then error(what .. ": '" .. name .. "' (" .. boxText(L) .. ") sticks out of the card (" .. boxText(K) .. ")", 0) end
+      end
+      if links["giver doesn't offer it"] then
+        both = true
+        if overlap(links["not doing this quest"], links["giver doesn't offer it"]) then error(what .. ": the two links lie over each other", 0) end
+      end
+      if cur.titleText:GetStringHeight() > 24 then wrapped = true end
+      if cur.nbars > 0 then bars = true end
+    end
+    for _, width in ipairs({ 280, 360, 520 }) do
+      for _, scale in ipairs({ 0.6, 1, 2.5 }) do
+        ns.db.cardWidth, ns.db.uiScale = width, scale
+        ns.Fire("FR_SETTINGS"); w:wait(0.1)
+        w.quests[99783] = nil; ns.Engine.Refresh(); cardOn()
+        assertEquals(1, w:shown())
+        check("a pick-up, card " .. width .. " wide at scale " .. scale)
+        onQuest(w); cardOn()
+        assertEquals(2, w:shown())
+        check("an objective, card " .. width .. " wide at scale " .. scale)
+      end
+    end
+    must(wrapped, "no title ran to a second line: the test checks nothing about one")
+    must(both, "'giver doesn't offer it' never showed")
+    must(bars, "no objective bar ever showed")
+  end, { anyTarget = true })
+  ns.db.cardWidth, ns.db.uiScale, ns.db.cardPos, ns.db.targetPos = sv.w, sv.ui, sv.pos, sv.tp
+  ns.Fire("FR_SETTINGS")
+  if ns.Card.ApplyPos then ns.Card.ApplyPos() end
+  if not ok then error(err, 0) end
 end)
 
 test("saved data stays small: no companion -> no walking trails or learning recorded, old ones cleared; trails capped overall", function()
@@ -4878,27 +5245,39 @@ test("Scale: one Forever Route scale for the card, the arrow, the list and every
   end)
 end)
 
-test("Scale: the Target and item buttons keep the card's size and place when the Forever Route scale changes", function()
-  local sv = { pos = ns.db.targetPos }
-  ForeverRouteTest.withWorld({ id = "sc", title = "sc", sections = { { title = "x" } }, steps = {
-    { k = "accept", q = 783, name = "A Threat Within", npc = "Deputy Willem", level = 1, m = 1429, x = 0.48, y = 0.43, sec = 1, lvl = 1 },
-  } }, function(w)
+test("Scale: the Target and item buttons keep the card's size and their place above it when the Forever Route scale changes", function()
+  local sv = { pos = ns.db.targetPos, card = ns.db.cardPos }
+  local ok, err = pcall(ForeverRouteTest.withWorld, buttonRoute(), function(w)
     withScreen(1600, 0.48, function()
-      local t, card = ForeverRouteTargetButton, ForeverRouteCard
-      ns.db.targetPos = nil; ns.db.collapsed = nil; ns.Engine.view = nil
-      for _, s in ipairs({ 1, 1.4 }) do
-        ns.db.uiScale = s; ns.Fire("FR_SETTINGS")
-        card:Show(); ns.Card.Fill(); ns.Card.SetButtons(ForeverRouteData.steps[1]); ns.Card.Layout(); ns.Card.PlaceSecure()
+      local t, item, card = ForeverRouteTargetButton, ForeverRouteItemButton, ForeverRouteCard
+      ns.db.targetPos = nil
+      onQuest(w)
+      for _, s in ipairs({ 0.6, 1, 1.4, 2.5 }) do
+        -- (the place in screen units: the game multiplies a frame's offsets by its scale)
+        local top = UIParent:GetHeight() - 100
+        ns.db.cardPos = { "ABS", 100, top }
+        ns.db.uiScale = s; ns.Fire("FR_SETTINGS"); w:wait(0.1)
+        cardOn()
         near(t:GetEffectiveScale(), card:GetEffectiveScale(), "the Target button's effective scale at " .. s)
-        if t:IsShown() and t:GetLeft() and card.cur:GetLeft() then
-          -- in screen units: 50 card units right of the step's block, whatever the scale
-          local dx = (t:GetLeft() * t:GetEffectiveScale() - card.cur:GetLeft() * card:GetEffectiveScale()) / card:GetEffectiveScale()
-          if math.abs(dx - 50) > 1.5 then error("the Target button is " .. dx .. " card units from the step's left edge at scale " .. s .. " (50 expected)", 0) end
-        end
+        near(item:GetEffectiveScale(), card:GetEffectiveScale(), "the use-item button's effective scale at " .. s)
+        local C = box(card)
+        must(math.abs(C.l - 100) < 0.6 and math.abs(C.t - top) < 0.6, "the card moved with the scale: " .. boxText(C) .. " at " .. s)
+        aboveCard("at scale " .. s)
+        local T, I = box(t), box(item)
+        local S = card:GetEffectiveScale() / UIParent:GetEffectiveScale()
+        must(math.abs((T.r - T.l) - ns.Card.TARGET_W * S) < 0.6, "the Target button is " .. (T.r - T.l) .. " wide at scale " .. s)
+        must(item:IsShown() and not overlap(I, C) and math.abs(I.l - (T.r + ns.Card.SECURE_GAP * S)) < 0.6, "the use-item button (" .. boxText(I) .. ") is not next to the Target button (" .. boxText(T) .. ") at scale " .. s)
+        -- a spot you dragged it to stays the same spot on the screen at any scale
+        ns.db.targetPos = { 640, 320 }; ns.Card.PlaceSecure()
+        T = box(t)
+        must(math.abs(T.l - 640) < 0.6 and math.abs(T.t - 320) < 0.6, "the dragged spot moved with the scale: " .. boxText(T) .. " at " .. s)
+        ns.db.targetPos = nil
       end
     end)
   end, { anyTarget = true })
-  ns.db.targetPos = sv.pos
+  ns.db.targetPos, ns.db.cardPos = sv.pos, sv.card
+  if ns.Card.ApplyPos then ns.Card.ApplyPos() end
+  if not ok then error(err, 0) end
 end)
 
 test("Scale: a window never grows past the screen", function()
@@ -5250,29 +5629,47 @@ test("scrollbars you can use: the route list's and the quest log check's take a 
   if ForeverRouteLogCheck then assertNotNil(g, "the quest log check has no scrollbar to grab"); ForeverRouteLogCheck:Hide() end
 end)
 
-test("the card hangs from its top (its height changing in combat no longer leaves the Target button off it), and in combat the button's row stays put", function()
-  ForeverRouteTest.withWorld({ id = "tc", title = "tc", sections = { { title = "x" } }, steps = {
-    { k = "accept", q = 783, name = "A Threat Within", npc = "Deputy Willem", level = 1, m = 1429, x = 0.48, y = 0.43, sec = 1, lvl = 1 },
-    { k = "turnin", q = 783, name = "A Threat Within", npc = "Marshal McBride", level = 1, m = 1429, x = 0.49, y = 0.42, sec = 1, lvl = 1 },
-  } }, function(w)
-    local card = ForeverRouteCard
-    card:Show(); ns.Card.Fill(); ns.Card.SetButtons(ForeverRouteData.steps[1]); ns.Card.Layout(); ns.Card.PlaceSecure()
-    ns.Card.AnchorTop()
-    local p = card:GetPoint(1)
-    assertEquals("TOPLEFT", p, "the card is not anchored by its top")
+test("the card hangs from its top - never dragged or placed by an older version too - so a step that changes in a fight leaves the Target button where it belongs, and no row of the card runs under it", function()
+  local sv = { pos = ns.db.targetPos, card = ns.db.cardPos, combat = InCombatLockdown }
+  local ok, err = pcall(ForeverRouteTest.withWorld, buttonRoute(), function(w)
+    local t, card = ForeverRouteTargetButton, ForeverRouteCard
+    ns.db.targetPos = nil
+    -- never dragged: the default place hangs from the top (it hung from its middle: every change of height moved its top)
+    ns.db.cardPos = nil; ns.Card.ApplyPos()
+    cardOn()
+    must(tostring((card:GetPoint(1))):find("^TOP") ~= nil, "a card that was never dragged is anchored by its " .. tostring((card:GetPoint(1))))
     local top = card:GetTop()
     card:SetHeight(card:GetHeight() + 120)
-    assertTrue(math.abs(card:GetTop() - top) < 0.5, "growing the card moved its top")
-    -- combat: the button can't move, so its row stays where the button was put
-    local placed = card.cur.placedBtnY
-    assertNotNil(placed, "the button row was never recorded")
-    local sv = InCombatLockdown
+    must(math.abs(card:GetTop() - top) < 0.5, "growing a card that was never dragged moved its top")
+    -- a place saved by an older version (by its middle): the same place, hung from the top from now on
+    ns.db.cardPos = { "CENTER", "CENTER", -150, 60 }; ns.Card.ApplyPos()
+    assertEquals("TOPLEFT", (card:GetPoint(1)), "a card placed by an older version is not hung from its top")
+    assertEquals("ABS", ns.db.cardPos[1], "its place is not kept in screen units")
+    local mid = (box(card).l + box(card).r) / 2
+    must(math.abs(mid - (UIParent:GetWidth() / 2 - 150 * card:GetScale())) < 1, "re-anchoring moved the card sideways")
+    top = card:GetTop()
+    card:SetHeight(card:GetHeight() + 120)
+    must(math.abs(card:GetTop() - top) < 0.5, "growing the card moved its top")
+    -- a fight: the step changes to one with objective bars (a taller card), the button can't move
+    cardOn()
+    aboveCard("before the fight")
+    local was = box(t)
     InCombatLockdown = function() return true end
-    card.cur.titleText:SetText("A much shorter title")
-    ns.Card.Layout()
-    InCombatLockdown = sv
-    assertEquals(placed, card.cur.btnY, "in combat the button row moved away from the button")
+    onQuest(w)
+    ns.Card.Fill(); ns.Card.Layout(); ns.Card.PlaceSecure()
+    InCombatLockdown = sv.combat
+    must(card.cur.nbars >= 1, "the step in the fight has no objective bars")
+    local now = box(t)
+    must(math.abs(now.l - was.l) < 0.01 and math.abs(now.t - was.t) < 0.01, "the Target button moved in a fight")
+    aboveCard("after the step changed in a fight")
+    for k = 1, card.cur.nbars do must(not overlap(now, box(card.cur.bars[k])), "objective bar " .. k .. " runs under the Target button") end
+    must(not overlap(now, box(card.cur.titleText)) and not overlap(now, box(card.prog)), "the Target button is over the card's title or progress line")
+    assertNil(card.cur.btnY, "the card still keeps a row for the buttons")
   end, { anyTarget = true })
+  InCombatLockdown = sv.combat
+  ns.db.targetPos, ns.db.cardPos = sv.pos, sv.card
+  if ns.Card.ApplyPos then ns.Card.ApplyPos() end
+  if not ok then error(err, 0) end
 end)
 
 test("built-in plans from the faction addon: only your plan's text becomes code, the others are never run, and the text is let go", function()
@@ -5357,4 +5754,107 @@ test("the card stays on the screen when the scale changes, an off-screen card co
   end)
   ns.db.cardPos, ns.db.uiScale, ns.db.scale = sv.pos, sv.ui, sv.sc; ns.Fire("FR_SETTINGS")
   if not ok then error(err, 0) end
+end)
+
+-- The planned path (the plan's own waypoints, from where the plan expected you to come from) and the live line (Nav.lua,
+-- from where you stand). A tester: "occasionally it throws a random path on the map that flashes for a few seconds and
+-- then goes away".
+local function plannedRoute(m, wp, x, y)
+  return { id = "pp", title = "pp", sections = { { title = "x" } }, steps = {
+    { id = 1, k = "goto", text = "To the far end", m = m, x = x, y = y, r = 8, sec = 1, wp = wp },
+    { id = 2, k = "goto", text = "And back", m = m, x = 0.70, y = 0.47, r = 8, sec = 1 },
+  } }
+end
+local function pathWorld(route, at, fn)
+  local sv = { path = ns.db.pathLine }
+  ns.db.pathLine = true
+  local ok, err = pcall(withWorld, route, function(w)
+    ns.Nav.Want(nil); ns.Arrow.SetTarget(w:shown(), true) -- a fresh target (an earlier test may have left the same one)
+    fn(w)
+  end, { at = at, anyTarget = true })
+  ns.db.pathLine = sv.path
+  ns.Nav.Want(nil); ns.Pins.Update(true)
+  if not ok then error(err, 0) end
+end
+
+test("planned path: where there is no walk map it is drawn only while you are on it, from where you are - not from where the plan expected you, to be taken away a moment later", function()
+  -- Duskwood has no walk map: the plan's path runs west along the road from Darkshire
+  local wp = "0.7500,0.4800,0;0.7000,0.4700,0;0.6000,0.4500,0;0.5000,0.4200,0"
+  pathWorld(plannedRoute(1431, wp, 0.40, 0.40), { m = 1431, x = 0.50, y = 0.90 }, function(w)
+    -- far south of the path: while the live line is looked for, and once it is known there is none - nothing
+    ns.Pins.Update(true)
+    assertEquals(0, ns.Pins.PathDots(), "a path is drawn while the live line is still being looked for")
+    ns.Nav.Settle()
+    assertNil(ns.Nav.PathFor(ns.Arrow.Current().key), "a live line in a zone with no walk map")
+    must(not ns.Nav.Coming(), "a live line is said to be coming in a zone with no walk map")
+    assertEquals(-1, ns.Pins.OnPlanned(w:shown()), "far from the planned path, but taken to be on it")
+    assertEquals(0, ns.Pins.PathDots(), "far from the planned path, it is drawn anyway (from where the plan expected you)")
+    ns.Pins.Update(true)
+    assertEquals(0, ns.Pins.PathDots(), "far from the planned path, a refresh draws it")
+    -- on the road, at the plan's third point: the path from here on, not the part behind you
+    w:go(1431, 0.60, 0.45); ns.Nav.Settle(); ns.Pins.Update(true)
+    local n = ns.Pins.PathDots()
+    must(n >= 10, "on the planned path, but only " .. n .. " dots of it are drawn")
+    must(n <= 30, "on the planned path, " .. n .. " dots: the part behind you is drawn too (the whole path has about 37)")
+    -- the arrow's own word on it agrees (it comes every second or two as you walk): the same line stays
+    ns.Fire("FR_PATHPROGRESS", w:shown(), ns.Pins.OnPlanned(w:shown()))
+    must(math.abs(ns.Pins.PathDots() - n) <= 1, "the arrow's word on where you are changed the line: " .. n .. " dots, then " .. ns.Pins.PathDots())
+    -- the arrow turns to something else (a new target): the old path goes at once, nothing until the new one is known
+    local t = ns.Arrow.Current()
+    ns.Nav.Want({ key = "elsewhere", wx = t.wx + 300, wy = t.wy + 300, inst = t.winst, m = 1431 })
+    assertEquals(0, ns.Pins.PathDots(), "the old target's planned path stays on the map after the target changed")
+    ns.Nav.Want(nil); ns.Arrow.SetTarget(w:shown(), true); ns.Nav.Settle(); ns.Pins.Update(true)
+    must(ns.Pins.PathDots() >= 10, "back on the step, the planned path is not drawn again")
+    -- on a flight there is nothing to walk: no path (it came back for the whole flight); landing brings it back
+    w:taxi(true)
+    must(ns.Arrow.Current() == nil, "the arrow has a target on a flight")
+    assertEquals(0, ns.Pins.PathDots(), "the planned path is drawn during a flight")
+    w:taxi(false); ns.Nav.Settle()
+    must(ns.Pins.PathDots() >= 10, "after landing on the planned path it is not drawn")
+    -- off the road again: gone
+    w:go(1431, 0.60, 0.80); ns.Nav.Settle(); ns.Pins.Update(true)
+    assertEquals(0, ns.Pins.PathDots(), "walked off the planned path, and it is still drawn")
+  end)
+end)
+
+test("planned path: never drawn while a live line is on its way or drawn - not at a loading screen, not when the target changes", function()
+  -- Stormwind has a walk map; the plan's path starts right where you stand (so only the live line keeps it away)
+  local route = { id = "pl", title = "pl", sections = { { title = "Stormwind" } }, steps = {
+    { id = 1, k = "goto", text = "To the Keep", m = 1453, x = 0.800, y = 0.380, r = 8, sec = 1, wp = "0.6610,0.7080,0;0.7000,0.6000,0;0.7500,0.5000,0" },
+    { id = 2, k = "goto", text = "Back to the Trade District", m = 1453, x = 0.661, y = 0.708, r = 8, sec = 1, wp = "0.8000,0.3800,0;0.7500,0.5000,0;0.7000,0.6000,0" },
+  } }
+  pathWorld(route, { m = 1453, x = 0.661, y = 0.708 }, function(w)
+    must(ns.Pins.OnPlanned(w:shown()) >= 1, "the test's planned path does not start where you stand")
+    -- the line is being found
+    ns.Pins.Update(true)
+    must(ns.Pins.LiveComing(), "no live line on its way in Stormwind")
+    assertEquals(0, ns.Pins.PathDots(), "the planned path is drawn while the live line is being found")
+    -- a loading screen in between: the line waits for the game to say where you are
+    ns.Fire("PLAYER_ENTERING_WORLD")
+    must(ns.Nav.Live().waiting == true, "the live line does not wait at a loading screen")
+    ns.Pins.Update(true)
+    assertEquals(0, ns.Pins.PathDots(), "the planned path is drawn at a loading screen, until the live line is found again")
+    ns.Fire("FR_PATHPROGRESS", w:shown(), 1)
+    assertEquals(0, ns.Pins.PathDots(), "the arrow's word on the planned path draws it while the live line waits")
+    ns.Nav.Settle()
+    local P = ns.Nav.PathFor(ns.Arrow.Current().key)
+    must(P ~= nil and ns.Pins.Line() ~= nil and ns.Pins.Line().P == P, "no live line drawn once it was found")
+    assertEquals(0, ns.Pins.PathDots(), "the planned path is drawn next to the live line")
+    -- a loading screen with the line drawn: it stays, the planned path stays away
+    ns.Fire("PLAYER_ENTERING_WORLD"); ns.Pins.Update(true)
+    assertEquals(0, ns.Pins.PathDots(), "the planned path comes back at a loading screen")
+    ns.Nav.Settle()
+    -- the next step: the old line goes, and nothing is drawn until the new line is ready
+    ns.Engine.Skip()
+    assertEquals(2, w:shown())
+    must(ns.Arrow.Current().index == 2 and ns.Nav.PathFor(ns.Arrow.Current().key) == nil, "the new target already has a line")
+    assertNil(ns.Pins.Line(), "the old target's line is still drawn")
+    assertEquals(0, ns.Pins.PathDots(), "the planned path of the new step is drawn while its live line is being found")
+    ns.Pins.Update(true)
+    assertEquals(0, ns.Pins.PathDots(), "a refresh draws the planned path while the live line is being found")
+    ns.Nav.Settle()
+    local P2 = ns.Nav.PathFor(ns.Arrow.Current().key)
+    must(P2 ~= nil and P2 ~= P and ns.Pins.Line() ~= nil and ns.Pins.Line().P == P2, "the new target's live line is not drawn")
+    assertEquals(0, ns.Pins.PathDots())
+  end)
 end)

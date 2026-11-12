@@ -42,7 +42,8 @@ local function withWorld(route, fn, opts)
     local p = ns.Pins.First()
     -- the first pin is the card's step, or - when the card's step has no place (hearth, a trip to a zone) - the next
     -- step that has one: where you're headed
-    local function placeless(j) local st = ForeverRouteData and ForeverRouteData.steps and ForeverRouteData.steps[j]; return st and not (st.m and st.x) end
+    -- (a step whose work has no place in the quest data, s.unknown, is placeless too: its spot only orders it)
+    local function placeless(j) local st = ForeverRouteData and ForeverRouteData.steps and ForeverRouteData.steps[j]; return st and (not (st.m and st.x) or st.unknown) end
     local okPin = (p == i)
     if i and p and p > i then okPin = true; for j = i + 1, p - 1 do if not (placeless(j) or ns.Engine.IsDone(j)) then okPin = false end end; if not placeless(i) then okPin = false end end
     if i and p then checks.pins = checks.pins + 1; if not okPin then error(what .. ": the first pin marks step " .. tostring(p) .. ", the card shows " .. i, 0) end end
