@@ -34,8 +34,8 @@ ns.FLIGHT_BY = {
     [1452] = { { 0.6233, 0.3661, "Maethrya", "Everlook, Winterspring" } },
     [1453] = { { 0.7129, 0.7223, "Dungar Longdrink", "Stormwind, Elwynn" } },
     [1455] = { { 0.5550, 0.4774, "Gryth Thurden", "Ironforge, Dun Morogh" } },
-    [2482] = { { 0.6884, 0.4399, "Fayran Elthas", "Summit of Eternity, Mount Hyjal" }, { 0.5501, 0.8276, "Bluebell", "Tainted Foothills, Mount Hyjal" } },
-    [2548] = { { 0.6064, 0.8151, "Gretchen Mayberry", "Farholde Keep, Riverglades" } },
+    [2482] = { { 0.6871, 0.4680, "Fayran Elthas", "Summit of Eternity, Mount Hyjal" }, { 0.5499, 0.8278, "Bluebell", "Tainted Foothills, Mount Hyjal" } },
+    [2548] = { { 0.6065, 0.8151, "Gretchen Mayberry", "Farholde Keep, Riverglades" } },
   },
   Horde = {
     [1413] = { { 0.5150, 0.3034, "Devrak", "Crossroads, The Barrens" }, { 0.4445, 0.5915, "Omusa Thunderhorn", "Camp Taurajo, The Barrens" }, { 0.6308, 0.3716, "Bragok", "Ratchet, The Barrens" } },
@@ -65,8 +65,8 @@ ns.FLIGHT_BY = {
     [1454] = { { 0.4512, 0.6389, "Doras", "Orgrimmar, Durotar" } },
     [1456] = { { 0.4700, 0.4983, "Tal", "Thunder Bluff, Mulgore" } },
     [1458] = { { 0.6325, 0.4856, "Michael Garrett", "Undercity, Tirisfal" } },
-    [2482] = { { 0.6884, 0.4399, "Fayran Elthas", "Summit of Eternity, Mount Hyjal" }, { 0.5501, 0.8276, "Bluebell", "Tainted Foothills, Mount Hyjal" } },
-    [2548] = { { 0.5957, 0.4514, "Grakna", "Rog'mar, Riverglades" } },
+    [2482] = { { 0.6871, 0.4680, "Fayran Elthas", "Summit of Eternity, Mount Hyjal" }, { 0.5499, 0.8278, "Bluebell", "Tainted Foothills, Mount Hyjal" } },
+    [2548] = { { 0.5951, 0.4520, "Grakna", "Rog'mar, Riverglades" } },
   },
 }
 ns.FLIGHT = ns.FLIGHT_BY.Alliance -- until ns.UseFaction (Core.lua) knows yours

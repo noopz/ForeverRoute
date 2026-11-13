@@ -43,8 +43,12 @@ const { spawnSync } = require('child_process');
 const { readChar } = require('./save-fixture');
 
 const ROOT = path.join(__dirname, '..');
-const SIM = path.join(ROOT, 'sim', 'pkg', 'wow-ui-sim-v0.1.40-forever-windows-x86_64');
+const SIM = path.join(ROOT, 'sim', 'pkg', require('fs').readFileSync(path.join(__dirname, 'sim-version.txt'), 'utf8').trim()) /* tools/sim-version.txt: the simulator in use */;
 
+// the simulator knows the original races only: Forever's own (Skyborne) log in as the nearest one. An unknown race
+// made the simulator open an error dialog on the desktop and wait for someone to click it.
+const SIM_RACE = { human: 'Human', dwarf: 'Dwarf', gnome: 'Gnome', nightelf: 'NightElf', skyborne: 'NightElf', orc: 'Orc', troll: 'Troll', tauren: 'Tauren', undead: 'Scourge', scourge: 'Scourge' }; // (as tools/simplay.js)
+const simRaceOf = (r) => SIM_RACE[String(r || '').toLowerCase().replace(/[^a-z]/g, '')] || 'Gnome';
 // ---------------------------------------------------------------- arguments
 const args = {};
 for (let a = process.argv.slice(2), i = 0; i < a.length; i++) {
@@ -459,7 +463,7 @@ function run(scns) {
     fs.writeFileSync(path.join(dest, 'tests', 'replay_test.lua'), testFile(scns));
     fs.mkdirSync(path.join(work, 'wtf'), { recursive: true });
     const r = spawnSync(path.join(SIM, 'wow-sim.exe'), ['--allow-ui-version-mismatch', '--addons-path', work, '--session-wtf-path', path.join(work, 'wtf'),
-      '--class', who.class, '--race', who.race, 'run-tests', 'ForeverRoute'],
+      '--class', who.class, '--race', simRaceOf(who.race), 'run-tests', 'ForeverRoute'],
     { cwd: SIM, env: { ...process.env, WOW_INSTALL_PATH: require('./game-dir').WOW }, encoding: 'utf8', timeout: 600000, maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'pipe'] });
     const out = (String(r.stdout || '') + '\n' + String(r.stderr || '') + (r.error ? '\n' + r.error.message : '')).replace(/\x1b\[[0-9;]*m/g, '');
     if (process.env.FR_KEEP) { fs.writeFileSync(path.join(work, 'out.txt'), out); console.log('kept ' + work); }

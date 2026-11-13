@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.4.6 - 2026-11-13
+- Arrived somewhere the plan comes back to later (you hearthed to Stormwind, flew into a town): if all of that later visit can be done now, it's done now and the trip back is dropped - "the plan comes back here for this later".
+- Already where your plan goes after its next trip (you flew on ahead, or rode there yourself): the card starts on the plan's quests where you are, and the trip waits.
+- A pick-up is never offered before the quest that leads to it is handed in, whatever the plan says (For Further Study without Gleaning Our Future).
+- Plans made with quests already finished in your log no longer fly you back and forth to their givers.
+- A step that needs a flight, a boat or your hearthstone reads "Travel to Wetlands", with the step itself under it.
+- The arrow: on the Deeprun Tram it says to ride it; riding to a flight master it aims at him once you're past the trip's first waypoint (Theramore); a ride aims at the border, not a flight master the road passes; a line that loops back past you can't pull it backwards; after you die it points to your corpse.
+- Turtle Meat and similar: "A few in Hillsbrad Foothills too - the plan farms the bigger group in Alterac Mountains".
+- Horde: the zone-choice prompt knows every capital, and warlocks get the grimoire errand in Orgrimmar and the Undercity.
+- A dungeon or class route you didn't pick is never where a new plan puts you (a plan with no leveling path put a player on Gnomeregan).
+- A flight-path step ticks only for its own flight point, not another in the same zone; automatic ticks no longer count as "ticked by hand".
+- The other faction's towns are named (Southshore, Refuge Pointe - not "Darla Harris's town").
+- "Save & replan" on a flight only shows when the companion app plans for you. The route list's zone chips show names only.
+- Quest data: QuestieDB 1.1.0.
+
 ## 1.4.5 - 2026-11-13
 - A zone change says why: "Going to Alterac Mountains for 2 quests (Soothing Turtle Bisque, Alterac Granite), then Hillsbrad Foothills" on the card, above how to get there.
 - Zones ahead: a small panel beside the card (the tab on its edge) lists where the route goes next and how many quests in each. The route list's zone chips start from where you are, not from level 1.

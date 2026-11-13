@@ -17,7 +17,11 @@ const MIN_NPCS = 8, SEED_PCT = 4, MEMBER_PCT = 6;
 const TOWN_OF_FM = { Devrak: 'the Crossroads', Zarise: 'Tarren Mill', Urda: 'Hammerfall', Vhulgra: 'Splintertree Post', Andruk: "Zoram'gar Outpost",
   Tharm: 'Sun Rock Retreat', Nyse: 'Freewind Post', Thalon: 'Shadowprey Village', Shardi: 'Brackenwall Village', Gorrik: 'Kargath', Breyk: 'Stonard',
   Thysta: "Grom'gol", 'Omusa Thunderhorn': 'Camp Taurajo', Gorkas: 'Revantusk Village', Shyn: 'Camp Mojache', Brakkar: 'Bloodvenom Post', 'Karos Razok': 'the Sepulcher',
-  'Michael Garrett': 'the Undercity' };
+  'Michael Garrett': 'the Undercity', Doras: 'Orgrimmar' };
+// any other flight master: the town in its flight point's name ('Southshore, Hillsbrad' -> Southshore), from the addon's
+// flight masters (tools/flightmasters.js: the client's flight points) - not 'Darla Harris's town'
+const TOWN_OF_FP = {};
+for (const m of require('fs').readFileSync(require('path').join(__dirname, '..', 'addon', 'ForeverRoute', 'FlightMasters.lua'), 'utf8').matchAll(/\{ [\d.]+, [\d.]+, "([^"]+)", "([^",]+)/g)) TOWN_OF_FP[m[1]] = m[2];
 // a zone's size in yards (its map bounds), to turn map percent into yards
 const yardsPerPct = (t) => { const b = t && (t.target_bounds || t.source_bounds); return b ? Math.max(Math.abs(b.right - b.left), Math.abs(b.bottom - b.top)) / 100 : 0; };
 function towns(side) {
@@ -42,7 +46,7 @@ function towns(side) {
       const rPct = ds[Math.floor(ds.length * 0.75)] || ds[ds.length - 1];
       const t = T[z];
       const fm = mem.map((j) => pts[j]).find((p) => /Wind Rider|Bat Handler|Gryphon Master|Hippogryph Master/i.test(p.sub || ''));
-      out.push({ name: fm ? (TOWN_OF_FM[fm.name] || fm.name + "'s town") : 'a ' + (side === 'H' ? 'Horde' : 'Alliance') + ' camp', m: t.ui_map_id, zone: t.target_name, x: +(cx / 100).toFixed(4), y: +(cy / 100).toFixed(4), r: Math.round(Math.max(40, rPct * yardsPerPct(t))), n: mem.length, fm: fm ? fm.name : undefined });
+      out.push({ name: fm ? (TOWN_OF_FM[fm.name] || TOWN_OF_FP[fm.name] || fm.name + "'s town") : (side === 'H' ? 'a Horde' : 'an Alliance') + ' camp', m: t.ui_map_id, zone: t.target_name, x: +(cx / 100).toFixed(4), y: +(cy / 100).toFixed(4), r: Math.round(Math.max(40, rPct * yardsPerPct(t))), n: mem.length, fm: fm ? fm.name : undefined });
     }
   }
   return out.sort((a, b) => a.zone.localeCompare(b.zone) || b.n - a.n);

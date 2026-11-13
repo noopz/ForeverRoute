@@ -612,7 +612,9 @@ local function statusRaw(i)
     return "todo"
   elseif k == "fp" then
     if s.fp and State.knownTaxi[s.fp] then return "done" end
-    if s.zone and Engine.KnowsFlightIn(s.zone) then return "done" end
+    -- (this flight master's own point, by its flight-map name - not "a point whose name has the zone's first word": in a
+    -- zone with two points for you, the other one counted as this one)
+    if Engine.KnowsThisFlightPoint(s) then return "done" end
   elseif k == "bind" then
     local b = GetBindLocation and GetBindLocation()
     if Engine.BoundAt(s, b) then return "done" end
@@ -828,6 +830,12 @@ function Engine.SamePlace(a, b)
   return A == B or A:find(B, 1, true) ~= nil or B:find(A, 1, true) ~= nil
 end
 -- a known flight path in this zone: node names look like "Sentinel Hill, Westfall" / "Lakeshire, Redridge"
+-- the flight point of an "fp" step: by the flight master (Travel.KnowsFlightPoint: the flight map's own names); a step
+-- without one, by its zone's name as before
+function Engine.KnowsThisFlightPoint(s)
+  if s.m and s.npc and ns.Travel and ns.Travel.KnowsFlightPoint then return ns.Travel.KnowsFlightPoint(s.m, s.npc) and true or false end
+  return s.zone and Engine.KnowsFlightIn(s.zone) or false
+end
 function Engine.KnowsFlightIn(zone)
   State = State or ns.State
   local z = norm(zone); local first = z:match("^(%S+)")
@@ -977,13 +985,18 @@ end
 -- history entries let Undo restore accidental skips/dones; one entry may cover several steps
 local function remember(kind, ids) table.insert(ns.char.history, { kind = kind, ids = ids }); if #ns.char.history > 50 then table.remove(ns.char.history, 1) end end
 
-function Engine.MarkDone(i)
+local function markDone(i)
   i = i or Engine.Shown(); local id = key(i); if not id then return end
   ns.char.manualDone[id] = true
   remember("done", { id })
   Engine.view = nil
   Engine.Refresh()
 end
+-- you clicked done (the card's check, a slash command): Learn.lua records it as "ticked by hand"
+function Engine.MarkDone(i) return markDone(i) end
+-- the game told us (you arrived, landed, set your hearth, took the flight, trained): the same tick, not a hand tick -
+-- through MarkDone these went into the learning data as things the route got wrong
+function Engine.AutoDone(i) return markDone(i) end
 function Engine.Skip(i)
   i = i or Engine.Shown(); local s = steps()[i]; if not s then return end
   local ids = { key(i) }
@@ -1037,7 +1050,7 @@ end
 
 function Engine.Arrived(i)
   local s = steps()[i]
-  if s and s.k == "goto" and i == Engine.current then Engine.MarkDone(i) end
+  if s and s.k == "goto" and i == Engine.current then Engine.AutoDone(i) end
 end
 
 local function currentStep() local i = Engine.current; return i, i and steps()[i] end
@@ -1268,7 +1281,7 @@ end
 Engine.InZone = inZone
 local function travelDone()
   local i, s = currentStep()
-  if s and s.k == "fly" and s.to and inZone(s.to) then Engine.MarkDone(i) end
+  if s and s.k == "fly" and s.to and inZone(s.to) then Engine.AutoDone(i) end
 end
 ns.On("ZONE_CHANGED_NEW_AREA", function() C_Timer.After(1, function() travelDone(); Engine.Refresh() end) end)
 ns.On("PLAYER_ENTERING_WORLD", function() C_Timer.After(4, travelDone) end)
@@ -1314,7 +1327,7 @@ ns.On("PLAYER_ENTERING_WORLD", function() C_Timer.After(2, function() pcall(lear
 ns.On("FR_TAXI_OPENED", function()
   local j = nearCurrent("fp", 3); if not j then return end
   local s = steps()[j]; local m = ns.State.Position()
-  if s and (not s.m or s.m == m) then Engine.MarkDone(j) end
+  if s and (not s.m or s.m == m) then Engine.AutoDone(j) end
 end)
 -- once: undo "got the flight path" ticks from before that fix, where you still have no flight path in that zone
 ns.On("FR_LOADED", function()
@@ -1324,7 +1337,7 @@ ns.On("FR_LOADED", function()
     local undone = 0
     for i, s in ipairs(steps()) do
       local k = s.k == "fp" and key(i)
-      if k and ns.char.manualDone[k] and s.zone and not Engine.KnowsFlightIn(s.zone) then ns.char.manualDone[k] = nil; undone = undone + 1 end
+      if k and ns.char.manualDone[k] and s.zone and not Engine.KnowsThisFlightPoint(s) then ns.char.manualDone[k] = nil; undone = undone + 1 end
     end
     if undone > 0 then ns.Print("Un-ticked " .. undone .. " \"get the flight path\" step" .. (undone == 1 and "" or "s") .. " you don't actually have yet."); Engine.Refresh() end
   end)
@@ -1332,7 +1345,7 @@ end)
 -- hearthstone cast: complete a hearth step
 ns.On("UNIT_SPELLCAST_SUCCEEDED", function(unit, _, spellID)
   if unit ~= "player" then return end
-  if spellID == 8690 then local j = nearCurrent("hearth", 1); if j then Engine.MarkDone(j) end end
+  if spellID == 8690 then local j = nearCurrent("hearth", 1); if j then Engine.AutoDone(j) end end
 end)
 -- landing from a flight: complete a fly step (if it names a destination map, be in it)
 local onTaxi = false
@@ -1344,7 +1357,7 @@ ns.On("PLAYER_CONTROL_GAINED", function()
   if j then
     local s = steps()[j]
     local m = ns.State.Position()
-    if not s.to or s.to == m or (C_Map.GetMapInfo(m) and C_Map.GetMapInfo(m).parentMapID == s.to) then Engine.MarkDone(j) end
+    if not s.to or s.to == m or (C_Map.GetMapInfo(m) and C_Map.GetMapInfo(m).parentMapID == s.to) then Engine.AutoDone(j) end
   end
 end)
 -- class trainer visits complete a train step (profession trainers don't)
@@ -1353,7 +1366,7 @@ ns.On("TRAINER_SHOW", function() atClassTrainer = not (IsTradeskillTrainer and I
 ns.On("TRAINER_CLOSED", function()
   if not atClassTrainer then return end
   atClassTrainer = false
-  local j = nearCurrent("train", 4); if j then Engine.MarkDone(j) end
+  local j = nearCurrent("train", 4); if j then Engine.AutoDone(j) end
 end)
 
 ----------------------------------------------------------------------------------------------------------------
@@ -1424,6 +1437,17 @@ function Engine.Available(j)
   if s.k == "turnin" then return State.OnQuest(s.q) and true or false end
   if s.k ~= "accept" then return true end
   for _, p in ipairs(Engine.PrereqsOf(s.q)) do if not State.IsCompleted(p) then return false end end
+  -- and the quest data's own prerequisites, whatever the plan carries (QuestData.lua ns.QUEST_PRE): all of g, one of s.
+  -- A plan without Gleaning Our Future sent a player to Prospector Whelgar for For Further Study, which needs it - tester
+  local pre = ns.QUEST_PRE and ns.QUEST_PRE[s.q]
+  if pre then
+    for _, p in ipairs(pre.g or {}) do if not State.IsCompleted(p) then return false end end
+    if pre.s and #pre.s > 0 then
+      local any = false
+      for _, p in ipairs(pre.s) do if State.IsCompleted(p) then any = true; break end end
+      if not any then return false end
+    end
+  end
   return true
 end
 -- why a step can't be done at this moment, or nil when it can. For the pins: a step you can't act on yet must not

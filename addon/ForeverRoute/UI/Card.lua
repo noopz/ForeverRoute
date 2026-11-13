@@ -542,6 +542,14 @@ function Card.Fill()
     kind = tk
     title = Style.Hex(kind.color) .. kind.verb .. "|r " .. (s.dest or s.text or "")
   end
+  -- a step in another zone that takes a flight, a boat or your hearthstone to reach: the trip is the step you're on
+  -- ("Travel to Wetlands", then the quest step under it) - "Accept Hearts of the Lost" standing at the Stormwind
+  -- flight master read as "why pick up quests?" (tester)
+  if not tk and Card.TripFirst(s) then
+    kind = Style.Kind({ k = "fly" })
+    detail = "then " .. Card.Plain(title)
+    title = Style.Hex(C.gold) .. "Travel to " .. (s.zone or "the next zone") .. "|r"
+  end
   look(kind.color, kind.icon)
   local status = ns.Engine.Status(i)
   local group = ns.Engine.Group(i)
@@ -653,6 +661,10 @@ function Card.Fill()
       local nq = "|cff8fd3ffNew quest (not in the original game): it may need something first that the quest data doesn't list. If the giver doesn't offer it, it leaves your route by itself.|r"
       text = (text and text ~= "") and (text .. "\n" .. nq) or nq
     end
+    -- the same mobs nearer the quest giver, in fewer numbers (s.also = "Hillsbrad Foothills:16", route2.js): why the
+    -- plan farms them further away - "it wants me in Alterac though they're clearly in Hillsbrad" (tester)
+    local also = Card.AlsoNote(s)
+    if also then text = (text and text ~= "") and (text .. "\n" .. also) or also end
     -- live reordering picked this step because you are at it: that is exactly when its warnings and the full-log
     -- alert matter, so they stay, and the plan's own next step is a dim line under them
     -- a hand-in run here: say it - the moment the questing was for
@@ -675,9 +687,9 @@ function Card.Fill()
     if c then
       cur.choice = { c = c, owner = owner, key = key }
       -- the zone you just finished: the last step before this one that was out in the world, not a city errand
-      local CITY = { ["Stormwind City"] = 1, ["Stormwind"] = 1, ["Ironforge"] = 1, ["Darnassus"] = 1 }
+      -- (by map: every faction's capitals - the list of three Alliance city names had Horde prompts read "Orgrimmar is done")
       local prev
-      for j = i - 1, 1, -1 do local z = steps()[j].zone; if z and not CITY[z] then prev = { zone = z }; break end end
+      for j = i - 1, 1, -1 do local t = steps()[j]; if t.zone and not (t.m and Card.CAPITAL_MAPS[t.m]) then prev = { zone = t.zone }; break end end
       cur.titleText:SetText(Style.Hex(C.gold) .. "Choose your next zone|r")
       cur.detail:SetText((prev and prev.zone and (prev.zone .. " is done.  ") or "") .. "Pick one, then travel there.")
       setNote("Each option is a full plan from here with your level and quest log. The selected one is what you're following; click another to switch.", C.sub)
@@ -1072,6 +1084,9 @@ function Card.SaveNudge()
   if Card.planReady and not Card.readyDismissed then return "New route ready - reload to get it", "Reload" end
   if Card.saveDismissed then return nil end
   if not ns.Is(UnitOnTaxi, "player") then return nil end
+  -- (only with the companion on your PC: it replans from the save. An addon-only install has nothing to replan, and
+  -- the live next step needs no reload - tester)
+  if not (ns.HasCompanion and ns.HasCompanion()) then return nil end
   if GetTime() - loadedAt < Card.SAVE_AFTER then return nil end
   return "On a flight - a good moment to save, so your route is replanned before you land"
 end
@@ -1163,6 +1178,28 @@ function Card.WhyGo(i)
   if not a or a.zone ~= (steps()[i] or {}).zone then return nil end
   local what = a.quests > 0 and string.format("%d quest%s (%s)", a.quests, a.quests == 1 and "" or "s", table.concat(a.names, ", ", 1, math.min(3, #a.names)) .. (#a.names > 3 and ", ..." or "")) or "grinding"
   return string.format("|cffffd25aGoing to %s for %s%s|r", a.zone, what, b and (", then " .. b.zone) or "")
+end
+
+-- the capitals' maps, both factions (Stormwind, Ironforge, Darnassus, Orgrimmar, Thunder Bluff, the Undercity)
+Card.CAPITAL_MAPS = { [1453] = true, [1455] = true, [1457] = true, [1454] = true, [1456] = true, [1458] = true }
+
+-- "A few in Hillsbrad Foothills too (16 there) - the plan farms the bigger group here" for an objective step whose
+-- mobs also stand, fewer of them, where the quest is given or handed in
+function Card.AlsoNote(s)
+  if not (s and s.k == "obj" and type(s.also) == "string") then return nil end
+  local zone, n = s.also:match("^(.-):(%d+)$")
+  if not zone or zone == s.zone then return nil end
+  return string.format("|cff8e99adA few in %s too (%s there) - the plan farms the bigger group%s|r", zone, n, s.zone and (" in " .. s.zone) or " here")
+end
+
+-- does reaching step s start with a flight, a boat, a portal or the hearthstone (not a walk or a ride)?
+local LONG = { fly = true, boat = true, hearth = true, spell = true, via = true }
+function Card.TripFirst(s)
+  if ns.Engine.view or not (s and s.k ~= "fly" and s.k ~= "hearth" and ns.Engine.TravelFor) then return false end
+  local trip = ns.Engine.TravelFor(s)
+  local l1 = trip and trip.legs and trip.legs[1]
+  local how = (l1 and l1.how) or (trip and trip.how)
+  return (how and LONG[how]) and true or false
 end
 
 function Card.Header()

@@ -26,6 +26,21 @@ const show = (out) => out.map((s, i) => `${i + 1}:${s.k}:${s.q || s.dest || ''}$
   const out = ensure(steps), at = out.choiceAt(2);
   check('steps added before the boundary: the choice moves with the travel step', at > 0 && out[at - 1].k === 'fly' && out[at - 1].dest === 'Duskwood' && out.length > steps.length, show(out));
 }
+// 2b. quests already in your log, finished, planned from a capital: their put-back pick-ups and objectives are done at
+// once, so no flights to them (Stormwind - Duskwood - Wetlands - Stormwind opened a plan with three hand-ins ready)
+{
+  const SW = { m: 1453, x: 0.4, y: 0.85, zone: 'Stormwind City' };
+  const steps = [
+    { k: 'turnin', q: 335, name: 'A Noble Brew', ...SW, sec: 1 },
+    { k: 'turnin', q: 293, name: 'Cleansing the Eye', ...SW, sec: 1 },
+    { k: 'turnin', q: 322, name: 'Blessed Arm', ...SW, sec: 1 },
+  ];
+  const out = ensure(steps, { done: [], active: [335, 293, 322] });
+  const flights = out.filter((x) => x.k === 'fly');
+  check('finished quests in your log: their put-back steps bring no flights', flights.length === 0 && out.some((x) => x.ensured), show(out));
+  const out2 = ensure(steps, { done: [], active: [] });
+  check('...but a quest not in your log still gets the trip to its giver', out2.some((x) => x.k === 'fly'), show(out2));
+}
 // 2. the first step of a leg is a pick-up that is never handed in on the route: the choice goes to the next step
 {
   const steps = [

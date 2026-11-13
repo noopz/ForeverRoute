@@ -52,8 +52,11 @@ steps.forEach((s, i) => {
   if (s.k === 'obj' && s.target && lvl) { const ml = questMobLevel(s.q, s.target) ?? mobLevelOf(s.target); if (ml && ml > lvl + above) issues.push(`#${n} kill ${s.target} (mobs up to ${ml}) at level ${lvl}`); }
   if (s.k === 'accept') accepted.add(s.q);
   if (s.k === 'turnin' && s.q > 0 && !accepted.has(s.q) && !s.inserted) { /* may be in log already: fine */ }
+  // (a step for a quest already in your log - inLog, ensure-steps.js - is done on load: no trip to it, and it doesn't
+  // count as where you are for the next step)
+  if (s.inLog) return;
   if (s.m && lastMap && s.m !== lastMap && !['fly', 'hearth', 'train'].includes(s.k)) {
-    const prev = steps[i - 1];
+    let prev = null; for (let j = i - 1; j >= 0; j--) if (!steps[j].inLog) { prev = steps[j]; break; }
     if (prev && !['fly', 'hearth', 'train'].includes(prev.k)) issues.push(`#${n} ${s.k} ${s.name || s.text || ''}: zone changes (${lastMap} -> ${s.m}) with no travel step`);
   }
   const pv = steps[i - 1];

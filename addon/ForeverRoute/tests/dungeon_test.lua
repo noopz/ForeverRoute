@@ -80,6 +80,8 @@ local DALARAN = {
   [92456] = { on = true, objectives = { { text = "Fel Infused Blossom: 0/1", finished = false, have = 0, need = 1 } } },
   [92489] = { on = true, complete = true, objectives = { { text = "Arcane Remnant slain: 8/8", finished = true, have = 8, need = 8 } } },
   [201] = { on = true, objectives = { { text = "Wolf slain: 1/5", finished = false, have = 1, need = 5 } } }, -- not a dungeon quest
+  -- (QuestieDB 1.1.0: Starving Arcane needs 92432 handed in first)
+  [92432] = { on = false, done = true, objectives = {} },
 }
 
 test("a dungeon's quests: the ones in your log with their progress, unfinished first; the ones you didn't bring", function()
@@ -91,12 +93,13 @@ test("a dungeon's quests: the ones in your log with their progress, unfinished f
       assertEquals(0, st.quests[1].objectives[1].have); assertEquals(1, st.quests[1].objectives[1].need)
       assertEquals(92489, st.quests[2].q); assertTrue(st.quests[2].ready)
       assertEquals(1, st.done); assertEquals(2, st.total)
-      -- Starving Arcane (Alliance, level 24, nothing needed first) was there to take; the Horde's quests are not yours,
-      -- and Heart of Disruption needs a quest you haven't done
+      -- Starving Arcane and the Alliance's Heart of Disruption (both after 92432, done here - QuestieDB 1.1.0) were there to
+      -- take; the Horde's quests (96986, and 96984 - Heart of Disruption for them) are not yours
       local missed = {}
       for _, e in ipairs(st.missed) do missed[e.q] = e end
       assertNotNil(missed[92457]); assertTrue(missed[92457].from:find("Modera", 1, true) ~= nil)
-      assertEquals(nil, missed[96986]); assertEquals(nil, missed[92458]); assertEquals(nil, missed[92456])
+      assertNotNil(missed[92458], "Heart of Disruption: 92432 is done")
+      assertEquals(nil, missed[96986]); assertEquals(nil, missed[96984]); assertEquals(nil, missed[92456])
     end)
     -- too low for them: nothing was missed
     where({ inst = 2959, level = 12, side = "Alliance" }, function() assertEquals(0, #ns.Dungeon.State(2959).missed) end)

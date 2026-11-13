@@ -49,7 +49,13 @@ Nav.MOB_GAP = 5        -- mobs this many levels under you (or more) are left out
 Nav.STRAIGHT_TOL = 5   -- the arrow aims as far along the line as a straight walk stays within this many yards of it
 Nav.STRAIGHT_MAX = 200 -- ...up to this far
 Nav.STRAIGHT_PTS = 24  -- ...over this many of its corners at most
-Nav.AIM_REACH = 1.25   -- off the line by more than the arrow's look-ahead, it looks this many times as far as you are off
+Nav.AIM_REACH = 1.25   -- far off the line (over Nav.AIM_MERGE_YD), it looks this many times as far as you are off
+Nav.AIM_MERGE = 1.25   -- a little off it, this many (2.5 - a long shallow merge - had followers stray 12 yd from city lines and
+Nav.AIM_MERGE_YD = 20  -- 40 yd from open ones: it cuts the corners the line goes round; the same as far off, for now)
+Nav.AIM_BACK = 3       -- where you are on the line is looked for from this many segments behind where you were...
+Nav.AIM_AHEAD_YD = 80  -- ...to this many yards of line ahead of it
+Nav.AIM_JUMP = 0.15    -- yards of "off the line" one yard of skipped line counts as (a nearby later stretch must be much nearer)
+Nav.AIM_LOST_YD = 40   -- further off than this from all of that: look along the whole line ahead
 
 -- the 85 characters of the packed text -> 0..84 (tools/navgrid.js ALPHA)
 local V = {}
@@ -640,10 +646,30 @@ function Nav.Aim(P, px, py, look, far)
     return aim, d, d, a[3] or P.z0
   end
   local c0 = P.cursor or 1; if c0 < 1 then c0 = 1 end; if c0 > n - 1 then c0 = n - 1 end
-  local best, bd, bt = c0, huge, 0
-  for j = c0, n - 1 do
+  -- where you are on the line: near where you were - a little behind, up to Nav.AIM_AHEAD_YD of line ahead - and the
+  -- nearest by distance plus a small cost per yard of line skipped. A line that loops back past you (Ironforge's ring,
+  -- a switchback) can't capture the arrow with a stretch you reach only later: it pointed "back to the path" across
+  -- the room while you walked along the dots (tester). Far from all of that (a teleport, a long lag), the whole line
+  -- ahead is searched as before.
+  local best, bd, bt, bc = c0, huge, 0, huge
+  local from = c0 - Nav.AIM_BACK; if from < 1 then from = 1 end
+  -- (where you are along the stretch you were on: the line skipped to reach stretch j counts from there)
+  local _, t0 = segDist(px, py, pts[c0], pts[c0 + 1])
+  local here = rem[c0] - t0 * (rem[c0] - rem[c0 + 1])
+  for j = from, n - 1 do
+    -- (line skipped to reach stretch j: from your spot on the one you were on to its start, or back to its end - the
+    -- stretch you are on and the next one cost nothing)
+    local skip = (j > c0 + 1) and (here - rem[j]) or (j < c0) and (rem[j + 1] - here) or 0
+    if skip > Nav.AIM_AHEAD_YD then break end
     local d, t = segDist(px, py, pts[j], pts[j + 1])
-    if d < bd - 0.01 then best, bd, bt = j, d, t end
+    local c = d + Nav.AIM_JUMP * abs(skip)
+    if c < bc - 0.01 then best, bd, bt, bc = j, d, t, c end
+  end
+  if bd > Nav.AIM_LOST_YD then
+    for j = c0, n - 1 do
+      local d, t = segDist(px, py, pts[j], pts[j + 1])
+      if d < bd - 0.01 then best, bd, bt = j, d, t end
+    end
   end
   P.cursor = best
   local a, b = pts[best], pts[best + 1]
@@ -651,7 +677,10 @@ function Nav.Aim(P, px, py, look, far)
   if a[3] and b[3] then zHere = a[3] + (b[3] - a[3]) * bt end
   -- forward from where you are on the line to where it leaves the circle
   local R = look
-  if bd * Nav.AIM_REACH > R then R = bd * Nav.AIM_REACH end
+  -- (a little off it: a long shallow merge, Nav.AIM_MERGE times as far ahead as you are off; wandered far off: back
+  -- onto the stretch you left at a slant, Nav.AIM_REACH times - a long merge there would cut across to another leg)
+  local reach = bd <= Nav.AIM_MERGE_YD and bd * Nav.AIM_MERGE or max(Nav.AIM_MERGE_YD * Nav.AIM_MERGE, bd * Nav.AIM_REACH)
+  if reach > R then R = reach end
   local j, t0, t = best, bt, nil
   while true do
     a, b = pts[j], pts[j + 1]

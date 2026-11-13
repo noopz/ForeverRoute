@@ -17,7 +17,7 @@ node "$ROOT/tools/check-bindings.js" "$SRC" || { echo "NOT installed (Bindings.x
 node "$ROOT/tools/check-report.js" || { echo "NOT installed (/fr report format)"; exit 1; }
 RAW=$(cd "$SRC" && grep -rnE '(UnitOnTaxi|UnitIsAFK|UnitIsDeadOrGhost|UnitIsGhost|IsFlying|IsIndoors|IsInInstance|IsMounted|IsSwimming|IsResting|UnitInVehicle)[(]' --include=*.lua . | grep -v '^./tests/' | grep -v '^./Libs/')
 if [ -n "$RAW" ]; then echo "$RAW"; echo "NOT installed (ask the game through ns.Is: a hidden answer is an error otherwise)"; exit 1; fi
-SIM="$ROOT/sim/pkg/wow-ui-sim-v0.1.40-forever-windows-x86_64"
+SIM="$ROOT/sim/pkg/$(tr -d '\r\n' < "$ROOT/tools/sim-version.txt")" # (tools/sim-version.txt: the simulator in use)
 R=$(cd "$SIM" && export WOW_INSTALL_PATH="$(node "$ROOT/tools/game-dir.js" wow)"; timeout 900 ./wow-sim.exe --allow-ui-version-mismatch \
   --addons-path "$(cygpath -w "$ROOT/addon")" --session-wtf-path "$(cygpath -w "$ROOT/sim/wtf")" \
   --class Warlock --race Gnome run-tests ForeverRoute 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -E 'tests,|✗|_test.lua:[0-9]+: [^i]|_harness.lua:[0-9]+:')
@@ -34,6 +34,8 @@ for cfg in "$ROOT"/routes/campaign-*.json; do
     *) echo "NOT installed (the live check failed: this code would not load your plan right)"; exit 1 ;;
   esac
 done
+# FR_TEST_ONLY=1: the tests and the live check only, nothing installed (the game stays on the version it has)
+if [ -n "${FR_TEST_ONLY:-}" ]; then echo "tests passed (FR_TEST_ONLY: not installed)"; exit 0; fi
 cd "$SRC" && find . -type f ! -name 'Route.lua' | while read f; do mkdir -p "$DEST/$(dirname "$f")"; cp "$f" "$DEST/$f"; done
 # the built-in plans: one load-on-demand addon per faction (tools/bundle-plans.js)
 node "$ROOT/tools/bundle-plans.js" "$GAME/Interface/AddOns" >/dev/null || { echo "NOT installed (bundling the plans)"; exit 1; }

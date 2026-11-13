@@ -154,268 +154,34 @@
       "special": 1,
       "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
     },
-    "90702": {
-      "starters": [
-        "object:651262"
-      ],
-      "finishers": [
-        "npc:244517"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=90702) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "91688": {
-      "starters": [
-        "npc:244517"
-      ],
-      "finishers": [
-        "npc:254915"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=91688) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "91881": {
-      "starters": [
-        "npc:257753"
-      ],
-      "finishers": [
-        "npc:244517"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=91881) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "92014": {
-      "starters": [
-        "npc:249234"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=92014) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "92015": {
-      "starters": [
-        "npc:249234"
-      ],
-      "finishers": [
-        "npc:249234"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=92015) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "92064": {
-      "starters": [
-        "npc:249549"
-      ],
-      "finishers": [
-        "npc:249549"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=92064) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "92101": {
-      "starters": [
-        "npc:255038"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=92101) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "92446": {
-      "starters": [
-        "npc:244511"
-      ],
-      "finishers": [
-        "npc:244511"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=92446) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "92449": {
-      "starters": [
-        "npc:244517"
-      ],
-      "finishers": [
-        "npc:244517"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=92449) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
     "92457": {
       "reqLevel": 30,
       "_why": "Seen in game 2026-11-11 (City of Dalaran quest list): Available from Level 30 - the quest data says 24"
     },
     "92458": {
-      "preSingle": [
-        92432
-      ],
       "_why": "Seen in game 2026-11-11 (City of Dalaran quest list): Available from Level 30 - the quest data says 24",
       "reqLevel": 30
-    },
-    "92459": {
-      "preSingle": [
-        92458
-      ],
-      "_why": "Wowhead (https://www.wowhead.com/forever/quest=92458): needs 92458 first - the quest data did not say"
-    },
-    "92591": {
-      "starters": [
-        "npc:244517"
-      ],
-      "finishers": [
-        "npc:244517"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=92591) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "92592": {
-      "starters": [
-        "npc:244511"
-      ],
-      "finishers": [
-        "npc:244511"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=92592) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "92609": {
-      "starters": [
-        "npc:244511"
-      ],
-      "finishers": [
-        "npc:244511"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=92609) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "92702": {
-      "starters": [
-        "npc:249549"
-      ],
-      "finishers": [
-        "npc:249549"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=92702) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "93383": {
-      "starters": [
-        "npc:254644"
-      ],
-      "finishers": [
-        "npc:254644"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=93383) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "94782": {
-      "starters": [
-        "npc:257753"
-      ],
-      "finishers": [
-        "npc:244511"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=94782) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "95026": {
-      "starters": [
-        "npc:244511"
-      ],
-      "finishers": [
-        "npc:244511"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=95026) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "95027": {
-      "starters": [
-        "npc:249968"
-      ],
-      "finishers": [
-        "npc:249968"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=95027) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "95218": {
-      "starters": [
-        "npc:264521"
-      ],
-      "finishers": [
-        "npc:244517"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=95218) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "95248": {
-      "starters": [
-        "npc:244511"
-      ],
-      "finishers": [
-        "npc:254915"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=95248) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "96077": {
-      "starters": [
-        "npc:264521"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=96077) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "96559": {
-      "starters": [
-        "npc:249549"
-      ],
-      "finishers": [
-        "npc:254644"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=96559) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
-    "96616": {
-      "starters": [
-        "npc:244512"
-      ],
-      "finishers": [
-        "npc:244512"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=96616) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
     },
     "96984": {
       "reqLevel": 30,
       "_why": "Seen in game 2026-11-11 (City of Dalaran quest list): Available from Level 30 - the quest data says 24"
     },
-    "96998": {
-      "starters": [
-        "object:656786"
-      ],
-      "finishers": [
-        "npc:244511"
-      ],
-      "_whyEnds": "Mount Hyjal: QuestieDB 1.0.15 has no giver/turn-in for this quest; Wowhead Forever (https://www.wowhead.com/forever/quest=96998) lists them (checked 2026-11-11). Remove once QuestieDB has them (the overrides audit says so)."
-    },
     "98072": {
       "reqLevel": 19,
       "races": 4294967372,
-      "preSingle": [
-        471
-      ],
       "_why": "Wowhead Forever quest=98072 (via the Mac agent, 2026-11-10): requires level 19; Dwarf, Gnome, Night Elf, High Order Skyborne only. Seen in game 2026-11-10 (level 26 gnome): after Young Crocolisk Skins, Halloran offers only Apprentice's Duties, not this - so it needs Apprentice's Duties (471)"
-    },
-    "98240": {
-      "preSingle": [
-        98072
-      ],
-      "_why": "Wowhead (https://www.wowhead.com/forever/quest=98072): needs 98072 first - the quest data did not say"
     },
     "98283": {
       "needsItems": [
         280331
       ],
       "_whyItems": "Wowhead (https://www.wowhead.com/forever/quest=98283): needs item 280331 brought in",
-      "preSingle": [
-        275
-      ],
       "_why": "Wowhead (https://www.wowhead.com/forever/quest=98283): needs 275 first - the quest data did not say"
     },
-    "98418": {
-      "preSingle": [
-        98417
-      ],
-      "_why": "Wowhead (https://www.wowhead.com/forever/quest=98418): needs 98417 first - the quest data did not say"
-    },
     "98815": {
-      "preSingle": [
-        484
-      ],
       "_why": "warcraft.wiki.gg Highland_Hides: \"Players must previously complete [22] Young Crocolisk Skins from the same questgiver before he offers this quest.\" (The Wowhead series had it after Daily Delivery instead.)",
       "races": 4294967372,
       "_whyRaces": "Wowhead Forever (James Halloran starts tab, via the Mac agent 2026-11-10): Dwarf, Gnome, Night Elf, High Order Skyborne only; a dungeon quest (Excavation Site: Wetlands, warcraft.wiki.gg). Seen in game: offered after Young Crocolisk Skins"
-    },
-    "98824": {
-      "preSingle": [
-        95810
-      ],
-      "_why": "Wowhead (https://www.wowhead.com/forever/quest=98824): needs 95810 first - the quest data did not say"
     }
   },
   "npcNames": {

@@ -250,7 +250,7 @@ ns.On("ADDON_LOADED", function(name)
   if not ns.db.combatFadeReset then ns.db.combatFade = false; ns.db.combatFadeReset = true end
   ns.char = ForeverRouteChar
   -- stay on the path you were on; nothing switches unless you choose (the zone you asked for is the one exception)
-  ns.SelectRoute(ns.char.routeTitle, true)
+  ns.SelectRoute(ns.SavedRoute(), true)
   -- a path you asked for has arrived: switch to it once (you can switch away; it won't pull you back)
   if ns.char.requestZone and ns.char.requestHandled ~= ns.char.requestZone then
     for _, r in ipairs(ns.MainRoutes()) do
@@ -293,7 +293,7 @@ ns.On("PLAYER_LOGIN", function()
   if onStarter and ns.Routes()[1] and not (type(ForeverRouteByChar) == "table" and ns.FindMyPlan(key)) then ns.StarterNote(); return end
   ns.hasPlan = ns.LoadMyPlan()
   if ns.Routes()[1] then
-    ns.SelectRoute(ns.char and ns.char.routeTitle, false)
+    ns.SelectRoute(ns.SavedRoute(), false)
     ns.StarterNote()
   else
     C_Timer.After(5, function()
@@ -329,6 +329,7 @@ end
 function ns.EnterDungeonRoute(id)
   local r = ns.RouteById(id); if not r then return end
   if ForeverRouteData and not ForeverRouteData.dungeon then ns.char.returnTo = ForeverRouteData.id end
+  ns.char.chosenTrip = id -- (you picked it: kept across logins - ns.SavedRoute)
   ns.SelectRoute(id)
   ns.Print((r.special and "Side trip: " or "Dungeon route: ") .. (r.dungeonName or r.title) .. ". Your leveling path is kept - \"Back to my path\" on the card returns you to it.")
 end
@@ -342,6 +343,7 @@ function ns.LeaveDungeonRoute()
     if ns.Why then ns.Why("path", "your path " .. tostring(was) .. " was renamed by a replan; back on " .. tostring(back.id) .. " (closest match to your zone order)") end
   end
   ns.char.returnTo = back.id
+  ns.char.chosenTrip = nil
   ns.SelectRoute(back.id); ns.Print("Back on your path: " .. (back.title or ""))
 end
 -- a route's steps; branches and dungeon routes are kept packed until needed (see the planner's paths.js)
@@ -433,10 +435,24 @@ function ns.PathSwitchNote(title, pick)
 end
 -- pick by id or by title (titles from older saves); a renamed path is found by its zone order (ns.ResolvePath);
 -- nothing at all falls back to the first main path
+-- the route saved last time, at login / a new plan: a dungeon or class route you never chose (no path to go back to)
+-- was a fallback (a plan file with no path in it put a player on Gnomeregan): back to a leveling path
+function ns.SavedRoute()
+  local t = ns.char and ns.char.routeTitle
+  local r = t and ns.RouteById and ns.RouteById(t)
+  -- (only one you picked - Route me, Do it now - is yours; a path you came from long ago doesn't make it so)
+  if r and (r.dungeon or r.special) and ns.char.chosenTrip ~= r.id and ns.MainRoutes()[1] then
+    if ns.Why then ns.Why("path", "saved on " .. tostring(t) .. ", which you didn't pick: back on a leveling path") end
+    return ns.char.returnTo
+  end
+  return t
+end
 function ns.SelectRoute(title, quiet)
   local list = ns.Routes()
   local pick, exact = ns.ResolvePath(title)
-  pick = pick or ns.MainRoutes()[1] or list[1]
+  -- (never a dungeon or class route by default: a plan file with no path in it put a player on Gnomeregan)
+  if not pick then for _, r in ipairs(list) do if not r.dungeon and not r.special then pick = r; break end end end
+  pick = pick or ns.MainRoutes()[1]
   if not exact and title and ns.char.routeLegs and pick then
     if ns.Why then ns.Why("path", "your path " .. tostring(title) .. " is not in the new plan; continuing on " .. tostring(pick.id) .. " (closest match to your zone order)") end
     -- your own pick (Paths window, a zone choice) follows the path to its new name

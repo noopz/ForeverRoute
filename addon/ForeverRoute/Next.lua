@@ -121,6 +121,87 @@ Next._laterCost = laterCost
 -- plan's visit to the hub: questing a long while in a good order and then handing in a pile at once, the XP bar
 -- climbing and climbing, is the loop WoW is built around - the guide sets it up rather than chipping it away.
 Next.HUB_YD, Next.HUB_STEPS, Next.CHAIN_YD = 70, 4, 150
+-- A later visit to where you are now (Next.VisitHere): the plan leaves, and comes back here for more - hand-ins, a
+-- chain's next part, a trainer. When all of that visit can be done now, doing it now saves the whole trip back. Arriving
+-- in Stormwind by hearth with three hand-ins ready while the plan flew to Ironforge first and hearthed back for them
+-- ("you've just arrived, hand in what's here") is one case; any town, any way of arriving, is the same rule.
+Next.VISIT_SCAN = 250   -- steps ahead looked through for a later visit here
+Next.TRIP_FIXED = 60    -- seconds a trip costs on top of its distance (to the flight master, take-off, landing)
+Next.TRIP_MIN = 120     -- a trip back is never valued at less than this
+-- -> { now = { step indices you can do this moment }, saves = seconds } or nil
+function Next.VisitHere(list, planned, from, pm, px, py, pinst)
+  if not pm then return nil end
+  local E, St = ns.Engine, ns.State
+  local TRIP = { fly = true, hearth = true, boat = true }
+  local Lv = (UnitLevel and UnitLevel("player")) or 1
+  local pre = ns.QUEST_PRE or {}
+  local function preMet(q, handed)
+    local p = pre[q]
+    if p then
+      for _, x in ipairs(p.g or {}) do if not (St.IsCompleted(x) or handed[x]) then return false end end
+      if p.s and #p.s > 0 then local any = false; for _, x in ipairs(p.s) do if St.IsCompleted(x) or handed[x] then any = true; break end end; if not any then return false end end
+    end
+    for _, x in ipairs(E.PrereqsOf and E.PrereqsOf(q) or {}) do if not (St.IsCompleted(x) or handed[x]) then return false end end
+    return true
+  end
+  -- quests that have work somewhere ahead (an objective step): their hand-in can't follow a pick-up made now
+  local work = {}
+  for j = from, math.min(#list, from + Next.VISIT_SCAN) do local s = list[j]; if s.k == "obj" and s.q then work[s.q] = true end end
+  -- the visits: runs of steps between trips (or map changes); the first one on your map, past the window
+  -- (only once the plan has left here - a trip, or steps somewhere else: until then it is still this visit)
+  local left = false
+  for x = planned, from - 1 do local t = list[x]; if E.Status(x) ~= "done" and (TRIP[t.k] or (t.m and t.m ~= pm)) then left = true; break end end
+  local j, last = from, math.min(#list, from + Next.VISIT_SCAN)
+  local prevPos -- the last place the plan is at before the visit (for the trip's length)
+  while j <= last do
+    local s = list[j]
+    if TRIP[s.k] or not s.m or s.m ~= pm or not left then
+      if E.Status(j) ~= "done" and (TRIP[s.k] or (s.m and s.m ~= pm)) then left = true end
+      if s.m and not TRIP[s.k] and E.Status(j) ~= "done" then prevPos = s end
+      j = j + 1
+    else
+      -- a run on your map: j .. k
+      local k = j
+      while k + 1 <= last and not TRIP[list[k + 1].k] and (not list[k + 1].m or list[k + 1].m == pm) do k = k + 1 end
+      local handed, accepted, ok, now, any = {}, {}, true, {}, false
+      local load = (St.LogCount and St.LogCount()) or 0
+      local cap = (St.MaxLog and St.MaxLog()) or 25
+      for x = j, k do
+        local t = list[x]
+        if E.Status(x) ~= "done" then
+          any = true
+          local can = true
+          if t.minLevel and t.minLevel > Lv then can = false
+          elseif t.k == "obj" or t.k == "grind" or t.unknown then can = false -- work, not a stop: the visit is still needed
+          elseif t.k == "accept" then
+            can = t.q and preMet(t.q, handed) and load < cap
+            if can then accepted[t.q] = true; load = load + 1 end
+          elseif t.k == "turnin" then
+            can = t.q and (St.QuestReady(t.q) or (accepted[t.q] and not work[t.q]))
+            if can then handed[t.q] = true; load = load - 1 end
+          end
+          if not can then ok = false; break end
+          -- doable this moment (not after another step of the visit): a stop the solve can take now
+          local nowOk = (t.k ~= "accept" or (E.Available and E.Available(x))) and (t.k ~= "turnin" or St.QuestReady(t.q))
+          if nowOk and t.m and t.x then now[#now + 1] = x end
+        end
+      end
+      if ok and any and #now > 0 then
+        -- the trip back it saves: from where the plan was before it to the visit's first stop
+        local saves = Next.TRIP_MIN
+        local a, b = prevPos and wpos(prevPos), wpos(list[now[1]])
+        if a and b and a[3] == b[3] then
+          local speed = (ns.Travel and ns.Travel.Speed and ns.Travel.Speed()) or 7
+          saves = math.max(Next.TRIP_MIN, Next.TRIP_FIXED + math.sqrt((a[1] - b[1]) ^ 2 + (a[2] - b[2]) ^ 2) * 1.25 / speed)
+        end
+        return { now = now, saves = saves, from = j, to = k }
+      end
+      if any then return nil end -- the next visit here isn't all doable now: it happens anyway, its stops wait for it
+      j = k + 1
+    end
+  end
+  return nil
+end
 local hubMemo = setmetatable({}, { __mode = "k" })
 local function isHub(list, s)
   local m = hubMemo[s]
@@ -175,6 +256,29 @@ local function isDismissed(j, px, py, pinst)
 end
 Next.IsDismissed = isDismissed
 -- -> the step index to show, or nil (the plan's own next step stands)
+-- Already where the plan goes after its next trip (you flew on ahead, or rode somewhere yourself): the plan's steps
+-- in the zone you're in come first, the trip and what it was for wait (they are still to do - the card comes back to
+-- them once these are done). In Stormwind with hand-ins left, a player flew to the Wetlands; the card kept saying
+-- "fly back to Stormwind" while the plan's Wetlands questing was a few steps on - tester.
+-- -> the first of Next.REJOIN_MIN or more plan steps in a row on your map, within Next.REJOIN_SCAN steps; or nil
+Next.REJOIN_SCAN, Next.REJOIN_MIN = 250, 4
+function Next.LocalBlock(list, planned, pm)
+  local trip = list[planned]
+  if not (pm and trip and trip.to and trip.to ~= pm) then return nil end
+  local E = ns.Engine
+  local j0, n = nil, 0
+  for j = planned + 1, math.min(#list, planned + Next.REJOIN_SCAN) do
+    local s = list[j]
+    if Next.KIND[s.k] and s.m and E.Status(j) == "todo" then
+      if s.m == pm then
+        j0 = j0 or j; n = n + 1
+        if n >= Next.REJOIN_MIN then return j0 end
+      elseif j0 then j0, n = nil, 0 end -- (a few steps here, then away again: not worth leaving the plan for)
+    end
+  end
+  return nil
+end
+
 function Next.Pick(planned)
   local E, St = ns.Engine, ns.State
   local list = ForeverRouteData and ForeverRouteData.steps
@@ -220,7 +324,14 @@ function Next.Pick(planned)
   end
   -- the plan's next stops you can do now (a step that isn't a place - grind to a level, a note - ends the window there:
   -- it is done where it stands in the plan)
-  for j = planned, math.min(#list, planned + Next.SCAN) do
+  -- (you're already where the plan goes after this trip: start from there - see Next.LocalBlock)
+  local from = planned
+  Next.rejoin = nil
+  if onTrip then
+    local j0 = Next.LocalBlock(list, planned, here[1])
+    if j0 then from = j0; holdPlanned, holdAt = false, nil; Next.rejoin = { at = j0, trip = planned } end
+  end
+  for j = from, math.min(#list, from + Next.SCAN) do
     local s = list[j]
     local st = E.Status(j)
     scanEnd = j
@@ -289,6 +400,17 @@ function Next.Pick(planned)
         and (isHub(list, s) or chainsOnHere(list, s)) then
         add(j, { prize = laterCost(list, j), opt = true, early = true, chain = not isHub(list, s) or nil })
       end
+    end
+  end
+  -- a later visit the plan makes to where you are now, all of which you can do now: done now, the trip back for it
+  -- goes (a trip to steps that are all done is passed - Engine statusRaw). Worth that trip (Next.VisitHere)
+  local visit = Next.VisitHere(list, planned, planned + 1, here[1], px, py, pinst)
+  if visit then
+    local share = visit.saves / #visit.now
+    for _, j in ipairs(visit.now) do
+      -- (one of the plan's own next stops already: it may now come before the trip)
+      if byStep[j] then byStep[j].visit, byStep[j].early = true, true
+      else add(j, { prize = laterCost(list, j) + share, opt = true, early = true, visit = true }) end
     end
   end
   -- your bags filling up (or gear wearing out): the vendors of this map as prizes, worth more the closer you are to
@@ -373,7 +495,7 @@ function Next.Pick(planned)
   if pst then res.first = pst end
   -- the plan's next step is a trip: it stays on the card unless the pick is a prize close by (worth doing before you go)
   -- (a prize comes before the trip or grind only when it is close by: where you stand, Next.HOLD_NEAR)
-  local closePrize = pst and pst.opt and pst.w and pst.w[3] == pinst and (pst.w[1] - px) ^ 2 + (pst.w[2] - py) ^ 2 <= Next.HOLD_NEAR ^ 2
+  local closePrize = pst and pst.w and pst.w[3] == pinst and (pst.visit or (pst.opt and (pst.w[1] - px) ^ 2 + (pst.w[2] - py) ^ 2 <= Next.HOLD_NEAR ^ 2))
   if (holdPlanned or count == 0) and not closePrize then
     local opts = 0
     for _, st in ipairs(stops) do if st.opt then opts = opts + 1 end end
@@ -409,7 +531,14 @@ function Next.Reason(i)
   for _, s in ipairs((res and res.seq) or {}) do if s.step == i then st = s; break end end
   if not st then return "" end
   if st.behind then return "right here and still worth XP at your level (the plan has it earlier)" end
+  local rj = Next.rejoin
+  local L = ForeverRouteData and ForeverRouteData.steps
+  if rj and st.step and st.step >= rj.at and L and L[rj.trip] then
+    local t = L[rj.trip]
+    return "you're here already - the plan quests here next; " .. ((t.dest or t.text) and ("the trip to " .. (t.dest or t.text)) or "the trip") .. " waits"
+  end
   if st.early and st.chain then return "the chain goes on right here - hand it in and take the next" end
+  if st.early and st.visit then return "the plan comes back here for this later - done now, that trip back goes" end
   if st.early then return "while you're here - it saves coming back for it later" end
   if st.opt then return "a quest you picked up on the way, handed in where it costs least" end
   return "on the way - the whole route from here is shorter this way"

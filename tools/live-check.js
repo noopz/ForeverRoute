@@ -18,7 +18,7 @@ const [charDir, routeFile0, src0] = process.argv.slice(2);
 if (!charDir) { console.log('usage: node tools/live-check.js <character SavedVariables dir> [Route.lua] [addon dir]'); process.exit(2); }
 const routeFile = routeFile0 || path.join(require('./game-dir').addonDir(), 'Route.lua');
 const src = src0 || path.join(ROOT, 'addon', 'ForeverRoute');
-const SIM = path.join(ROOT, 'sim', 'pkg', 'wow-ui-sim-v0.1.40-forever-windows-x86_64');
+const SIM = path.join(ROOT, 'sim', 'pkg', require('fs').readFileSync(path.join(__dirname, 'sim-version.txt'), 'utf8').trim()) /* tools/sim-version.txt: the simulator in use */;
 const skip = (why) => { console.log('live check skipped: ' + why); process.exit(0); };
 if (!fs.existsSync(path.join(SIM, 'wow-sim.exe'))) skip('no simulator');
 if (!fs.existsSync(routeFile)) skip('no plan file');
@@ -67,6 +67,8 @@ const text = saveTestLua(c, 'live', {
   title: 'live: your path at the spot you saved',
   top,
   prelude: '  local ok = login(LIVE.name, "Forever Realm 8 PvP", {}); assertTrue(ok, "no plan loaded")',
+  // FR_LIVE_PROBE=<file.lua>: run that Lua in the replayed world at the spot you saved (print what you want to know)
+  inside: process.env.FR_LIVE_PROBE ? fs.readFileSync(process.env.FR_LIVE_PROBE, 'utf8') : '',
 });
 if (!text) skip('no snapshot with a position in the save (reload in game first)');
 

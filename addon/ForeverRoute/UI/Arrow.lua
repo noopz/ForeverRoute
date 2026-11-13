@@ -134,7 +134,17 @@ local function build()
     if focusAcc >= 1 then focusAcc = 0; ns.Engine.UpdateFocus(px, py, pinst) end
     if not target then return end
     if not (px and target.wx) or pinst ~= target.winst then
-      if f:IsShown() then f.arrow:SetAlpha(0.25); f.arrow:SetVertexColor(C.dim[1], C.dim[2], C.dim[3]); f.dist:SetText(target.zone and ("in " .. target.zone) or "-") end
+      if f:IsShown() then
+        -- on the Deeprun Tram (its own little instance: the game gives no position there) there is nothing to steer:
+        -- say so, instead of a grey arrow and "in Ironforge" (tester)
+        if Arrow.InTram() then
+          f.arrow:SetAlpha(0); f.dist:SetText("On the tram")
+          f.label:SetText("ride it to the other end" .. (target.zone and (", then on to " .. target.zone) or ""))
+        else
+          f.arrow:SetAlpha(0.25); f.arrow:SetVertexColor(C.dim[1], C.dim[2], C.dim[3]); f.dist:SetText(target.zone and ("in " .. target.zone) or "-")
+          f.label:SetText(target.label or "")
+        end
+      end
       if lastDist ~= false then lastDist = false; ns.Fire("FR_DISTANCE", nil) end
       return
     end
@@ -162,6 +172,21 @@ local function build()
         local a2 = HBD:GetWorldVector(pinst, px, py, aim[1], aim[2])
         if a2 then angle = a2 end
         shown = walk
+        -- close to the line but the arrow far off its direction for a few seconds: noted for the report (where you were,
+        -- how far off, which stretch) - "it wants me back on the path while the dots lead where I'm going" (tester)
+        local c = P.cursor
+        local pa, pb = c and P.pts[c], c and P.pts[c + 1]
+        local la = pa and pb and HBD:GetWorldVector(pinst, pa[1], pa[2], pb[1], pb[2])
+        if la and a2 and off < 15 then
+          local diff = math.abs(((a2 - la + math.pi) % (2 * math.pi)) - math.pi)
+          if diff > math.rad(60) then
+            target.awry = (target.awry or 0) + el
+            if target.awry > 3 and not target.awryNoted and ns.Why then
+              target.awryNoted = true
+              ns.Why("arrow", string.format("pointing %d deg off the line's direction for 3 s, %d yd off it, stretch %d of %d, %d yd to go", math.floor(math.deg(diff) + 0.5), math.floor(off + 0.5), c, #P.pts, math.floor(walk + 0.5)))
+            end
+          else target.awry = 0 end
+        end
       end
       if dz and math.abs(dz) >= 6 and Arrow.Indoors() then hint = string.format(dz > 0 and "|cff8fd3ff%d yd up|r" or "|cff8fd3ff%d yd down|r", math.floor(math.abs(dz) + 0.5)) end
     elseif target.path and target.path.z1 and target.path.z0 and dist <= 40 and math.abs(target.path.z1 - target.path.z0) >= 6 and Arrow.Indoors() then
@@ -173,7 +198,18 @@ local function build()
     -- or say "in the area" - the next leg takes over once you fly or sail
     local arrived = not target.leg and dist <= (target.r or 12)
     -- at the crossing a ride was pointed at: on toward the step (crossing the border re-plans anyway)
-    if target.leg == "ride" and dist <= (target.r or 8) and not target.passing then
+    -- ...or one you went past another way: nearer the end of the ride than the waypoint is, it is behind you. Riding to
+    -- Baldruc in Theramore by a way of your own, the arrow stayed on the trip's first waypoint and its distance grew as
+    -- you walked up to him (tester)
+    local behind = false
+    if target.leg == "ride" and target.endW and target.endW[3] == pinst then
+      local e = target.endW
+      local youToEnd = math.sqrt((px - e[1]) ^ 2 + (py - e[2]) ^ 2)
+      local wayToEnd = math.sqrt((target.wx - e[1]) ^ 2 + (target.wy - e[2]) ^ 2)
+      -- (near the end only: far off, a crossing that looks "behind" can still be the way round the mountains)
+      behind = youToEnd < 300 and youToEnd + 5 < wayToEnd
+    end
+    if target.leg == "ride" and (dist <= (target.r or 8) or behind) and not target.passing then
       target.passing = true
       Arrow.passed = { index = target.index, wx = target.wx, wy = target.wy, inst = target.winst }
       C_Timer.After(0, function() Arrow.SetTarget(ns.Engine.Shown(), true) end)
@@ -181,8 +217,8 @@ local function build()
     if arrived ~= target.arrived then
       target.arrived = arrived
       local t = target
-      if arrived then ns.Engine.Arrived(t.index) end
-      ns.Fire("FR_ARRIVED", t.index, arrived)
+      if arrived and not t.corpse then ns.Engine.Arrived(t.index) end
+      if not t.corpse then ns.Fire("FR_ARRIVED", t.index, arrived) end
       if target ~= t then return end -- arriving ticked the step: the next one has its own target now (or none)
       if f:IsShown() then
         f.arrow:SetShown(not arrived); f.check:SetShown(arrived)
@@ -238,10 +274,52 @@ end
 
 -- up/down hints only mean something inside a building (floors, stairs); outdoors a height difference is a hill
 function Arrow.Indoors() return ns.Is(IsIndoors) and true or false end
+-- on the Deeprun Tram: its instance (369) or its map (499)
+Arrow.TRAM_INSTANCE, Arrow.TRAM_MAP = 369, 499
+function Arrow.InTram()
+  -- (each answer through pcall, compared inside it too: a hidden "secret" answer reads as no)
+  local ok, yes = pcall(function() return select(8, GetInstanceInfo()) == Arrow.TRAM_INSTANCE end)
+  if ok and yes then return true end
+  local ok2, yes2 = pcall(function() return C_Map.GetBestMapForUnit("player") == Arrow.TRAM_MAP end)
+  return (ok2 and yes2) and true or false
+end
 -- what the arrow points at ({ index, m, x, y, label, ... } or nil), for tests: card, arrow and pins must agree
 function Arrow.Current() return target end
 
+-- Dead: the arrow (and the walking line) go to your corpse until you're back in it, then back to the step (tester).
+-- Where you died is kept at PLAYER_DEAD; once you're a ghost the game's own corpse position (on the map you're on)
+-- refines it.
+Arrow.corpse = nil
+function Arrow.NoteDeath()
+  local x, y, m = HBD:GetPlayerZonePosition()
+  if x and m then Arrow.corpse = { m = m, x = x, y = y } end
+end
+function Arrow.CorpseSpot()
+  if not ns.Is(UnitIsGhost, "player") then return nil end
+  local here = C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+  if here and C_DeathInfo and C_DeathInfo.GetCorpseMapPosition then
+    local ok, p = pcall(C_DeathInfo.GetCorpseMapPosition, here)
+    if ok and p and p.x and p.x > 0 then return { m = here, x = p.x, y = p.y } end
+  end
+  return Arrow.corpse
+end
+local function corpseTarget(i)
+  local c = Arrow.CorpseSpot()
+  if not c then return false end
+  local wx, wy, winst = HBD:GetWorldCoordinatesFromZone(c.x, c.y, c.m)
+  if not wx then return false end
+  target = { index = i, corpse = true, m = c.m, x = c.x, y = c.y, r = 8, wx = wx, wy = wy, winst = winst, label = "Your corpse",
+    key = "corpse:" .. math.floor(wx) .. ":" .. math.floor(wy) }
+  if ns.Nav then ns.Nav.Want({ key = target.key, wx = wx, wy = wy, inst = winst, m = c.m }) end
+  f.label:SetText(target.label)
+  f.arrow:Show(); f.check:Hide(); f.pulse:Stop(); f.ring:SetAlpha(0)
+  f:SetShown(ns.db.arrow and true or false)
+  return true
+end
+
 function Arrow.SetTarget(i, force)
+  if f and corpseTarget(i) then return end
+  if target and target.corpse then target = nil end -- alive again: the step's target is built afresh
   local s = i and ForeverRouteData and ForeverRouteData.steps[i]
   if target and s and target.index == i and not force then
     f:SetShown(visible(i)); noteHidden(not visible(i) and hiddenReason(i, s) or nil)
@@ -266,6 +344,7 @@ function Arrow.SetTarget(i, force)
   end
   -- the step is in another zone than you: point the way there - the flight master, the pier, or for a ride the first
   -- zone crossing on the way (the road, not a line over the mountains; the next zone re-targets)
+  local endM, endX, endY = m, x, y -- (where the ride ends: the step, or the flight master for a flight)
   local trip = s and ns.Engine.TravelFor and ns.Engine.TravelFor(s)
   if trip and trip.how == "aboard" then m, x, y = nil, nil, nil -- sailing: nothing to point at until you land
   elseif trip then
@@ -274,7 +353,8 @@ function Arrow.SetTarget(i, force)
     -- a ride with no crossing on the way points at the step itself: keep it the step (its radius, its arrival)
     local isStep = s.k ~= "fly" and how == "ride" and trip.m == s.m and trip.x == s.x and trip.y == s.y
     local useTrip = not isStep
-    if useTrip and how == "ride" and s.k ~= "fly" then
+    -- (a ride to the flight master for a "fly" step too: the trip's waypoint, once passed, is passed)
+    if useTrip and how == "ride" then
       local cx, cy, ci = HBD:GetWorldCoordinatesFromZone(trip.x or 0, trip.y or 0, trip.m or 0)
       local px, py, pinst = HBD:GetPlayerWorldPosition()
       -- the crossing reached: carry on toward the step until the next zone takes over (a gate inside one zone
@@ -298,6 +378,7 @@ function Arrow.SetTarget(i, force)
     -- a waypoint gets its own small radius: the step's (25 yd for a dungeon, up to 60 for a kill area) belongs to the step
     target = { index = i, m = m, x = x, y = y, r = leg and 8 or s.r, leg = leg, zone = s.zone, wx = wx, wy = wy, winst = winst, label = label or ns.Card.Plain((ns.Card.Describe(s))) }
     target.path = (not label) and buildPath(s, m, wx, wy) or nil
+    if leg == "ride" and endM and endX then local a, b, c = HBD:GetWorldCoordinatesFromZone(endX, endY, endM); if a then target.endW = { a, b, c } end end
     -- the live line (Nav.lua) is for exactly this target: the step itself (with its planned floor height) or a waypoint
     target.key = wx and (i .. ":" .. math.floor(wx) .. ":" .. math.floor(wy)) or nil
     target.z = (not leg) and (m == s.m) and s.z or nil
@@ -325,6 +406,11 @@ function Arrow.SetTarget(i, force)
 end
 
 ns.On("FR_LOADED", build)
+ns.On("PLAYER_DEAD", function() Arrow.NoteDeath() end)
+-- released (a ghost now) or back in your body: the arrow goes to the corpse, or back to the step
+local function afterDeath() C_Timer.After(0.5, function() if f then Arrow.SetTarget(ns.Engine.Shown(), true); ns.Fire("FR_STEP", ns.Engine.Shown()) end end) end
+ns.On("PLAYER_ALIVE", afterDeath)
+ns.On("PLAYER_UNGHOST", function() Arrow.corpse = nil; afterDeath() end)
 ns.On("FR_STEP", function(i) Arrow.SetTarget(i) end)
 ns.On("FR_DUNGEON", function() if f then Arrow.SetTarget(ns.Engine.Shown(), true) end end)
 -- a new zone can change the way there (landed, or rode across a border)

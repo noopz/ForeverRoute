@@ -118,11 +118,16 @@ end
 Errands.GRIMOIRES = {
   { name = "Sacrifice", level = 16, pet = "Voidwalker" },
   { name = "Consume Shadows", level = 18, pet = "Voidwalker" },
-  { name = "Seduction", level = 26, pet = "Succubus", quest = { 1739 } },
-  { name = "Devour Magic", level = 30, pet = "Felhunter", quest = { 1795 } },
-  { name = "Spell Lock", level = 36, pet = "Felhunter", quest = { 1795 } },
+  -- (the demon by its summoning spell, known to either faction: the quests that teach it differ - 1739 and 1795 are the
+  -- Alliance's, and a Horde warlock never had them)
+  { name = "Seduction", level = 26, pet = "Succubus", spell = 712, quest = { 1739 } },
+  { name = "Devour Magic", level = 30, pet = "Felhunter", spell = 691, quest = { 1795 } },
+  { name = "Spell Lock", level = 36, pet = "Felhunter", spell = 691, quest = { 1795 } },
 }
-Errands.DEMON_TRAINERS = { [1453] = "Spackle Thornberry, by Gakin in the Mage Quarter", [1455] = "Jubahl Corpseseeker, in the Forlorn Cavern" }
+-- the demon trainers of the capitals with warlocks (QuestieDB: "Demon Trainer"; Thunder Bluff and Darnassus have none -
+-- no Tauren or Night Elf warlocks). Orgrimmar and the Undercity were missing: Horde warlocks never got the errand
+Errands.DEMON_TRAINERS = { [1453] = "Spackle Thornberry, by Gakin in the Mage Quarter", [1455] = "Jubahl Corpseseeker, in the Forlorn Cavern",
+  [1454] = "Kurgul, in the Cleft of Shadow", [1458] = "Martha Strain, in the Magic Quarter" }
 function Errands.Grimoire()
   local _, class = UnitClass("player")
   if class ~= "WARLOCK" then return nil end
@@ -133,6 +138,7 @@ function Errands.Grimoire()
   local lvl = UnitLevel("player") or 1
   for _, g in ipairs(Errands.GRIMOIRES) do
     local have = not g.quest
+    if g.spell and ns.Is(IsSpellKnown, g.spell) then have = true end
     for _, q in ipairs(g.quest or {}) do if ns.State.IsCompleted(q) then have = true end end
     if have and lvl >= g.level and not ns.char.grimoires[g.name] then
       return string.format("Demon trainer (%s): Grimoire of %s for your %s", trainer, g.name, g.pet), "grimoire:" .. g.name

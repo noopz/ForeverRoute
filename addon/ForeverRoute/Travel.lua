@@ -386,7 +386,10 @@ function Travel.Plan(from, to, opts)
         -- the first waypoint that is really ahead: one right beside you (a city waypoint you're standing on) would read
         -- "1 yd" and point at your feet - in Stormwind's Trade District it did, on the way to the harbor
         local first
-        for _, x in ipairs(c.via) do if x.w and f.w and d(f, x) > Travel.AHEAD_YD then first = x; break end end
+        -- (a border crossing or a gate, not a flight master or a pier the road happens to pass: riding from Southshore
+        -- to Alterac the arrow pointed at Southshore's flight master 70 yd away and read as "fly" - tester)
+        for _, x in ipairs(c.via) do if x.w and f.w and (x.kind == "cross" or x.gate) and d(f, x) > Travel.AHEAD_YD then first = x; break end end
+        if not first then for _, x in ipairs(c.via) do if x.w and f.w and d(f, x) > Travel.AHEAD_YD then first = x; break end end end
         local crossings = {}
         for _, x in ipairs(c.via) do if x.kind == "cross" or x.gate then crossings[#crossings + 1] = placeName(x) end end
         local text = ns.RideWord() .. " " .. ((f.town and f.town ~= placeName(n)) and ("from " .. f.town .. " ") or "") .. "to " .. placeName(n) .. (#crossings > 0 and (" (through " .. table.concat(crossings, ", ") .. ")") or "")

@@ -144,8 +144,23 @@ function makeEnsure(db, conv) {
     }
     // any two steps in a row in different zones get a travel step between them (whatever put them there)
     const travelK = (x) => x.k === "fly" || x.k === "hearth" || x.k === "train";
+    // a step put back above for a quest already in your log (its pick-up, an objective you'd finished) is done the moment
+    // the route loads: marked inLog (the audit reads it too - lint-route.js), no trip to it, and the steps around it are
+    // measured from each other. Six flights Stormwind - Duskwood - Wetlands - Stormwind - ... opened a plan made in
+    // Stormwind with three hand-ins ready (tester, 2026-11-13)
+    const inLogQ = new Set(((ctx && ctx.active) || []).map(Number));
+    for (const x of out) if (x.ensured && x.q > 0 && inLogQ.has(x.q)) x.inLog = true;
     // (a choice point on the first step in the new zone moves to that travel step: you choose before you go)
-    for (let i = 1; i < out.length; i++) { const p = out[i - 1], q = out[i]; if (p.m && q.m && p.m !== q.m && !travelK(p) && !travelK(q)) { const f = { k: "fly", to: q.m, dest: q.zone, text: q.zone, sec: q.sec, note: "Fly, or ride if it is close." }; if (q._choice) { f._choice = q._choice; delete q._choice; } out.splice(i, 0, f); i++; } }
+    let prev = null;
+    for (let i = 0; i < out.length; i++) {
+      const q = out[i];
+      if (q.inLog) continue;
+      const p = prev; prev = q;
+      if (!p || travelK(p) || travelK(q) || !(p.m && q.m) || p.m === q.m) continue;
+      const f = { k: "fly", to: q.m, dest: q.zone, text: q.zone, sec: q.sec, note: "Fly, or ride if it is close." };
+      if (q._choice) { f._choice = q._choice; delete q._choice; }
+      out.splice(i, 0, f); i++;
+    }
     // never two travel steps to the same place in a row (fly X then fly X, or fly X then hearth X)
     // and no hearth straight into a flight elsewhere: the stop the hearth was for was left out above, so it leads nowhere
     // (you keep the stone for later instead)

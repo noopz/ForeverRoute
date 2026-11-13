@@ -19,7 +19,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const ROOT = path.join(__dirname, '..');
-const SIM = path.join(ROOT, 'sim', 'pkg', 'wow-ui-sim-v0.1.40-forever-windows-x86_64');
+const SIM = path.join(ROOT, 'sim', 'pkg', require('fs').readFileSync(path.join(__dirname, 'sim-version.txt'), 'utf8').trim()) /* tools/sim-version.txt: the simulator in use */;
 const src = path.join(ROOT, 'addon', 'ForeverRoute');
 const [plan = 'starter:gnome-warlock', personaArg = 'clean,skip,fast,slow,die,reload,secret', stepsArg] = process.argv.slice(2);
 const personas = personaArg.split(',').filter(Boolean);

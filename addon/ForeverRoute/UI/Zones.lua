@@ -23,9 +23,9 @@ local function place()
   local c = card(); if not (c and f) then return end
   f:ClearAllPoints(); tab:ClearAllPoints()
   if side() == "RIGHT" then
-    tab:SetPoint("TOPLEFT", c, "TOPRIGHT", -2, -48); f:SetPoint("TOPLEFT", c, "TOPRIGHT", 12, 0); tab.label:SetText(f:IsShown() and "<" or ">")
+    tab:SetPoint("TOPLEFT", c, "TOPRIGHT", 1, -12); f:SetPoint("TOPLEFT", c, "TOPRIGHT", 12, 0); tab.label:SetText(f:IsShown() and "<" or ">")
   else
-    tab:SetPoint("TOPRIGHT", c, "TOPLEFT", 2, -48); f:SetPoint("TOPRIGHT", c, "TOPLEFT", -12, 0); tab.label:SetText(f:IsShown() and ">" or "<")
+    tab:SetPoint("TOPRIGHT", c, "TOPLEFT", -1, -12); f:SetPoint("TOPRIGHT", c, "TOPLEFT", -12, 0); tab.label:SetText(f:IsShown() and ">" or "<")
   end
 end
 

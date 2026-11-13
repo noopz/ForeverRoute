@@ -402,7 +402,11 @@ for (const q of Object.values(Q)) {
     const mobLevel = levelAt(mobs, at, dungeon, q);
     // the same objective listed twice (The Great Outdoors: "use the campfire" twice, same object): one step does both
     if (t.objs.some((x) => x.label === label && x.at && at && x.at.x === at.x && x.at.y === at.y && x.at.zone === at.zone)) { dropInfo = null; continue; }
-    t.objs.push({ dropPct: dropInfo ? Math.round(100 * Object.values(dropInfo.rates).reduce((x, y) => x + y, 0) / Math.max(1, Object.values(dropInfo.rates).length)) : undefined, label, at, work, kills, mobLevel, mobIds: mobs.map((m) => m.id), allSpawns: spawns.filter(inZones), drop: o.kind === 'item' && !dungeon ? dropInfo : null, dungeon: dungeon ? dungeon.id : null, killsFor: o.kind === 'kill' || o.kind === 'killcredit' ? mobs.map((m) => m.id) : null });
+    // the same mobs where the quest is given or handed in, when the plan farms them in another zone (Snapjaws: a few on the
+    // river by Southshore, the plan at Lordamere Lake in Alterac with 36): the card says so - why not the nearer ones
+    const alsoRef = t.accept.at || (t.turnin.spawns || [])[0];
+    const alsoN = (at && alsoRef && !dungeon && alsoRef.zone !== at.zone) ? spawns.filter((p) => p.zone === alsoRef.zone && p.x >= 0).length : 0;
+    t.objs.push({ also: alsoN >= 3 ? zname(alsoRef.zone) + ':' + alsoN : undefined, dropPct: dropInfo ? Math.round(100 * Object.values(dropInfo.rates).reduce((x, y) => x + y, 0) / Math.max(1, Object.values(dropInfo.rates).length)) : undefined, label, at, work, kills, mobLevel, mobIds: mobs.map((m) => m.id), allSpawns: spawns.filter(inZones), drop: o.kind === 'item' && !dungeon ? dropInfo : null, dungeon: dungeon ? dungeon.id : null, killsFor: o.kind === 'kill' || o.kind === 'killcredit' ? mobs.map((m) => m.id) : null });
     dropInfo = null;
   }
   // several fights in one hunting ground (Tramping Paws: Mosshide Gnolls and Mongrels mixed together): one spot for
@@ -1021,7 +1025,7 @@ if (cfg.optimize) {
     if (s2.type === 'do') for (const it of s2.items) {
       if (droppedQ.has(it.q.id)) continue;
       const t = tasks[it.q.id], o = t && t.objs.find((x) => x.label === it.label);
-      events.push({ kind: 'obj', q: it.q.id, loc: locOf(s2.at), shared: it.shared, work: it.shared ? 0 : o ? o.work : 60, killXp: 0, reqLevel: o && o.kills > 0 ? Math.max(0, o.mobLevel - cfg.maxMobAbove + 1) : 0, pre: [], label: it.label, area: o && o.at ? o.at.area : undefined, name: it.q.name, qLevel: it.q.level, kills: it.shared || !o ? 0 : o.kills, mobLevel: o ? o.mobLevel : undefined,
+      events.push({ kind: 'obj', q: it.q.id, loc: locOf(s2.at), shared: it.shared, work: it.shared ? 0 : o ? o.work : 60, killXp: 0, reqLevel: o && o.kills > 0 ? Math.max(0, o.mobLevel - cfg.maxMobAbove + 1) : 0, pre: [], label: it.label, area: o && o.at ? o.at.area : undefined, also: o ? o.also : undefined, name: it.q.name, qLevel: it.q.level, kills: it.shared || !o ? 0 : o.kills, mobLevel: o ? o.mobLevel : undefined,
         after: o && o.dungeon && runEvent[o.dungeon] !== undefined ? [runEvent[o.dungeon]] : undefined });
     }
   }
@@ -1232,7 +1236,7 @@ function writeRoute(seq, locs) {
     if (e.kind === 'obj' && oInfo && oInfo.unknown) steps.push({ k: 'obj', unknown: true, text: e.label, r: 40, note: 'Where to do this isn\'t in the quest data: follow your quest log and map.', ...base });
     // (work: the seconds the planner expects the objective to take - kills at your rate, drops at their rates - so the
     // live solver weighs it as planned instead of a flat guess; 0 for one done alongside another on the same mobs)
-    else if (e.kind === 'obj') steps.push({ rate: oInfo && oInfo.dropPct, k: 'obj', text: e.label, match: matchOf(e.label), target: targetOf(e.label, level), item: itemOf(q), loot: /^(Collect|Loot)/.test(e.label) || undefined, r: Math.max(40, Math.min(220, (e.area || 0) + 15)), note: e.shared ? 'Drops from the mobs you are already killing here.' : undefined, work: Number.isFinite(e.work) ? Math.round(e.work) : undefined, ...base });
+    else if (e.kind === 'obj') steps.push({ rate: oInfo && oInfo.dropPct, k: 'obj', text: e.label, match: matchOf(e.label), target: targetOf(e.label, level), item: itemOf(q), loot: /^(Collect|Loot)/.test(e.label) || undefined, r: Math.max(40, Math.min(220, (e.area || 0) + 15)), note: e.shared ? 'Drops from the mobs you are already killing here.' : undefined, also: e.also, work: Number.isFinite(e.work) ? Math.round(e.work) : undefined, ...base });
     if (e.kind === 'turnin') {
       steps.push({ k: 'turnin', npc: e.who, r: 6, note: tq && tq.rewardText ? 'Reward: ' + tq.rewardText : undefined, reward: (tq && tq.rewardItem) || undefined, ...base });
       levelUp(questXpAt(q, level));

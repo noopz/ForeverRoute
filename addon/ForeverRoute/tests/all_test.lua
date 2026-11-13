@@ -1839,10 +1839,13 @@ test("errands: eat Well Fed food before a kill step when you have some and aren'
   if not ok then error(err, 0) end
 end)
 
-test("save nudge: shows on a flight after a few minutes played, not on foot, not when dismissed", function()
-  local sv = { taxi = UnitOnTaxi, after = ns.Card.SAVE_AFTER }
+test("save nudge: shows on a flight after a few minutes played, not on foot, not when dismissed, not without the companion", function()
+  local sv = { taxi = UnitOnTaxi, after = ns.Card.SAVE_AFTER, comp = ns.HasCompanion }
   local ok, err = pcall(function()
     ns.Card.SAVE_AFTER = -1; ns.Card.saveDismissed = nil
+    ns.HasCompanion = function() return false end; UnitOnTaxi = function() return true end
+    assertNil(ns.Card.SaveNudge(), "addon only: nothing replans from a save")
+    ns.HasCompanion = function() return true end
     UnitOnTaxi = function() return false end
     assertNil(ns.Card.SaveNudge())
     UnitOnTaxi = function() return true end
@@ -1853,7 +1856,7 @@ test("save nudge: shows on a flight after a few minutes played, not on foot, not
     ns.Card.SAVE_AFTER = 1e9; ns.Card.saveDismissed = nil
     assertNil(ns.Card.SaveNudge())
   end)
-  UnitOnTaxi, ns.Card.SAVE_AFTER, ns.Card.saveDismissed = sv.taxi, sv.after, nil
+  UnitOnTaxi, ns.Card.SAVE_AFTER, ns.Card.saveDismissed, ns.HasCompanion = sv.taxi, sv.after, nil, sv.comp
   ns.Card.Layout()
   if not ok then error(err, 0) end
 end)

@@ -67,7 +67,7 @@ ns.DUNGEON_QUESTS = {
       { 1654, "The Test of Righteousness", 20, "A", 2, "Jordan Stilwell, Dun Morogh", any = { 1653 } },
       { 2040, "Underground Assault", 15, "A", nil, "Shoni the Shilent, Stormwind City" },
       { 92753, "Destruction in Deadmines", 9, "A", nil, "Alba Fairmoon, Westfall", any = { 92752 } },
-      { 95036, "A Moon-Kissed Blade", 20, "H", 2, "Lumina Windsinger, Silverpine Forest" },
+      { 95036, "A Moon-Kissed Blade", 20, "H", 2, "Lumina Windsinger, Silverpine Forest", any = { 95034 } },
     },
   },
   [43] = { -- Wailing Caverns
@@ -91,8 +91,8 @@ ns.DUNGEON_QUESTS = {
       { 1221, "Blueleaf Tubers", 20, nil, nil, "Mebok Mizzyrix, The Barrens" },
       { 1701, "Fire Hardened Mail", 20, "A", 1, "Furen Longbeard, Stormwind City", any = { 1702 } },
       { 1838, "Brutal Armor", 20, "H", 1, "Thun'grim Firegaze, The Barrens", any = { 1824 } },
-      { 79360, "Elemental Aid", 30, "H", 64, "Rau Cliffrunner, Thousand Needles" },
-      { 96264, "Elemental Aid", 30, "A", 64, "Veyric Thunderhame, Arathi Highlands" },
+      { 79360, "Elemental Aid", 30, "H", 64, "Rau Cliffrunner, Thousand Needles", any = { 1531, 1532, 96136 } },
+      { 96264, "Elemental Aid", 30, "A", 64, "Veyric Thunderhame, Arathi Highlands", any = { 94789 } },
     },
   },
   [48] = { -- Blackfathom Deeps
@@ -155,7 +155,7 @@ ns.DUNGEON_QUESTS = {
     },
   },
   [109] = { -- The Temple of Atal'Hakkar
-    ids = "1445 1446 1475 3373 3446 3447 3528 4143 4146 8232 8236 8253 8257 8413 8418 8422 8425 8733 9053 96603 98477",
+    ids = "1445 1446 1475 3373 3446 3447 3528 4143 4146 8232 8236 8253 8257 8413 8418 8422 8425 8733 9053",
     open = {
       { 1445, "The Temple of Atal'Hakkar", 38, "H", nil, "Fel'zerul, Swamp of Sorrows", any = { 1444 } },
       { 1446, "Jammal'an the Prophet", 38, nil, nil, "Atal'ai Exile, The Hinterlands" },
@@ -175,8 +175,6 @@ ns.DUNGEON_QUESTS = {
       { 8422, "Trolls of a Feather", 50, nil, 256, "Impsy, Felwood", any = { 8421 } },
       { 8425, "Voodoo Feathers", 50, nil, 1, "Fallen Hero of the Horde, Swamp of Sorrows", any = { 8424 } },
       { 9053, "A Better Ingredient", 50, nil, 1024, "Torwa Pathfinder, Un'Goro Crater", any = { 9051 } },
-      { 96603, "Unstable Magic", 48, "A", nil, "Archmage Celindra, Alterac Mountains" },
-      { 98477, "Unstable Magic", 48, "H", nil, "Nuara Tremorhoof, Mulgore" },
     },
   },
   [129] = { -- Razorfen Downs
@@ -277,7 +275,7 @@ ns.DUNGEON_QUESTS = {
       { 3802, "Dark Iron Legacy", 48, nil, nil, "Franclorn Forgewright, Burning Steppes", any = { 3801 } },
       { 3907, "Disharmony of Fire", 48, "H", nil, "Thunderheart, Badlands", any = { 3906 } },
       { 3981, "Commander Gor'shak", 48, "H", nil, "Galamav the Marksman, Badlands", any = { 3906 } },
-      { 4001, "What Is Going On?", 48, "H", nil, "Commander Gor'shak", true, any = { 3982 } },
+      { 4001, "What Is Going On?", 48, "H", nil, "Commander Gor'shak", true, any = { 3981, 3982 } },
       { 4003, "The Royal Rescue", 48, "H", nil, "Thrall, Orgrimmar", any = { 4002 } },
       { 4004, "The Princess Saved?", 48, "H", nil, "Princess Moira Bronzebeard", true, any = { 4003 } },
       { 4024, "A Taste of Flame", 52, nil, nil, "Cyrus Therepentous, Burning Steppes", any = { 4022, 4023 } },
@@ -434,7 +432,7 @@ ns.DUNGEON_QUESTS = {
       { 7463, "Arcane Refreshment", 60, nil, 128, "Lorekeeper Lydros", true },
       { 7481, "Elven Legends", 54, "H", nil, "Sage Korolusk, Feralas" },
       { 7482, "Elven Legends", 54, "A", nil, "Scholar Runethorn, Feralas" },
-      { 7488, "Lethtendris's Web", 54, "A", nil, "Latronicus Moonspear, Feralas" },
+      { 7488, "Lethtendris's Web", 54, "A", nil, "Latronicus Moonspear, Feralas", any = { 7494 } },
       { 7489, "Lethtendris's Web", 54, "H", nil, "Talo Thornhoof, Feralas" },
       { 7498, "Garona: A Study on Stealth and Treachery", 54, nil, 8, "a drop inside", true },
       { 7499, "Codex of Defense", 54, nil, 1, "a drop inside", true },
@@ -495,10 +493,10 @@ ns.DUNGEON_QUESTS = {
     ids = "92456 92457 92458 92489 96984 96986 96987 96988",
     open = {
       { 92456, "A Green Sample", 24, "A", nil, "Shylamiir, Stormwind City" },
-      { 92457, "Starving Arcane", 30, "A", nil, "Image of Archmage Modera, Alterac Mountains" },
+      { 92457, "Starving Arcane", 30, "A", nil, "Image of Archmage Modera, Alterac Mountains", any = { 92432 } },
       { 92458, "Heart of Disruption", 30, "A", nil, "Image of Archmage Modera, Alterac Mountains", any = { 92432 } },
       { 92489, "Power Overwhelming", 24, "A", nil, "High Sorcerer Andromath, Stormwind City" },
-      { 96984, "Heart of Disruption", 30, "H", nil, "Image of Archmage Modera, Alterac Mountains" },
+      { 96984, "Heart of Disruption", 30, "H", nil, "Image of Archmage Modera, Alterac Mountains", any = { 92434 } },
       { 96986, "The Grave Knight", 24, "H", nil, "Melisara, Hillsbrad Foothills" },
       { 96988, "Source of Power", 24, "H", nil, "Doctor Martin Felben, Undercity" },
     },
@@ -506,7 +504,7 @@ ns.DUNGEON_QUESTS = {
   [2998] = { -- Excavation Site: Wetlands
     ids = "95646 95664 95697 95810 98815",
     open = {
-      { 95646, "Horrors in the Highland", 24, "A", nil, "Rethiel the Greenwarden, Wetlands" },
+      { 95646, "Horrors in the Highland", 24, "A", nil, "Rethiel the Greenwarden, Wetlands", any = { 275 } },
       { 95664, "Elder Knowledge", 24, "H", nil, "a drop inside", true },
       { 95697, "Changing Tastes", 24, "H", nil, "Borstan, Orgrimmar" },
       { 95810, "Lost Relic Carry", 24, "A", nil, "a drop inside", true },
@@ -524,10 +522,11 @@ ns.DUNGEON_QUESTS = {
     },
   },
   [3065] = { -- The Hall of Thanes
-    ids = "96393 96394 96403",
+    ids = "96393 96394 96395 96403",
     open = {
       { 96393, "Old Ironforge Incursion", 9, "A", nil, "Earthseer Farsen, Dun Morogh", any = { 96391 } },
       { 96394, "The Restless Dead", 10, "A", nil, "Afadra Dunwall, Ironforge" },
+      { 96395, "An Ancient Grudge", 1, nil, nil, "Ghostly Attendant", true },
       { 96403, "Important Heirlooms", 10, "A", nil, "Thom Filch, Ironforge" },
     },
   },

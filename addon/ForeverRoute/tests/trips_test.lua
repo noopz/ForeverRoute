@@ -57,3 +57,15 @@ test("trips: Dun Morogh to the Wetlands on foot goes through Loch Modan, never o
     assertTrue(text:find("Loch Modan", 1, true) ~= nil, text)
   end)
 end)
+
+test("trips: riding from Southshore to Alterac Mountains, the arrow aims at the border, not Southshore's flight master on the way (tester)", function()
+  onRealMaps(33, allAlliance(), function()
+    ns.State.Position = function() return 1424, 0.495, 0.557 end
+    local legs = ns.Travel.Plan({ m = 1424, x = 0.495, y = 0.557 }, { m = 1416, x = 0.184, y = 0.497, name = "Alterac Mountains" })
+    assertNotNil(legs)
+    local l1 = legs[1]
+    assertEquals("ride", l1.how, ns.Travel.Describe(legs))
+    local atFM = l1.m == 1424 and math.abs(l1.x - 0.4934) < 0.02 and math.abs(l1.y - 0.5227) < 0.02
+    assertTrue(not atFM, "the ride points at the flight master: " .. l1.m .. " " .. l1.x .. "," .. l1.y)
+  end)
+end)

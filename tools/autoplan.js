@@ -98,6 +98,9 @@ function check(file) {
   if (!/^ForeverRouteRoutes = \{$/m.test(t) || !t.trimEnd().endsWith('}')) return 'not a complete route file';
   const routes = (t.match(/^ {4}id = "/gm) || []).length;
   if (routes < 1) return 'no routes';
+  // a plan with no leveling path (the zone ranking found nothing to start in): only dungeon and class routes - the
+  // addon would put you on a dungeon route. Never installed (17:47, 2026-11-13: 'it is forcing me into Gnomeregan')
+  if (!/^ {4}id = "path:/m.test(t)) return 'no leveling path in it (only dungeon / class routes)';
   const opens = (t.match(/\{/g) || []).length, closes = (t.match(/\}/g) || []).length;
   if (opens !== closes) return `unbalanced braces (${opens} vs ${closes})`;
   return null;

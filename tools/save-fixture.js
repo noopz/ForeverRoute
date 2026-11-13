@@ -15,7 +15,8 @@ function readChar(src) {
   return parseSavedVariables(fs.readFileSync(file, 'utf8')).ForeverRouteChar || {};
 }
 // the test file's text (null without a snapshot with a position). opts: title, top (Lua after the save table),
-// prelude (Lua run first inside the test), after (Lua run last inside the test)
+// prelude (Lua run first inside the test), after (Lua run last inside the test), inside (Lua run in the replayed world,
+// with route, i = the step shown, s = that step, quests = the save's quests: tools/live-check.js FR_LIVE_PROBE)
 function saveTestLua(c, name, opts = {}) {
   const s = c.snapshot;
   if (!s || !s.pos) return null;
@@ -47,6 +48,7 @@ ${opts.prelude || ''}
     local i = w:shown()
     assertNotNil(i, "no step shown for this save")
     local s = ns.Steps(route)[i]
+${opts.inside || ''}
     local q = s and s.q and quests[s.q]
     if s and q then
       if s.k == "accept" then assertTrue(not (q.done or q.on), "the card asks you to pick up a quest you already have or did (step " .. i .. ")") end

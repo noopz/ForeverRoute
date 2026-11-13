@@ -7,11 +7,14 @@ local HBD = LibStub("HereBeDragons-2.0")
 -- a world where 1% of a map is 35 yd, everything on one continent
 local function inWorld(fn)
   local realConv, realPos = HBD.GetWorldCoordinatesFromZone, ns.State.Position
+  -- (made-up quests: the real quest data's prerequisites for those numbers don't apply - tester3_test checks them)
+  local realPre = ns.QUEST_PRE; ns.QUEST_PRE = {}
   local ok, err = pcall(withState, {}, function()
     HBD.GetWorldCoordinatesFromZone = function(_, mx, my, m) return mx * 3500, my * 3500, 0 end
     fn()
   end)
   HBD.GetWorldCoordinatesFromZone, ns.State.Position = realConv, realPos
+  ns.QUEST_PRE = realPre
   ns.Engine.focus, ns.Engine.pos = nil, nil
   if not ok then error(err, 0) end
 end
@@ -35,10 +38,10 @@ end
 test("next: at the NPC of a finished quest the plan hands in much later - hand it in now, while you're here", function()
   inWorld(function()
     local list = { { id = 1, k = "accept", q = 901, name = "Far Planned", m = 1437, x = 0.60, y = 0.30, r = 6, sec = 1 } }
-    for k = 2, 40 do list[k] = { id = k, k = "accept", q = 1000 + k, name = "Filler " .. k, m = 1437, x = 0.62, y = 0.32, r = 6, sec = 1 } end
+    for k = 2, 40 do list[k] = { id = k, k = "accept", q = 901000 + k, name = "Filler " .. k, m = 1437, x = 0.62, y = 0.32, r = 6, sec = 1 } end
     list[41] = { id = 41, k = "turnin", q = 98221, name = "From the Ashes", npc = "Captain Stoutfist", m = 1437, x = 0.0986, y = 0.5749, r = 6, sec = 1 }
     -- (Menethil: a town the plan stops at a lot)
-    for k = 42, 45 do list[k] = { id = k, k = "accept", q = 2000 + k, name = "Town " .. k, m = 1437, x = 0.099, y = 0.576, r = 6, sec = 1 } end
+    for k = 42, 45 do list[k] = { id = k, k = "accept", q = 902000 + k, name = "Town " .. k, m = 1437, x = 0.099, y = 0.576, r = 6, sec = 1 } end
     ForeverRouteData = { id = "n1", title = "n1", sections = { { title = "x" } }, steps = list }
     quests({ [98221] = true }, {})
     at(0.0986, 0.5749, 3)
@@ -73,9 +76,9 @@ test("next: back in town with full bags (or grouping up for a dungeon) - the tow
       { id = 2, k = "turnin", q = 901, name = "Crocs", m = 1437, x = 0.10, y = 0.57, r = 6, sec = 1 },
       { id = 3, k = "accept", q = 902, name = "Next Thing", m = 1437, x = 0.66, y = 0.46, r = 6, sec = 1 },
     }
-    for k = 4, 30 do list[k] = { id = k, k = "accept", q = 1000 + k, name = "Filler " .. k, m = 1437, x = 0.70, y = 0.50, r = 6, sec = 1 } end
+    for k = 4, 30 do list[k] = { id = k, k = "accept", q = 901000 + k, name = "Filler " .. k, m = 1437, x = 0.70, y = 0.50, r = 6, sec = 1 } end
     list[31] = { id = 31, k = "turnin", q = 960, name = "Town Errand", m = 1437, x = 0.105, y = 0.565, r = 6, sec = 1 }
-    for k = 32, 35 do list[k] = { id = k, k = "accept", q = 2000 + k, name = "Town " .. k, m = 1437, x = 0.104, y = 0.566, r = 6, sec = 1 } end
+    for k = 32, 35 do list[k] = { id = k, k = "accept", q = 902000 + k, name = "Town " .. k, m = 1437, x = 0.104, y = 0.566, r = 6, sec = 1 } end
     ForeverRouteData = { id = "n3", title = "n3", sections = { { title = "x" } }, steps = list }
     quests({ [960] = true }, { [901] = true })
     -- out in the croc marsh: the crocs
@@ -238,7 +241,7 @@ test("next: out in the field a lone finished hand-in waits for the hub - unless 
       { id = 1, k = "obj", q = 901, text = "Kill 8 Croc", match = "Croc", m = 1437, x = 0.65, y = 0.45, r = 60, sec = 1 },
       { id = 2, k = "accept", q = 902, name = "Next Thing", m = 1437, x = 0.30, y = 0.30, r = 6, sec = 1 },
     }
-    for k = 3, 30 do list[k] = { id = k, k = "accept", q = 1000 + k, name = "Filler " .. k, m = 1437, x = 0.70, y = 0.50, r = 6, sec = 1 } end
+    for k = 3, 30 do list[k] = { id = k, k = "accept", q = 901000 + k, name = "Filler " .. k, m = 1437, x = 0.70, y = 0.50, r = 6, sec = 1 } end
     -- a farmer in the field with a finished quest; later the plan's chain quest from him
     list[31] = { id = 31, k = "turnin", q = 970, name = "Field Errand", m = 1437, x = 0.40, y = 0.40, r = 6, sec = 1 }
     list[32] = { id = 32, k = "accept", q = 971, name = "Field Errand II", m = 1437, x = 0.40, y = 0.40, r = 6, sec = 1 }
@@ -292,9 +295,9 @@ end)
 test("next: \"not now\" on a while-you're-here hand-in - the plan's step comes back; walk on and it's offered again", function()
   inWorld(function()
     local list = { { id = 1, k = "accept", q = 901, name = "Far Planned", m = 1437, x = 0.60, y = 0.30, r = 6, sec = 1 } }
-    for k = 2, 40 do list[k] = { id = k, k = "accept", q = 1000 + k, name = "Filler " .. k, m = 1437, x = 0.62, y = 0.32, r = 6, sec = 1 } end
+    for k = 2, 40 do list[k] = { id = k, k = "accept", q = 901000 + k, name = "Filler " .. k, m = 1437, x = 0.62, y = 0.32, r = 6, sec = 1 } end
     list[41] = { id = 41, k = "turnin", q = 98221, name = "From the Ashes", npc = "Captain Stoutfist", m = 1437, x = 0.0986, y = 0.5749, r = 6, sec = 1 }
-    for k = 42, 45 do list[k] = { id = k, k = "accept", q = 2000 + k, name = "Town " .. k, m = 1437, x = 0.099, y = 0.576, r = 6, sec = 1 } end
+    for k = 42, 45 do list[k] = { id = k, k = "accept", q = 902000 + k, name = "Town " .. k, m = 1437, x = 0.099, y = 0.576, r = 6, sec = 1 } end
     ForeverRouteData = { id = "n9", title = "n9", sections = { { title = "x" } }, steps = list }
     quests({ [98221] = true }, {})
     ns.Next.dismissed = {}
@@ -311,5 +314,82 @@ test("next: \"not now\" on a while-you're-here hand-in - the plan's step comes b
     at(0.0986, 0.5749, 3)
     assertEquals(41, ns.Engine.current, "back after moving on: offered again")
     ns.Next.dismissed = {}
+  end)
+end)
+
+test("next: in a capital, its finished hand-ins come before the plan's trip out, wherever they are in the city (Stormwind, tester)", function()
+  inWorld(function()
+    -- the plan: off to the Wetlands; A Noble Brew's hand-in in the Mage Quarter comes much later
+    local list = { { id = 1, k = "accept", q = 87318, name = "Hearts of the Lost", npc = "Corma Villard", m = 1437, x = 0.50, y = 0.13, r = 6, sec = 1 } }
+    for k = 2, 40 do list[k] = { id = k, k = "accept", q = 903000 + k, name = "Wetlands " .. k, m = 1437, x = 0.52, y = 0.15, r = 6, sec = 1 } end
+    list[41] = { id = 41, k = "turnin", q = 335, name = "A Noble Brew", npc = "Zardeth of the Black Claw", m = 1453, x = 0.4014, y = 0.8531, r = 6, sec = 1, level = 30 }
+    ForeverRouteData = { id = "n-city", title = "n-city", sections = { { title = "x" } }, steps = list }
+    quests({ [335] = true }, {})
+    local realLevel = UnitLevel; UnitLevel = function() return 32 end
+    local ok, err = pcall(function() -- (the sim's character is 70: a level 30 quest would be gray)
+    -- at the Stormwind flight master: the hand-in is ~1100 yd off here, far over the "while you're here" distance
+    at(0.713, 0.722, 0, 1453)
+    assertEquals(41, ns.Engine.current, "the city hand-in before leaving town")
+    assertTrue(ns.Next.Reason(41):find("comes back here", 1, true) ~= nil, ns.Next.Reason(41))
+    -- the same hand-in, but you're out in the Wetlands: no trip back to Stormwind for it
+    at(0.52, 0.15, 0, 1437)
+    assertEquals(1, ns.Engine.current, "out of town: the plan")
+    end)
+    UnitLevel = realLevel
+    if not ok then error(err, 0) end
+  end)
+end)
+
+test("next: already where the plan goes after its trip (flew on ahead) - quest here first, the trip waits (Wetlands, tester)", function()
+  inWorld(function()
+    local list = {
+      { id = 1, k = "fly", to = 1453, dest = "Stormwind", text = "Stormwind", sec = 1 },
+      { id = 2, k = "turnin", q = 335, name = "A Noble Brew", m = 1453, x = 0.40, y = 0.85, r = 6, sec = 1 },
+      { id = 3, k = "fly", to = 1437, dest = "Wetlands", text = "Wetlands", sec = 2 },
+    }
+    for k = 4, 12 do list[k] = { id = k, k = "accept", q = 904000 + k, name = "Wetlands " .. k, m = 1437, x = 0.10 + k * 0.002, y = 0.60, r = 6, sec = 2 } end
+    ForeverRouteData = { id = "n-rejoin", title = "n-rejoin", sections = { { title = "x" }, { title = "y" } }, steps = list }
+    quests({ [335] = true }, {})
+    at(0.11, 0.60, 0, 1437)
+    assertTrue(ns.Engine.current >= 4, "questing here, not the flight back: " .. tostring(ns.Engine.current))
+    assertEquals(1, ns.Engine.planned, "the trip is still the plan's step (it comes back once these are done)")
+    assertTrue(ns.Next.Reason(ns.Engine.current):find("here already", 1, true) ~= nil, ns.Next.Reason(ns.Engine.current))
+    -- somewhere the plan doesn't go next (Duskwood): the trip stands
+    at(0.50, 0.50, 0, 1431)
+    assertEquals(1, ns.Engine.current, "elsewhere: the plan's trip")
+  end)
+end)
+
+test("next: you just arrived where the plan comes back to later (hearthed to Stormwind; the plan goes to Ironforge first and hearths back for the hand-ins) - the later visit now, its trip goes", function()
+  inWorld(function()
+    local realLevel = UnitLevel; UnitLevel = function() return 33 end
+    local ok, err = pcall(function()
+      local list = {
+        { id = 1, k = "fly", to = 1455, dest = "Ironforge", text = "Ironforge", sec = 1 },
+        { id = 2, k = "accept", q = 905001, name = "Ironforge Errand", m = 1455, x = 0.30, y = 0.30, r = 6, sec = 1 },
+        { id = 3, k = "turnin", q = 905001, name = "Ironforge Errand", m = 1455, x = 0.31, y = 0.30, r = 6, sec = 1 },
+        { id = 4, k = "hearth", dest = "Stormwind", sec = 2 },
+        { id = 5, k = "turnin", q = 905002, name = "Ready One", m = 1453, x = 0.40, y = 0.85, r = 6, sec = 2 },
+        { id = 6, k = "accept", q = 905003, name = "Its Next Part", m = 1453, x = 0.40, y = 0.85, r = 6, sec = 2 },
+        { id = 7, k = "turnin", q = 905003, name = "Its Next Part", m = 1453, x = 0.77, y = 0.49, r = 6, sec = 2 },
+        { id = 8, k = "turnin", q = 905004, name = "Ready Two", m = 1453, x = 0.50, y = 0.45, r = 6, sec = 2 },
+        { id = 9, k = "fly", to = 1431, dest = "Duskwood", text = "Duskwood", sec = 3 },
+      }
+      for k = 10, 30 do list[k] = { id = k, k = "accept", q = 906000 + k, name = "Duskwood " .. k, m = 1431, x = 0.75, y = 0.45, r = 6, sec = 3 } end
+      ForeverRouteData = { id = "n-visit", title = "n-visit", sections = { { title = "a" }, { title = "b" }, { title = "c" } }, steps = list }
+      quests({ [905002] = true, [905004] = true }, {})
+      at(0.56, 0.74, 0, 1453) -- in Stormwind, just hearthed
+      local c = ns.Engine.current
+      assertTrue(c == 5 or c == 8, "a Stormwind hand-in first, not the flight to Ironforge: " .. tostring(c))
+      assertTrue(ns.Next.Reason(c):find("comes back here", 1, true) ~= nil, ns.Next.Reason(c))
+      -- the same, but the plan's Stormwind visit also has work to do (it happens anyway): the plan's order stands
+      table.insert(list, 6, { id = 0, k = "obj", q = 905009, text = "Kill 10 Rats", m = 1453, x = 0.6, y = 0.6, r = 40, sec = 2 })
+      for k, s in ipairs(list) do s.id = k end
+      ns.Engine.Refresh()
+      at(0.56, 0.74, 5, 1453)
+      assertEquals(1, ns.Engine.current, "the visit happens anyway: the flight to Ironforge")
+    end)
+    UnitLevel = realLevel
+    if not ok then error(err, 0) end
   end)
 end)
