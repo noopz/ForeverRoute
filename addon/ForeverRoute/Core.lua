@@ -516,6 +516,8 @@ function ns.ShowOnMap(i)
     if WorldMapFrame and WorldMapFrame.SetMapID then WorldMapFrame:SetMapID(m) end
   end)
   if not ok then ns.LogError("map", err) end
+  -- and make its pin blink, so the eye finds it among the map's own markers (tester)
+  if ns.Pins and ns.Pins.Blink then C_Timer.After(0.05, function() ns.Pins.Blink(i) end) end
 end
 
 function ns.Print(msg)

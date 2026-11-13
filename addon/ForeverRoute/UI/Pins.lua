@@ -91,6 +91,7 @@ local function look(p, where, n, s, notYet)
     p.icon:SetTexture(Style.MEDIA .. kind.icon); p.icon:SetSize(size * 0.66, size * 0.66); p.icon:Show()
   else p.icon:Hide() end
 end
+local blinkFor -- (Pins.Blink: a step whose pin is to blink once it is placed)
 local function makePin()
   local p = CreateFrame("Button", nil, UIParent)
   all[#all + 1] = p
@@ -106,6 +107,15 @@ local function makePin()
     GameTooltip:Show()
   end)
   p:SetScript("OnLeave", GameTooltip_Hide)
+  -- the Map button's blink: a glow behind the pin that pulses a few times so the eye finds it (Pins.Blink)
+  p.flash = p:CreateTexture(nil, "BACKGROUND", nil, -1); p.flash:SetTexture(Style.MEDIA .. "glow"); p.flash:SetSize(56, 56); p.flash:SetPoint("CENTER")
+  p.flash:SetVertexColor(1, 0.85, 0.35); p.flash:SetAlpha(0)
+  local ag = p.flash:CreateAnimationGroup(); ag:SetLooping("REPEAT")
+  local fa = ag:CreateAnimation("Alpha"); fa:SetFromAlpha(1); fa:SetToAlpha(0); fa:SetDuration(0.6)
+  local fs = ag:CreateAnimation("Scale"); fs:SetScaleFrom(0.5, 0.5); fs:SetScaleTo(1.3, 1.3); fs:SetDuration(0.6)
+  ag:SetScript("OnPlay", function() ag.loops = 0 end)
+  ag:SetScript("OnLoop", function() ag.loops = (ag.loops or 0) + 1; if ag.loops >= 5 then ag:Stop(); p.flash:SetAlpha(0) end end)
+  p.blink = ag
   p:SetScript("OnClick", function(self)
     if not self.index then return end
     if IsShiftKeyDown() and not self.notYet then ns.Engine.Jump(self.index) else ns.Engine.view = (self.index ~= ns.Engine.current) and self.index or nil; ns.Fire("FR_STEP", ns.Engine.Shown()) end
@@ -335,7 +345,8 @@ function Pins.Update(force)
         look(p, where, label + 1, s, notYet[n])
         -- hidden and unanchored until HereBeDragons places it (it shows the frame itself)
         p:Hide(); p:ClearAllPoints()
-        if where == "world" then HBDP:AddWorldMapIconMap(Pins, p, m, x, y, HBD_PINS_WORLDMAP_SHOW_PARENT or 1)
+        -- (on top of the map's own markers - a quest giver's "!" covered ours - like other Forever map addons)
+        if where == "world" then HBDP:AddWorldMapIconMap(Pins, p, m, x, y, HBD_PINS_WORLDMAP_SHOW_PARENT or 1, "PIN_FRAME_LEVEL_TOPMOST")
         else
           -- by world position, not by map: the map-bound call only draws the pin while the game says you are on
           -- exactly that map (not on a keep's or a district's own map), and nearness is already checked in yards
@@ -347,8 +358,19 @@ function Pins.Update(force)
     end
   end
   Pins.Sweep()
+  local b = blinkFor
+  if b then C_Timer.After(0.1, function() if blinkFor == b then Pins.Blink(b) end end) end
 end
 Pins._used = used
+-- blink the world map pin of step i (the card's Map button): now if it is drawn, else once the pins are next placed
+function Pins.Blink(i)
+  blinkFor = i
+  C_Timer.After(3, function() if blinkFor == i then blinkFor = nil end end) -- (not drawn by then: no late blink)
+  for _, p in ipairs(used) do
+    if p.where == "world" and p.index == i and p.blink then p.blink:Stop(); p.blink:Play(); blinkFor = nil end
+  end
+end
+function Pins.PendingBlink() local i = blinkFor; blinkFor = nil; return i end
 -- every frame this file ever put on a map (pins and path dots)
 function Pins.Frames() return all end
 -- nothing of ours may show on the minimap unless HereBeDragons is placing it there; returns how many it had to hide

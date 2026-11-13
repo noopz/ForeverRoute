@@ -140,8 +140,13 @@ function List.Draw()
     f.pathName:SetWidth(math.min(300, f.pathName:GetStringWidth() + 2))
     f.pathFast:ClearAllPoints(); f.pathFast:SetPoint("LEFT", f.pathName, "RIGHT", 6, 0)
     f.pathFast:SetShown((data.best or m.best) and true or false)
+    -- the zones ahead from where you are on the route (the plan's leg list started at level 1 - tester), with the
+    -- hand-ins in each; the plan's own list for a route with nothing left to tell from
     local legs = {}
-    for z in (m.legs or data.title or ""):gmatch("[^>·]+") do z = z:gsub("^%s+", ""):gsub("%s+$", ""); if z ~= "" and legs[#legs] ~= z then legs[#legs + 1] = z end end
+    for _, z in ipairs(ns.Engine.ZonesAhead and ns.Engine.ZonesAhead(nil, 5) or {}) do legs[#legs + 1] = z.quests > 0 and (Style.ShortZone(z.zone) .. " " .. z.quests) or Style.ShortZone(z.zone) end
+    if #legs == 0 then
+      for z in (m.legs or data.title or ""):gmatch("[^>·]+") do z = z:gsub("^%s+", ""):gsub("%s+$", ""); if z ~= "" and legs[#legs] ~= z then legs[#legs + 1] = z end end
+    end
     local hc = Style.Chips(f.pathChips, legs, 396, 5)
     f.pathChips:SetHeight(hc)
     f.pathMeta:ClearAllPoints(); f.pathMeta:SetPoint("TOPLEFT", f.pathChips, "BOTTOMLEFT", 0, -6); f.pathMeta:SetPoint("RIGHT", f.paths, "RIGHT", -10, 0)

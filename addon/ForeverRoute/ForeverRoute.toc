@@ -45,6 +45,7 @@ UI\Style.lua
 UI\Card.lua
 UI\Arrow.lua
 UI\Pins.lua
+UI\Zones.lua
 UI\List.lua
 UI\Paths.lua
 UI\Dungeons.lua

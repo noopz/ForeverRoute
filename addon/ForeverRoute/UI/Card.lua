@@ -137,8 +137,11 @@ local function build()
   -- macro, so grabbing it never targets
   cur.target:SetAttribute("ctrl-type1", "macro"); cur.target:SetAttribute("ctrl-macrotext1", "")
   cur.target:SetMovable(true); cur.target:RegisterForDrag("LeftButton"); cur.target:SetClampedToScreen(true)
-  cur.target:SetScript("OnDragStart", function(self) if IsControlKeyDown() and not InCombatLockdown() then self:StartMoving() end end)
+  cur.target:SetScript("OnDragStart", function(self) if IsControlKeyDown() and not InCombatLockdown() then self.dragging = true; self:StartMoving() end end)
   cur.target:SetScript("OnDragStop", function(self)
+    -- (only a drag we started: a drag in combat, never started, would call a protected function - ADDON_ACTION_BLOCKED)
+    if not self.dragging or InCombatLockdown() then return end
+    self.dragging = nil
     self:StopMovingOrSizing(); self:SetUserPlaced(false) -- (ours to keep, not the game's layout cache)
     local l, t, s = self:GetLeft(), self:GetTop(), self:GetEffectiveScale() / UIParent:GetEffectiveScale()
     if l and t then ns.db.targetPos = { l * s, t * s } end
@@ -159,6 +162,21 @@ local function build()
   local ihl = cur.item:CreateTexture(nil, "HIGHLIGHT"); ihl:SetTexture(Style.WHITE); ihl:SetAllPoints(); ihl:SetVertexColor(1, 1, 1, 0.15)
   cur.item:SetScript("OnEnter", function(self) if self.itemID then GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetItemByID(self.itemID); GameTooltip:Show() end end)
   cur.item:SetScript("OnLeave", GameTooltip_Hide)
+  -- one more Target button for each other mob of the step (its quest item drops from several, or the objectives
+  -- grouped with it name others): stacked under the first and moved with it (tester: a target for each mob)
+  cur.targets = {}
+  for n = 1, Card.EXTRA_TARGETS do
+    local b = CreateFrame("Button", "ForeverRouteTargetButton" .. (n + 1), UIParent, "SecureActionButtonTemplate"); b:SetFrameStrata(f:GetFrameStrata())
+    b:SetSize(140, 20); b:RegisterForClicks("AnyUp", "AnyDown"); b:SetAttribute("type", "macro")
+    Style.Nine(b, "panel", "BACKGROUND", 0, 8, 0, 1, 0.47, 0.42, 0.2)
+    local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetTexture(Style.WHITE); hl:SetPoint("TOPLEFT", 3, -3); hl:SetPoint("BOTTOMRIGHT", -3, 3); hl:SetVertexColor(1, 1, 1, 0.07)
+    b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetTexture(Style.MEDIA .. "icon-grind"); b.icon:SetSize(12, 12); b.icon:SetPoint("LEFT", 7, 0); b.icon:SetVertexColor(1, 0.55, 0.5)
+    b.label = Style.Text(b, 10, C.text); b.label:SetPoint("LEFT", b.icon, "RIGHT", 5, 0); b.label:SetPoint("RIGHT", -6, 0); b.label:SetWordWrap(false); b.label:SetJustifyV("MIDDLE")
+    b:SetScript("OnEnter", function(self) GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText("Click to target " .. (self.who or ""), 1, 1, 1); GameTooltip:AddLine("Also drops what this step needs. Ctrl+drag the top button to move them all.", 0.6, 0.65, 0.72, true); GameTooltip:Show() end)
+    b:SetScript("OnLeave", GameTooltip_Hide)
+    b:Hide()
+    cur.targets[n] = b
+  end
   cur.target:Hide(); cur.item:Hide()
 
   -- animations
@@ -207,7 +225,7 @@ local function build()
     undo = Style.IconButton(f.ctl, "btn-undo", 20, function() ns.Engine.Undo() end, "Undo the last skip / done"),
     list = Style.IconButton(f.ctl, "btn-list", 20, function() ns.Fire("FR_TOGGLE_LIST") end, "The whole route  (/fr list)"),
     dungeon = Style.IconButton(f.ctl, "icon-kill", 20, function() ns.Fire("FR_TOGGLE_DUNGEONS") end, "Dungeon routes: pick up everything for one dungeon  (/fr dungeons)"),
-    min = Style.IconButton(f.ctl, "btn-min", 20, function() ns.db.collapsed = not ns.db.collapsed; Card.Update() end, "Collapse / expand"),
+    min = Style.IconButton(f.ctl, "btn-min", 20, function() ns.db.collapsed = not ns.db.collapsed; Card.Update(); if ns.Zones then ns.Zones.Update() end end, "Collapse / expand"),
     opt = Style.IconButton(f.ctl, "btn-gear", 20, function() ns.Fire("FR_OPEN_OPTIONS") end, "Options"),
   }
   for _, b in pairs(f.btn) do b:HookScript("OnLeave", function() Card.Hover(false) end) end
@@ -218,8 +236,8 @@ local function build()
   f.home:SetScript("OnLeave", function(self) self.label:SetTextColor(C.gold[1], C.gold[2], C.gold[3]); GameTooltip:Hide() end)
   f.home:Hide()
   -- quests in your log you won't do (not on the route, or gray by then): a nudge that opens the log check
-  f.drop = Style.Button(f, "", 220, 18, function() ns.Fire("FR_TOGGLE_LOGCHECK") end, "Quests in your log that your route won't use - see them and drop them")
-  f.drop.label:SetTextColor(1, 0.55, 0.3)
+  f.drop = Style.Button(f, "", 90, 14, function() ns.Fire("FR_TOGGLE_LOGCHECK") end, "Quests in your log that your route won't use - see them and drop them")
+  f.drop.label:SetFontObject(Style.Font(10)); f.drop.label:SetTextColor(1, 0.55, 0.3)
   f.drop:SetScript("OnLeave", function(self) self.label:SetTextColor(1, 0.55, 0.3); GameTooltip:Hide() end)
   f.drop:Hide()
   -- options that just opened up (a level-up brought new zones): one line, See options, dismiss
@@ -284,7 +302,7 @@ local function build()
 
   f:SetScript("OnEnter", function() Card.Hover(true) end)
   f:SetScript("OnLeave", function() Card.Hover(false) end)
-  f:SetScript("OnHide", function() if InCombatLockdown() then Card.needPlace = true else cur.target:Hide(); cur.item:Hide() end end)
+  f:SetScript("OnHide", function() if InCombatLockdown() then Card.needPlace = true else cur.target:Hide(); cur.item:Hide(); for _, b in ipairs(cur.targets) do b:Hide() end end end)
   f:SetScript("OnShow", function() C_Timer.After(0, function() Card.PlaceSecure() end) end)
 
   Style.Scaled(f, "scale") -- the Forever Route scale x the card's own
@@ -295,10 +313,10 @@ end
 function Card.Hover(on)
   if not f then return end
   if not on then
-    C_Timer.After(0.2, function() if f and not f:IsMouseOver() and f.ctl:GetAlpha() > 0 then UIFrameFadeOut(f.ctl, 0.2, f.ctl:GetAlpha(), 0); UIFrameFadeIn(f.eta, 0.2, f.eta:GetAlpha(), 1) end end)
+    C_Timer.After(0.2, function() if f and not f:IsMouseOver() and f.ctl:GetAlpha() > 0 then UIFrameFadeOut(f.ctl, 0.2, f.ctl:GetAlpha(), 0); UIFrameFadeIn(f.eta, 0.2, f.eta:GetAlpha(), 1); f.drop:SetShown(f.dropWanted and true or false) end end)
     return
   end
-  if f.ctl:GetAlpha() < 1 then UIFrameFadeIn(f.ctl, 0.12, f.ctl:GetAlpha(), 1); UIFrameFadeOut(f.eta, 0.12, f.eta:GetAlpha(), 0) end
+  if f.ctl:GetAlpha() < 1 then UIFrameFadeIn(f.ctl, 0.12, f.ctl:GetAlpha(), 1); UIFrameFadeOut(f.eta, 0.12, f.eta:GetAlpha(), 0); f.drop:Hide() end
 end
 
 -- "where next?" option rows: zone, XP/h and the zones that follow; the open option is marked, the fastest gets a star
@@ -602,6 +620,10 @@ function Card.Fill()
       local own = Card.OwnNote(s)
       if trip.how == "aboard" and s.boat then own = nil end -- "Board the boat at the pier": done, you are on it
       own = own and ((s.warn and Style.Hex(C.warn) or "|cff8e99ad") .. own .. "|r")
+      -- why go: what there is to do there, and where the route goes after (a zone change said only "accept this
+      -- quest" with the trip folded in - tester)
+      local why = Card.WhyGo(i)
+      if why then own = own and (why .. "\n" .. own) or why end
       if trip.legs and #trip.legs > 1 then
         -- a planned trip: numbered steps, the one you are on highlighted (it is re-planned from where you are)
         local lines = {}
@@ -678,6 +700,22 @@ end
 -- the option changed: the macro follows (out of combat; the card refills the button then)
 ns.On("FR_SETTINGS", function() if Card.SetButtons and ns.Engine and ns.Engine.Shown and ForeverRouteData then local i = ns.Engine.Shown(); if i then pcall(Card.SetButtons, ForeverRouteData.steps[i]) end end end)
 
+-- the other mobs of step s worth a Target button of their own: the ones its text names ("Collect 10 Turtle Meat
+-- (Snapjaw, Cranky Benj)") and the targets of the objectives done at the same spot, without the first (who)
+Card.EXTRA_TARGETS = 3
+function Card.OtherTargets(s, who)
+  local out, seen = {}, { [who or ""] = true }
+  local function add(n) n = n and n:gsub("^%s+", ""):gsub("%s+$", ""); if n and n ~= "" and not seen[n] and #out < Card.EXTRA_TARGETS then seen[n] = true; out[#out + 1] = n end end
+  if not (s and s.k == "obj" and who) then return out end
+  local inner = (s.text or ""):match("%(([^()]+)%)%s*$")
+  if inner then for n in inner:gmatch("[^,]+") do add(n) end end
+  local i = ns.Engine.Shown and ns.Engine.Shown()
+  if i and ForeverRouteData and ForeverRouteData.steps[i] == s and ns.Engine.Group then
+    for _, j in ipairs(ns.Engine.Group(i)) do add(ForeverRouteData.steps[j].target) end
+  end
+  return out
+end
+
 function Card.SetButtons(s)
   local cur = f.cur
   local who = s and (s.target or ((s.k == "accept" or s.k == "turnin" or s.k == "bind" or s.k == "fp" or s.k == "train") and s.npc))
@@ -686,6 +724,12 @@ function Card.SetButtons(s)
   setSecure(function()
     if who then cur.target:SetAttribute("macrotext", Card.TargetMacro(who)); cur.target.who = who; cur.target.label:SetText(who)
     else cur.target:SetAttribute("macrotext", ""); cur.target.who = nil end -- the key does nothing on a step with no one to target
+    local others = Card.OtherTargets(s, who)
+    cur.wantOthers = #others
+    for n, b in ipairs(cur.targets) do
+      local o = others[n]
+      b.who = o; b:SetAttribute("macrotext", o and Card.TargetMacro(o) or ""); b.label:SetText(o or "")
+    end
     if item then
       cur.item:SetAttribute("item", "item:" .. item); cur.item.itemID = item
       cur.item.icon:SetTexture((ns.GetItemIcon and ns.GetItemIcon(item)) or 134400)
@@ -771,10 +815,10 @@ function Card.PlaceSecure()
   if InCombatLockdown() then Card.needPlace = true; return end
   Card.needPlace = false
   local x, y, where = Card.SecureSpot(cur.wantItem and true or false)
-  if not (f:IsShown() and not ns.db.collapsed and (cur.wantTarget or cur.wantItem) and x and not ns.Engine.view) then cur.target:Hide(); cur.item:Hide(); cur.secureAt = nil; return end
+  if not (f:IsShown() and not ns.db.collapsed and (cur.wantTarget or cur.wantItem) and x and not ns.Engine.view) then cur.target:Hide(); cur.item:Hide(); for _, b in ipairs(cur.targets) do b:Hide() end cur.secureAt = nil; return end
   -- on the card's layer, a level above it and everything on it
   local lvl = f:GetFrameLevel() + 20
-  for _, b in ipairs({ cur.item, cur.target }) do b:SetScale(f:GetScale()); b:SetFrameStrata(f:GetFrameStrata()); b:SetFrameLevel(lvl) end
+  for _, b in ipairs({ cur.item, cur.target, unpack(cur.targets) }) do b:SetScale(f:GetScale()); b:SetFrameStrata(f:GetFrameStrata()); b:SetFrameLevel(lvl) end
   -- places are worked out in UIParent units; the game multiplies a frame's offsets by its scale, so they are set
   -- divided by the buttons' own
   local S = cur.target:GetEffectiveScale() / UIParent:GetEffectiveScale()
@@ -784,6 +828,12 @@ function Card.PlaceSecure()
   cur.secureAt = where
   cur.target:ClearAllPoints(); cur.target:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x / S, y / S)
   cur.target:SetShown(cur.wantTarget and true or false)
+  -- the other mobs' buttons: a column under the first (above the card they'd cover it: they go up instead)
+  local up = where ~= "dragged"
+  for n, b in ipairs(cur.targets) do
+    b:ClearAllPoints(); b:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x / S, (y + (up and n or -n) * (Card.TARGET_H + 2) * S) / S)
+    b:SetShown((cur.wantTarget and (cur.wantOthers or 0) >= n) and true or false)
+  end
   -- the use-item button: next to the Target button, or in its place on a step with no one to target
   local ix = cur.wantTarget and x + (Card.TARGET_W + Card.SECURE_GAP) * S or x
   cur.item:ClearAllPoints(); cur.item:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", ix / S, y / S)
@@ -856,7 +906,7 @@ function Card.Layout()
   f.line:Hide()
   if ns.db.collapsed then
     for _, r in ipairs(f.rows) do r:Hide() end
-    f.eta:Hide(); f.ret:Hide()
+    f.eta:Hide(); f.ret:Hide(); f.drop:Hide(); f.dropWanted = nil
     for _, b in pairs(f.btn) do b:Hide() end
     f.ctl:ClearAllPoints(); f.ctl:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD + 4, -top + 6)
     f.btn.min:Show(); f.btn.min:ClearAllPoints(); f.btn.min:SetPoint("RIGHT", f.ctl, "RIGHT")
@@ -945,15 +995,18 @@ function Card.Layout()
     top = top + 22
   end
   local nd = ns.LogCheck and ns.LogCheck.dropCount or 0
-  f.drop:SetShown(nd > 0 and not ns.Engine.view)
-  if nd > 0 and not ns.Engine.view then
-    f.drop.label:SetText(string.format("%d quest%s you won't do - review", nd, nd == 1 and "" or "s"))
-    f.drop:ClearAllPoints(); f.drop:SetPoint("TOPLEFT", PAD - 2, -top); top = top + 22
+  -- (a small link at the right of the footer, not a row of its own: it took a lot of room - tester)
+  f.dropWanted = nd > 0 and not ns.Engine.view
+  f.drop:SetShown(f.dropWanted and f.ctl:GetAlpha() == 0)
+  if f.dropWanted then
+    f.drop.label:SetText(string.format("%d won't do", nd))
+    f.drop:SetWidth(f.drop.label:GetStringWidth() + 12)
   end
   local viewing = ns.Engine.view ~= nil
   f.ret:SetShown(viewing)
   if viewing then f.ret:ClearAllPoints(); f.ret:SetPoint("TOPLEFT", PAD, -top); top = top + 24 end
-  f.eta:Show(); f.eta:ClearAllPoints(); f.eta:SetPoint("TOPLEFT", PAD, -top - 4); f.eta:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
+  f.drop:ClearAllPoints(); f.drop:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD + 6, -top - 2)
+  f.eta:Show(); f.eta:ClearAllPoints(); f.eta:SetPoint("TOPLEFT", PAD, -top - 4); f.eta:SetPoint("RIGHT", f, "RIGHT", -PAD - (f.dropWanted and f.drop:GetWidth() + 4 or 0), 0)
   local onDungeon = ForeverRouteData and ForeverRouteData.dungeon
   f.home:SetShown(onDungeon and true or false)
   if onDungeon then f.home:ClearAllPoints(); f.home:SetPoint("TOPLEFT", PAD - 2, -top + 1) end
@@ -1102,6 +1155,16 @@ function Card.UpdateProgress()
   f.progFill:SetWidth(math.max(0.001, (f.prog:GetWidth() or 0) * (total > 0 and done / total or 0)))
 end
 
+-- "Going to Alterac Mountains: 2 quests (Soothing Turtle Bisque, Alterac Granite), then Hillsbrad Foothills" - for a
+-- step in another zone than yours
+function Card.WhyGo(i)
+  local z = ns.Engine.ZonesAhead and ns.Engine.ZonesAhead(i, 2)
+  local a, b = z and z[1], z and z[2]
+  if not a or a.zone ~= (steps()[i] or {}).zone then return nil end
+  local what = a.quests > 0 and string.format("%d quest%s (%s)", a.quests, a.quests == 1 and "" or "s", table.concat(a.names, ", ", 1, math.min(3, #a.names)) .. (#a.names > 3 and ", ..." or "")) or "grinding"
+  return string.format("|cffffd25aGoing to %s for %s%s|r", a.zone, what, b and (", then " .. b.zone) or "")
+end
+
 function Card.Header()
   local i = ns.Engine.Shown()
   local sec = i and section(i)
@@ -1117,7 +1180,8 @@ function Card.Update(animate)
   local s = i and steps()[i]
   local meta = ForeverRouteData and ForeverRouteData.meta
   if ForeverRouteData and ForeverRouteData.dungeon then f.eta:SetText("")
-  else f.eta:SetText(s and s.lvl and string.format("plan: level %s here%s", s.lvl, meta and meta.endLevel and ("  ·  ends %s"):format(meta.endLevel) or "") or "") end
+  -- ("plan: level 29 here · ends 60 (100%)" read as a puzzle - tester)
+  else f.eta:SetText(s and s.lvl and string.format("planned for level %s%s", s.lvl, meta and meta.endLevel and ("  ·  plan goes to level %s"):format((tostring(meta.endLevel):gsub("%s*%(%d+%%%)", ""))) or "") or "") end
   local cur = f.cur
   if animate then
     cur.animOut:Stop(); cur.animIn:Stop(); cur.pop:Stop()

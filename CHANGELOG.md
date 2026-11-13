@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.5 - 2026-11-13
+- A zone change says why: "Going to Alterac Mountains for 2 quests (Soothing Turtle Bisque, Alterac Granite), then Hillsbrad Foothills" on the card, above how to get there.
+- Zones ahead: a small panel beside the card (the tab on its edge) lists where the route goes next and how many quests in each. The route list's zone chips start from where you are, not from level 1.
+- A Target button for each mob a step names (Snapjaw and Cranky Benj both drop Turtle Meat), stacked with the first; Ctrl+drag the top one to move them together.
+- Clicking Map makes the step's pin blink on the world map, and our pins sit on top of the map's own markers.
+- The arrival ring pulses three times and stops, instead of the whole time you're there.
+- "Quests you won't do" is a small link in the card's footer, not a row of its own. The footer reads "planned for level 29 · plan goes to level 60".
+- Fixed: the Target button clicked or dragged in combat raised a "blocked action" error.
+
 ## 1.4.4 - 2026-11-12
 - A trip with an extra change (a boat, the tram, a portal) has to save real time to win: Refuge Pointe to Stormwind is the flight to Stormwind again, not a flight to Ironforge and the tram for 3 seconds less. The walk off the tram no longer reads "from Stormwind to Stormwind".
 - "Not now" on the card for a stop the route fitted in from where you are (a hand-in while you're here, a quest just behind you): it goes back to the plan's next step, and offers the stop again once you've moved on.

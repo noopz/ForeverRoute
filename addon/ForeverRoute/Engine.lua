@@ -868,6 +868,36 @@ function Engine.LegProgress(i)
   return done, b - a + 1, zone
 end
 
+-- The zones ahead, from step i (default: where you are on the route) on, in order: { zone, quests = quests with something
+-- still to do there on this visit (pick up, work or hand in), names = their quest names, first = its first step }. A zone you only pass through (no
+-- hand-in, a flight path or two) is left out; travel steps belong to no zone. Up to n visits (default 8).
+-- (the card's "why go there" line, the zones panel, the route list's chips - tester: they showed the plan from the start)
+function Engine.ZonesAhead(i, n)
+  local list, out = steps(), {}
+  n = n or 8
+  if not i then i = Engine.current or 1 end
+  local cur
+  local function close()
+    if cur and (cur.quests > 0 or cur.grind) then out[#out + 1] = cur end
+    cur = nil
+  end
+  local TRAVEL = { fly = true, hearth = true, boat = true, fp = true, bind = true }
+  for j = i, #list do
+    local s = list[j]
+    if not TRAVEL[s.k] and s.zone and not Engine.IsDone(j) then
+      if not cur or cur.zone ~= s.zone then
+        close()
+        if #out >= n then break end
+        cur = { zone = s.zone, quests = 0, names = {}, seen = {}, first = j }
+      end
+      if s.q and s.q > 0 and not cur.seen[s.q] then cur.seen[s.q] = true; cur.quests = cur.quests + 1; cur.names[#cur.names + 1] = s.name end
+      if s.k == "grind" then cur.grind = true end
+    end
+  end
+  if #out < n then close() end
+  return out
+end
+
 -- objective steps done in the same spot right after this one: shown together on the card
 function Engine.Group(i)
   local list, out = steps(), {}

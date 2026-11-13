@@ -103,6 +103,41 @@ function anneal(events, D, nLoc, opts, seed, budgetMs) {
   const t0 = Date.now();
   let T = opts.T0 || 120, it = 0;
   const tmp = new Int32Array(n);
+  // ALNS-style destroy and repair (Ropke & Pisinger 2006): the other moves shift events a few at a time and never see
+  // a quest as a whole - its pick-up, objectives and hand-in sit far apart. This one takes every event of one quest
+  // out and reinserts them in order (pick-up, then each objective, then the hand-in, each after the one before) at the
+  // cheapest of a sample of positions: near events at the same place, plus a few at random. Rare (FR_OPT_REPAIR, the
+  // share of moves; 0 turns it off): each one costs about a hundred evaluations.
+  const repairP = opts.repairP ?? +(process.env.FR_OPT_REPAIR ?? 0);
+  const byLoc = new Map(); events.forEach((e, k) => { const l = byLoc.get(e.loc) || []; l.push(k); byLoc.set(e.loc, l); });
+  const rank = (e) => (e.kind === 'accept' ? 0 : e.kind === 'turnin' ? 2 : 1);
+  function repair(arr) {
+    const q = events[arr[Math.floor(rnd() * n)]].q;
+    const out = [], rest = [];
+    for (let k = 0; k < n; k++) (events[arr[k]].q === q ? out : rest).push(arr[k]);
+    if (out.length === n) return;
+    out.sort((x, y) => rank(events[x]) - rank(events[y]));
+    let seq = rest, from = 0;
+    for (const ev of out) {
+      // candidate slots (insert before seq[j], j from 'from' to seq.length): after events at the same place, and some at random
+      const cand = new Set([seq.length]);
+      const posIn = new Map(); seq.forEach((x, j) => posIn.set(x, j));
+      for (const x of byLoc.get(events[ev].loc) || []) { const j = posIn.get(x); if (j !== undefined && j >= from) { cand.add(j + 1); cand.add(j); } }
+      for (let r = 0; r < 12; r++) cand.add(from + Math.floor(rnd() * (seq.length - from + 1)));
+      let bestJ = -1, bestC = Infinity;
+      const left = out.slice(out.indexOf(ev) + 1);
+      for (const j of cand) {
+        if (j < from || j > seq.length) continue;
+        const trial = seq.slice(0, j).concat([ev], seq.slice(j), left);
+        tmp2.set(trial);
+        const c = cost(tmp2);
+        if (c < bestC) { bestC = c; bestJ = j; }
+      }
+      seq = seq.slice(0, bestJ).concat([ev], seq.slice(bestJ)); from = bestJ + 1;
+    }
+    arr.set(seq);
+  }
+  const tmp2 = new Int32Array(n);
   // nothing to order (a leg left with no events, or one): the order it came in
   if (n < 2) return { order: Array.from(cur), cost: cc, iterations: 0, violations: cost.violations };
   // stop once it has stopped getting better (no new best for stallMs, after a minimum amount of work scaled to the
@@ -115,7 +150,9 @@ function anneal(events, D, nLoc, opts, seed, budgetMs) {
     for (let inner = 0; inner < 2000; inner++, it++) {
       tmp.set(cur);
       const mv = rnd();
-      if (mv < 0.45) { // relocate a block of 1-6 events
+      if (repairP > 0 && mv < repairP) { // ALNS destroy + repair: lift a whole quest out, put each piece back where it costs least
+        repair(tmp);
+      } else if (mv < 0.45) { // relocate a block of 1-6 events
         const len = 1 + Math.floor(rnd() * Math.min(6, n - 1)), i = Math.floor(rnd() * (n - len + 1));
         const block = Array.from(tmp.subarray(i, i + len));
         const rest = [...tmp.subarray(0, i), ...tmp.subarray(i + len)];

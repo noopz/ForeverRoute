@@ -283,6 +283,7 @@ const codeSig = (() => {
   const h = require('crypto').createHash('sha1');
   for (const f of ['route2.js', 'optimize.js', 'quality.js', 'voxnav.js', 'waypoints.js', 'world.js', 'travel.js', 'travel-facts.json', 'travel-net.json']) { try { h.update(fs.readFileSync(path.join(__dirname, f))); } catch (e) {} }
   try { h.update(fs.readFileSync(cfg.conversion)); } catch (e) {} // map geometry: every leg
+  h.update('repair:' + (process.env.FR_OPT_REPAIR ?? '')); // the optimizer's destroy-and-repair share (optimize.js), when set
   // (the quest data isn't here any more: each leg's key carries a fingerprint of the data it can see, legSig below -
   // a QuestieDB update used to throw away every cached leg; now it re-plans only the legs whose data changed)
   // the walking trails by what they say (their timestamps changed on every replan and threw the whole cache away)
