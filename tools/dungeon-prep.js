@@ -254,7 +254,7 @@ async function orderEvents(ev, Dm, n, startLoc, endLoc) {
   let initial = order;
   if (endLoc !== null) { evs.push({ kind: 'obj', q: -9999, loc: endLoc, work: 0, reqLevel: 0, pre: [], last: true }); initial = [...order, evs.length - 1]; }
   const planLevel = Math.max(level, ...evs.map((e) => e.reqLevel || 0));
-  const r = await optimize(evs, Dm, n, { startLoc, level: planLevel, xp: 0, xpToLevel: XP, xpWeight: 0, initial, budgetMs: cfg.optimizeMs || 3000, workers: cfg.workers || 3 });
+  const r = await optimize(evs, Dm, n, { startLoc, level: planLevel, xp: 0, xpToLevel: XP, xpWeight: 0, initial, effort: cfg.optimizeEffort ?? 1, runs: 3, workers: cfg.workers || 3 });
   let best = r.order;
   if (endLoc !== null) { const i = best.indexOf(evs.length - 1); if (i !== best.length - 1) best = order; else best = best.slice(0, -1); }
   return best;
@@ -273,13 +273,16 @@ async function orderEvents(ev, Dm, n, startLoc, endLoc) {
     for (const p of want) {
       const full = await build(p);
       const worth = [];
+      // the with/without comparison only needs rough plans (a quarter of the moves) - but both sides rough: the full
+      // plan's better order against a rough one without the quest made every quest look cheaper than it is (the
+      // rough plan's extra minutes were taken off the quest's own), and kept quests the cut would have dropped
+      const rough = (pp) => { const save = cfg.optimizeEffort; cfg.optimizeEffort = 0.25 * (save ?? 1); return build(pp).finally(() => { cfg.optimizeEffort = save; }); };
+      const withAll = p.main.length > 1 ? await rough(p) : null;
       if (p.main.length > 1) for (const q of p.main) {
         const others = p.main.filter((x) => x !== q);
         const need = new Set(others.flatMap((x) => x._chain));
-        const saveMs = cfg.optimizeMs; cfg.optimizeMs = 700; // the with/without comparison only needs a rough plan
-        const without = await build({ ...p, main: others, chains: p.chains.filter((c) => need.has(c.id)) });
-        cfg.optimizeMs = saveMs;
-        const minutes = Math.max(0, full.minutes - without.minutes);
+        const without = await rough({ ...p, main: others, chains: p.chains.filter((c) => need.has(c.id)) });
+        const minutes = Math.max(0, withAll.minutes - without.minutes);
         const own = p.chains.filter((c) => q._chain.includes(c.id) && !need.has(c.id));
         const xp = qxp(q) + own.reduce((t, c) => t + qxp(c), 0);
         const rw = rewardOf(q);

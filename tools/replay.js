@@ -43,7 +43,7 @@ const { spawnSync } = require('child_process');
 const { readChar } = require('./save-fixture');
 
 const ROOT = path.join(__dirname, '..');
-const SIM = path.join(ROOT, 'sim', 'pkg', require('fs').readFileSync(path.join(__dirname, 'sim-version.txt'), 'utf8').trim()) /* tools/sim-version.txt: the simulator in use */;
+const { SIM, BIN: SIM_BIN, simEnv } = require('./sim-path'); // the simulator for this platform (tools/sim-path.js, sim-version.txt)
 
 // the simulator knows the original races only: Forever's own (Skyborne) log in as the nearest one. An unknown race
 // made the simulator open an error dialog on the desktop and wait for someone to click it.
@@ -419,10 +419,11 @@ function ReplayRun(S)
       local spd = (ns.Travel and ns.Travel.Speed and ns.Travel.Speed()) or 7
       local yd0 = yards(j)
       local worth = not (ns.Next and ns.Next.BehindPrize) or ns.Next.BehindPrize(list, s, S.level) - ((yd0 and yd0 >= 0) and yd0 * 1.25 / spd or 0) > 0
-      -- (and one you could take: a pick-up whose earlier chain quest isn't handed in isn't work left here)
+      -- (and one you could take: a pick-up whose earlier chain quest isn't handed in isn't work left here; at a level the
+      -- live pick offers it at - ns.Next.BehindLevelOk, one rule for both)
       -- (and room in your log to take it: with the log full, nothing here is work you could take now)
       local room = ns.State.LogCount() < ns.State.MaxLog()
-      if room and s.k == "accept" and s.m == m and allHere and worth and (not E.Available or E.Available(j)) and (s.level or 0) >= S.level - 5 and E.Status(j) == "done" and reason(j) == "behind-you" then
+      if room and s.k == "accept" and s.m == m and allHere and worth and (not E.Available or E.Available(j)) and (not (ns.Next and ns.Next.BehindLevelOk) or ns.Next.BehindLevelOk(s.level, S.level)) and E.Status(j) == "done" and reason(j) == "behind-you" then
         cut.n = cut.n + 1
         local d = yards(j); if d and d >= 0 and (not cut.yd or d < cut.yd) then cut.yd, cut.name, cut.i, cut.ql, cut.lvl = d, s.name, j, s.level, s.lvl end
       end
@@ -462,9 +463,9 @@ function run(scns) {
     fs.copyFileSync(harness, path.join(dest, 'tests', '_harness.lua'));
     fs.writeFileSync(path.join(dest, 'tests', 'replay_test.lua'), testFile(scns));
     fs.mkdirSync(path.join(work, 'wtf'), { recursive: true });
-    const r = spawnSync(path.join(SIM, 'wow-sim.exe'), ['--allow-ui-version-mismatch', '--addons-path', work, '--session-wtf-path', path.join(work, 'wtf'),
+    const r = spawnSync(SIM_BIN, ['--allow-ui-version-mismatch', '--addons-path', work, '--session-wtf-path', path.join(work, 'wtf'),
       '--class', who.class, '--race', simRaceOf(who.race), 'run-tests', 'ForeverRoute'],
-    { cwd: SIM, env: { ...process.env, WOW_INSTALL_PATH: require('./game-dir').WOW }, encoding: 'utf8', timeout: 600000, maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'pipe'] });
+    { cwd: SIM, env: simEnv(), encoding: 'utf8', timeout: 600000, maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'pipe'] });
     const out = (String(r.stdout || '') + '\n' + String(r.stderr || '') + (r.error ? '\n' + r.error.message : '')).replace(/\x1b\[[0-9;]*m/g, '');
     if (process.env.FR_KEEP) { fs.writeFileSync(path.join(work, 'out.txt'), out); console.log('kept ' + work); }
     const res = [];

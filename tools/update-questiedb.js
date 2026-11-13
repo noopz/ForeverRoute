@@ -93,7 +93,7 @@ function get(url, binary) {
   log('regenerated: flight masters, vendors, dungeon quests, breadcrumbs, hostile towns, travel data');
 
   // 5. checks
-  for (const t of ['test-route2-tasks.js', 'test-route2-sim.js', 'test-lint.js', 'test-travel.js', 'test-quality.js']) {
+  for (const t of ['test-route2-tasks.js', 'test-route2-sim.js', 'test-lint.js', 'test-travel.js', 'test-quality.js', 'test-exclusive.js']) {
     const r = node(t).trim().split('\n').pop(); log(`${t}: ${r}`);
     if (!/all passed|skipped/.test(r)) throw new Error(t + ' failed: the data is in place, the version is not recorded');
   }

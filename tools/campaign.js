@@ -1,4 +1,4 @@
-const { raceOk } = require('./world'); // race masks above bit 32 (Skyborne)
+const { raceOk, raceFits, classFits } = require('./world'); // race masks above bit 32 (Skyborne)
 // Campaign planner: chains zone legs from the character's current state toward a target level.
 // Each leg: evaluate every candidate zone in parallel (quick plan, no optimizer), score XP per hour including the trip
 // there, pick the best, plan it properly (optimizer on), carry the end state (level, completed, quests in log) forward.
@@ -41,7 +41,7 @@ console.log(`${st.name || 'character'}: ${race} ${klass}, level ${state.level}, 
 // zone level bands from quest data (for this race), to shortlist candidates
 const band = {};
 for (const q of Object.values(db.quests)) {
-  if (q.races && !raceOk(q.races, race)) continue;
+  if (!raceFits(q.races, race)) continue;
   if (q.special & 3 || q.level <= 0 || q.level > 60) continue;
   for (const s of q.starters) for (const sp of s.spawns || []) if (zoneName[sp.zone]) (band[sp.zone] = band[sp.zone] || []).push(q.level);
 }
@@ -84,6 +84,33 @@ function hop(S, to) {
 // a level of grinding where there's nothing to quest: in the best-scored zone (else any candidate), at the densest
 // spot of hostile mobs around your level (the quest database's spawns), for the kills a level takes at
 // your kill speed. Returns a leg like a planned one: one "grind" step the addon ticks when you reach the level.
+// Is there quest XP enough left to reach the target level? The quests this character may still take - not done, not
+// in a dungeon zone or all-elite, not gray where you are now - counted at what they would pay a little above their
+// level, plus the kills their objectives bring (cfg.supplyKillShare: 0.5 of the quest XP, measured on a human warrior
+// plan), against the XP still needed. Grinding is a failure (the player's rule): while the quests can carry you, a thin
+// spot is waited out with short quest legs (the quests a level or two up open as you go), not ground through - the
+// grind only moves the same quests later. cfg.supplyShare: the share of that XP a plan really collects (0.75).
+function questSupply(S) {
+  const W = require("./world");
+  const done = new Set(S.completed || []);
+  const N = db.npcs || {};
+  const allElite = (q) => { const ids = (q.objectives || []).flatMap((o) => (o.kind === 'kill' ? [o.npc] : o.npcs || [])); const ns = ids.map((i) => N[i]).filter(Boolean); return ns.length > 0 && ns.every((n) => n.rank >= 1 && n.rank <= 3); };
+  let have = 0;
+  for (const q of Object.values(db.quests)) {
+    if (done.has(q.id) || !(q.xp > 0) || (q.special & 3) || q.skill || q.notInForever || !zoneName[q.zone]) continue;
+    if (q.level > (cfg.targetLevel || 60) || q.level < S.level - 5 || !W.canTake(q, race, klass) || allElite(q)) continue;
+    have += W.questXp(q.xp, q.level, Math.max(S.level, q.level - 2));
+  }
+  let need = (XP_TO_LEVEL[S.level] || 0) - (S.xp || 0);
+  for (let l = S.level + 1; l < (cfg.targetLevel || 60); l++) need += XP_TO_LEVEL[l] || 0;
+  return { have: Math.round(have * (1 + (cfg.supplyKillShare ?? 0.5)) * (cfg.supplyShare ?? 0.75)), need };
+}
+// the grind step's other way through (grouping, the player's own choice - dungeons are never forced): the dungeons
+// that fit this level, reachable from your side, each a dungeon route in the addon (/fr dungeons)
+function gapDungeons(L) {
+  const names = (typeof dungeonLegsAt === 'function' ? dungeonLegsAt(L) : []).filter((d) => uiMap[d.entrance]).map((d) => d.name);
+  return names.length ? ` Or group for ${names.slice(0, 3).join(', ')}: about as quick with a group, and each has a dungeon route (/fr dungeons).` : ' A dungeon run does it too.';
+}
 function grindLeg(S, evals, cands) {
   const W = require('./world');
   if (LEARNED) W.setLearned(LEARNED);
@@ -103,14 +130,14 @@ function grindLeg(S, evals, cands) {
     for (const p of pts) { let k = 0; for (const q of pts) if (Math.abs(p.x - q.x) < 6 && Math.abs(p.y - q.y) < 6) k++; if (k > bestN) { best = p; bestN = k; } }
     const perKill = W.killXp(L, L) || 1;
     const kills = Math.ceil((XP_TO_LEVEL[L] - (S.xp || 0)) / perKill);
-    // a grind is kill after kill, with the rest and the looking for the next mob a quest's few kills don't add up to:
-    // cfg.grindSecPerKill (33 s, half again a quest kill's 22) - at 22 a grind priced above most quest legs
-    const sec = cfg.grindSecPerKill || 1.5 * ((LEARNED && LEARNED.secPerKill) || cfg.secPerKill || 22);
-    const minutes = Math.round((kills * sec) / 60 + hop(S, z));
+    // a grind priced as people grind (world.grindSeconds: resting between pulls, attention fading past 15 min) - at a
+    // bare 33 s a kill it paid ~29k xp/h at 44, twice a quest leg, and the plans ground for days
+    const sec = W.grindSeconds(kills, cfg.grindSecPerKill || (LEARNED && LEARNED.secPerKill) || cfg.secPerKill || 22, cfg.grind);
+    const minutes = Math.round(sec / 60 + hop(S, z));
     if (pick && pick.state.minutes <= minutes) continue;
     const nm = zoneName[z];
     const step = { k: 'grind', text: 'Grind mobs around your level until ' + (L + 1), level: L + 1, xp: 0, m: uiMap[z], x: +(best.x / 100).toFixed(4), y: +(best.y / 100).toFixed(4), zone: nm, r: 60, sec: 1, lvl: L,
-      note: `No quests worth the trip at level ${L}: about ${kills} kills here gets you to ${L + 1}, where more open up. A dungeon run does it too.` };
+      note: `No quests worth the trip at level ${L}: about ${kills} kills here gets you to ${L + 1}, where more open up.` + gapDungeons(L) };
     const leg = { title: nm + ' ' + L + '+ (grind)', sections: [{ title: 'Grind in ' + nm }], steps: [step] };
     pick = { zone: z, leg, state: { level: L + 1, xp: 0, minutes, pos: { zone: z, x: best.x, y: best.y }, completed: S.completed, active: S.active }, options: [], levelBefore: L, grind: true, here: true }; // here: not a "where next?" choice
   }
@@ -162,7 +189,7 @@ function questZones(q, done, level) {
   // in Elwynn doesn't make Elwynn part of Redridge)
   // (only quests you can take - Forever's Camping 101 has a copy per race, and the tauren one tied Durotar to Mulgore - and
   // a "one of" prerequisite only when none of its alternatives is done or starts in this quest's own zone)
-  const tk = (P) => P && (!P.races || raceOk(P.races, race)) && (!P.classes || !CLASS_BIT[klass] || (P.classes & CLASS_BIT[klass]));
+  const tk = (P) => P && raceFits(P.races, race) && classFits(P.classes, klass);
   for (const p of q.preGroup || []) { const P = db.quests[p]; if (tk(P) && !done.has(p) && P.level >= level - 6) add(starterZone(P)); }
   const alts = (q.preSingle || []).map((p) => db.quests[p]).filter(tk);
   if (alts.length && !alts.some((P) => done.has(P.id))) { const zs = alts.filter((P) => P.level >= level - 6).map(starterZone); if (!zs.includes(starterZone(q))) zs.forEach(add); }
@@ -200,7 +227,7 @@ const DUNGEON_LEGS = (() => {
     const ls = [...A].flatMap((z) => mobLevels[z] || []).sort((a, b) => a - b);
     if (ls.length < 10) continue;
     const lo = ls[Math.floor(ls.length * 0.2)], hi = ls[Math.floor(ls.length * 0.8)];
-    const quests = Object.values(db.quests).filter((q) => !(q.special & 3) && (!q.races || raceOk(q.races, race)) && (!q.classes || (q.classes & CLASS_BIT[klass]))
+    const quests = Object.values(db.quests).filter((q) => !(q.special & 3) && raceFits(q.races, race) && classFits(q.classes, klass)
       && (A.has(q.zone) || (q.objectives || []).some((o) => { const sp = spawnsOf(o); return sp.length > 0 && sp.every((p) => A.has(p.zone)); })));
     if (quests.length < 3) continue;
     out.push({ id: d.id, name: d.name, entrance: d.entrance.zone, lo, hi, quests });
@@ -253,8 +280,7 @@ function regionOf(z, level, completed) {
   const links = {};
   for (const q of Object.values(db.quests)) {
     if (done.has(q.id) || q.level < level - 2 || q.level > level + 4 || (q.special & 3)) continue;
-    if (q.races && !raceOk(q.races, race)) continue;
-    if (q.classes && !(q.classes & CLASS_BIT[klass])) continue;
+    if (!raceFits(q.races, race) || !classFits(q.classes, klass)) continue;
     if (starterZone(q) !== z) continue;
     for (const w of questZones(q, done, level)) if (w !== z && continent[w] === continent[z] && zoneName[w] && nearby(z, w)) links[w] = (links[w] || 0) + 1;
   }
@@ -309,9 +335,12 @@ function questTouches(id, zones) {
   let z = qZoneCache[id];
   if (!z) {
     z = new Set(); const q = db.quests[id];
-    if (q) {
-      for (const x of [...q.starters, ...q.finishers]) for (const sp of x.spawns || []) z.add(sp.zone);
-      for (const o of q.objectives || []) { const n = o.npc && db.npcs[o.npc]; if (n) for (const sp of n.spawns || []) z.add(sp.zone); }
+    // (and where its alternatives are: In Search of Menara Voidrender done at Demisette Cloyce in Stormwind closes
+    // Briarthorn's in Ironforge, so it matters to an Ironforge leg - left out of the key, a leg planned before it was
+    // done was reused after, Briarthorn's pick-up and all)
+    for (const one of q ? [q, ...(q.exclusive || []).map((e) => db.quests[e]).filter(Boolean)] : []) {
+      for (const x of [...one.starters, ...one.finishers]) for (const sp of x.spawns || []) z.add(sp.zone);
+      for (const o of one.objectives || []) { const n = o.npc && db.npcs[o.npc]; if (n) for (const sp of n.spawns || []) z.add(sp.zone); }
     }
     qZoneCache[id] = z;
   }
@@ -354,7 +383,11 @@ async function run(cfgObj, tag, timeoutSec) {
   const r = await runFresh(cfgObj, tag, timeoutSec);
   // time per kind of run (eval-, leg-, look-, ...): where a plan's minutes go (printed at the end)
   { const kind = String(tag).split('-')[0]; const s = STAGE[kind] = STAGE[kind] || { n: 0, ms: 0, max: 0 }; const ms = Date.now() - tRun; s.n++; s.ms += ms; s.max = Math.max(s.max, ms); }
-  if (!r.code) {
+  // a leg whose search hit the safety cap (route2.js says OPTIMIZER CAP) depends on this PC's speed: say so here (the
+  // run's stderr is not shown when it succeeds) and keep it out of the cache, whose key has no PC in it
+  const capped = !r.code && /OPTIMIZER CAP:[^\r\n]*/.exec(r.err || '');
+  if (capped) console.log(`  ${tag}: ${capped[0]} (not kept in the leg cache)`);
+  if (!r.code && !capped) {
     try {
       fs.mkdirSync(dir, { recursive: true });
       for (const [k, f] of Object.entries(outs)) if (f && fs.existsSync(f)) fs.copyFileSync(f, path.join(dir, k));
@@ -404,63 +437,23 @@ function runFresh(cfgObj, tag, timeoutSec) {
 }
 async function pool(items, n, fn) { const r = []; let i = 0; await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) { const k = i++; r[k] = await fn(items[k]); } })); return r; }
 
-const CITY_MAPS = CAPITAL_MAPS; // the six capitals
-const areaOfMap = Object.fromEntries(conv.map((t) => [t.ui_map_id, t.area_id]));
+// carried deliveries: a quest with no objectives picked up in a capital the path passes and handed in on a later leg
+// (tools/carry-deliveries.js)
 function carryDeliveries(steps, legs) {
   if (cfg.carry === false || !legs.length) return;
-  const N = db.npcs, Q = db.quests;
-  const onRoute = new Set(steps.filter((x) => x.q > 0).map((x) => x.q));
-  const done0 = new Set(st.completed || []), inLog = new Set(Object.keys(st.log || {}).map(Number));
-  const legAt = (i) => { let k = 0; for (let j = 0; j < legs.length; j++) if (legs[j].from <= i) k = j; return k; };
-  const turnedBefore = (i) => new Set(steps.slice(0, i).filter((x) => x.k === 'turnin' && x.q > 0).map((x) => x.q));
-  const sq = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
-  // the end of each run of steps in a city
-  const stops = [];
-  for (let i = 0; i < steps.length; i++) if (CITY_MAPS.has(steps[i].m) && !(steps[i + 1] && steps[i + 1].m === steps[i].m)) stops.push(i);
-  const added = [];
-  for (const stop of stops.reverse()) { // from the end, so earlier indexes stay valid while inserting
-    const city = steps[stop].m, cityArea = areaOfMap[city], k = legAt(stop);
-    const level = legs[k].levelBefore || state.level;
-    const before = turnedBefore(stop);
-    for (const [id, q] of Object.entries(Q)) {
-      const qid = +id;
-      if (onRoute.has(qid) || done0.has(qid) || inLog.has(qid) || q.objectives.length || q.special & 3) continue;
-      if (q.races && !raceOk(q.races, race)) continue;
-      // class quests only for your class (a warlock was sent to deliver the warrior quest Yorus Barleybrew)
-      if (q.classes && !(q.classes & CLASS_BIT[klass])) continue;
-      if ((q.reqLevel || 1) > level || !(q.xp > 0)) continue;
-      const pre = [...(q.preGroup || []), ...((q.preSingle || []).length === 1 ? q.preSingle : [])];
-      if (!pre.every((x) => done0.has(x) || before.has(x))) continue;
-      const giver = q.starters.find((g) => g.type === 'npc' && (g.spawns || []).some((sp) => sp.zone === cityArea && sp.x >= 0));
-      if (!giver) continue;
-      const gn = N[giver.id]; if (gn && gn.friendly && gn.friendly !== 'AH' && gn.friendly !== (cfg.faction === 'horde' ? 'H' : 'A')) continue;
-      const fin = q.finishers.find((f) => (f.spawns || []).some((sp) => sp.x >= 0 && uiMap[sp.zone]));
-      if (!fin) continue;
-      const fsp = fin.spawns.find((sp) => sp.x >= 0 && uiMap[sp.zone]);
-      // a later leg of this path in the hand-in zone, while the quest still gives real XP (not gray)
-      const j = legs.findIndex((L, jj) => jj > k && L.zone === fsp.zone && (L.levelBefore || 0) <= q.level + 5);
-      if (j < 0) continue;
-      const gsp = giver.spawns.find((sp) => sp.zone === cityArea && sp.x >= 0);
-      // hand-in: cheapest spot among that leg's steps on the same map
-      const from = legs[j].from, to = j + 1 < legs.length ? legs[j + 1].from : steps.length;
-      const tm = uiMap[fsp.zone], T = { x: fsp.x / 100, y: fsp.y / 100 };
-      let at = -1, best = Infinity;
-      for (let i = from; i < to; i++) {
-        const a = steps[i], b = steps[i + 1];
-        if (a.m !== tm || !a.x) continue;
-        const c = b && b.m === tm && b.x ? Math.sqrt(sq(a, T)) + Math.sqrt(sq(T, b)) - Math.sqrt(sq(a, b)) : Math.sqrt(sq(a, T));
-        if (c < best) { best = c; at = i + 1; }
-      }
-      if (at < 0) continue;
-      steps.splice(at, 0, { k: 'turnin', npc: fin.name, r: 6, q: qid, name: q.name, level: q.level, m: tm, x: +T.x.toFixed(4), y: +T.y.toFixed(4), zone: zoneName[fsp.zone], sec: steps[Math.min(at, steps.length - 1)].sec, note: 'Carried from ' + zoneName[cityArea] + '.' });
-      steps.splice(stop + 1, 0, { k: 'accept', npc: giver.name, r: 6, minLevel: q.reqLevel > 1 ? q.reqLevel : undefined, q: qid, name: q.name, level: q.level, m: city, x: +(gsp.x / 100).toFixed(4), y: +(gsp.y / 100).toFixed(4), zone: zoneName[cityArea], sec: steps[stop].sec, note: 'Delivery - handed in later in ' + zoneName[fsp.zone] + ' (' + q.xp + ' xp).' });
-      for (const L of legs) if (L.from > stop) L.from += 1;
-      for (const L of legs) if (L.from > at) L.from += 1;
-      onRoute.add(qid); added.push(q.name + ' (' + zoneName[cityArea] + ' -> ' + zoneName[fsp.zone] + ')');
-    }
-  }
+  const added = require('./carry-deliveries').carry(steps, legs, { db, conv, completed: st.completed, log: st.log, level: state.level, race, klass, faction: cfg.faction });
   if (added.length) console.log('carried deliveries: ' + added.join(', '));
 }
+
+// ---------- the quests carried from leg to leg (tools/carry.js) ----------
+// errands for deliveries on the way (errandFor), the log kept from filling up (pruneLog), zones with open chains
+// (openZones) and the card's "the chain ends here" (chainEnds). planZones: where the plan may go at a level - where you
+// are, its region, and the zones at your level (a finished quest handed in there is kept in the log)
+const { makeCarry, revisited } = require('./carry');
+const planZones = (S) => new Set([S.zone, S.pos && S.pos.zone, ...(S.zone && zoneName[S.zone] ? regionOf(S.zone, S.level, S.completed) : []), ...candidates(S.level)].filter(Boolean));
+const CARRY = makeCarry({ db, cfg, st, race, klass, followersOf, mainZone, starterZone, zoneName, uiMap, continent, CITIES, BATTLEGROUNDS, START_ZONES, HOME, hop, NO_WAY, planZones });
+const { errandFor, pruneLog, openZones, LET_GO } = CARRY;
+function chainEnds(steps, legs) { const n = CARRY.chainEnds(steps, legs); if (n) console.log(`chains ending on the route: ${n} (said on the hand-in where each stops)`); }
 
 // drop rates you measured in game (account SavedVariables, ForeverRouteDB.drops)
 const OBSERVED_DROPS = (() => { try { const f = path.join(cfg.charDir, '..', '..', '..', 'SavedVariables', 'ForeverRoute.lua'); const sv = require('./luatable').parseSavedVariables(fs.readFileSync(f, 'utf8')); return (sv.ForeverRouteDB && sv.ForeverRouteDB.drops) || {}; } catch (e) { return {}; } })();
@@ -469,6 +462,20 @@ const LEARNED = (() => { if (cfg.learnedFile === false) return null; try { retur
 // quests with a fun reward (a toy, a transform...: tools/learn.js asked the game) are worth a detour: must-do, with a note
 const FUN_NOTES = (LEARNED && LEARNED.funQuests) || {};
 const MUST_DO = [...new Set([...(cfg.mustDo || []), ...Object.keys(FUN_NOTES).map(Number)])];
+// the optimizer's work for a leg (route2.js, optimize.js workFor): cfg.optimizeEffort scales the moves (1 = the default,
+// the here-leg and quick plans take less), cfg.optimizeRuns the independent runs. Only what is set goes in, so it is in
+// the leg cache key (runKey) exactly when it changes the plan
+const { positive: workSetting, roundsFor, RUNS: OPT_RUNS } = require('./optimize');
+// a setting that is not a positive number (a typo, a string) would leave the optimizer doing no moves at all: the
+// default instead, said on the console
+for (const k of ['optimizeEffort', 'optimizeRuns', 'optimizeCapSec']) cfg[k] = workSetting(cfg[k], undefined, k);
+// older settings files have optimizeSeconds (the search's time per leg, before its work was a number of moves): read by
+// nothing now, so say so once rather than let it look like it does something
+if (cfg.optimizeSeconds !== undefined) console.log(`note: optimizeSeconds (${cfg.optimizeSeconds}) in your settings is no longer used - the optimizer does a fixed amount of work per leg (optimizeEffort, 1 = the default)`);
+// the runs per leg are fixed (the same plan on every PC): with fewer threads than runs they go in rounds, and every
+// leg's search takes that many times as long here. Said up front, so a slow plan on a small PC is not a mystery
+{ const runs = cfg.optimizeRuns || OPT_RUNS, rounds = roundsFor(runs); if (rounds > 1) console.log(`optimizer: ${runs} runs per leg on ${require('os').cpus().length} cores go in ${rounds} rounds - each leg's search takes ${rounds}x as long as with a core per run (the plan is the same)`); }
+const optWork =(share) => { const e = (cfg.optimizeEffort ?? 1) * share; return { optimizeEffort: e === 1 ? undefined : e, optimizeRuns: cfg.optimizeRuns, optimizeCapSec: cfg.optimizeCapSec }; };
 function legConfig(zone, level, extra, S = state) {
   const zones = [zone, ...(cfg.regions === false ? [] : regionOf(zone, level, S.completed))];
   // your faction's hub rides along with every leg on its continent (hand-ins, books, training there): Stormwind for the
@@ -483,12 +490,13 @@ function legConfig(zone, level, extra, S = state) {
     start: S.pos && zones.includes(S.pos.zone) ? S.pos : null,
     // rounded to a 4% grid: only roughly where you come from matters, and exact spots would defeat the leg cache
     arriveFrom: S.pos && !zones.includes(S.pos.zone) ? { zone: S.pos.zone, x: Math.round(S.pos.x / 4) * 4, y: Math.round(S.pos.y / 4) * 4 } : undefined, arriveKnowsFP: hasFP(zone),
-    minQuestLevel: level - 6, maxQuestLevel: level + 5, maxAbove: cfg.maxAbove ?? LEVEL_ABOVE + 1, targetLevel: cfg.targetLevel, finishOpen: true,
+    minQuestLevel: level - 6, maxQuestLevel: level + 5, maxAbove: cfg.maxAbove, targetLevel: cfg.targetLevel, finishOpen: true,
     flightSec: 120, completed: S.completed, active: S.active, arrivalTour: true, terrainDir: cfg.terrainDir, conversion: cfg.conversion,
-    flightPaths: Object.keys(zoneName).map(Number).filter((z) => hasFP(z)), observedDrops: OBSERVED_DROPS, mustDo: MUST_DO, keep: [...(cfg.keep || []), ...MUST_DO], funNotes: FUN_NOTES, trainLevels: cfg.trainLevels, trainer: cfg.trainer, trainers: cfg.trainers, learned: LEARNED && Object.keys(LEARNED.killXpByDiff || {}).length ? { killXpByDiff: LEARNED.killXpByDiff } : undefined, ...(LEARNED && LEARNED.secPerKill ? { secPerKill: LEARNED.secPerKill } : {}), hearth: S.hearth || undefined, bindName: S.hearth ? undefined : st.bind, trainerNote: cfg.trainerNote, hubNames: cfg.hubNames, skip: [...(cfg.skip || []), ...(st.nope || []), ...(st.notOffered || [])],
+    flightPaths: Object.keys(zoneName).map(Number).filter((z) => hasFP(z)), observedDrops: OBSERVED_DROPS, mustDo: MUST_DO, keep: [...(cfg.keep || []), ...MUST_DO], funNotes: FUN_NOTES, trainLevels: cfg.trainLevels, trainer: cfg.trainer, trainers: cfg.trainers, learned: LEARNED && Object.keys(LEARNED.killXpByDiff || {}).length ? { killXpByDiff: LEARNED.killXpByDiff } : undefined, ...(LEARNED && LEARNED.secPerKill ? { secPerKill: LEARNED.secPerKill } : {}), hearth: S.hearth || undefined, bindName: S.hearth ? undefined : st.bind, trainerNote: cfg.trainerNote, hubNames: cfg.hubNames, skip: [...(cfg.skip || []), ...(st.nope || []), ...(st.notOffered || []), ...LET_GO],
     title: `${zoneName[zone]} ${level}+`, character: st.name, charDir: undefined, addonsDir: cfg.addonsDir, bonusQuests: cfg.bonusQuests, bonusNotes: cfg.bonusNotes, booksCharDir: cfg.charDir, itemsJson: cfg.itemsJson, maxFrustration: cfg.maxFrustration, awayHubShare: cfg.awayHubShare, lonelyYards: cfg.lonelyYards, lonelyXpShare: cfg.lonelyXpShare, keepRewardValue: cfg.keepRewardValue, frustrating: cfg.frustrating, // dungeons run earlier on this path: not run again for a quest or two (route2.js)
     dungeonsRun: S.dungeonsRun && S.dungeonsRun.length ? S.dungeonsRun : undefined,
     gearVerdicts: st.gearVerdicts && Object.keys(st.gearVerdicts).length ? st.gearVerdicts : undefined,
+    carrySameZone: cfg.carrySameZone, awayObjectives: cfg.awayObjectives, headChains: cfg.headChains, headChainShare: cfg.headChainShare, // route2 settings (route2.js)
     dungeonFile: cfg.dungeonFile, dungeons: cfg.dungeonsInPath === true ? cfg.dungeons : 'none', dungeonRunMin: cfg.dungeonRunMin, groupWaitMin: cfg.groupWaitMin, ...extra,
   };
 }
@@ -501,7 +509,7 @@ async function evalZone(z, S, n, tag) {
   const gained = (() => { let x = 0, L = S.level, xp = S.xp; while (L < s2.level) { x += XP_TO_LEVEL[L] - xp; xp = 0; L++; } return x + s2.xp - xp; })();
   // value: what a zone is worth, the same measure the main choice ranks by (XP plus rewards; must-do quests count via
   // the reward value) - look-ahead and the beam used raw XP, which favoured grindy zones the main choice would skip
-  return { z, gained, value: zoneValue(gained, s2), minutes: s2.minutes + hop(S, z), turnins: s2.turnins, s: s2 };
+  return { z, gained, value: zoneValue(gained, s2), carry: s2.carryValue || 0, minutes: s2.minutes + hop(S, z), turnins: s2.turnins, s: s2 };
 }
 function zoneValue(gained, s) { return gained + (s.rewardValue || 0) * (cfg.rewardWeight ?? 1); }
 // pick among the top candidates by simulating one more leg after each
@@ -513,7 +521,7 @@ async function lookaheadPick(top, n) {
     const next = candidates(S1.level).filter((z) => z !== e.z);
     const ev2 = (await pool(next, PARL, (z) => evalZone(z, S1, n + 1, `look-${n}-${e.z}-${z}`))).filter((x) => x && x.minutes > 0 && x.turnins >= (cfg.minTurnins || 5));
     // the second zone: a return to the first one counts less (the same revisit rule as the main choice)
-    const v2 = (x) => x.value * (x.z in visits || x.z === e.z ? 1 / (1 + (cfg.revisitPenalty ?? 0.8) * visitsAt(x.z, (visits[x.z] || 0) + (x.z === e.z ? 1 : 0), S1.level)) : 1);
+    const v2 = (x) => revisited(x.value, x.carry, x.z in visits || x.z === e.z ? 1 / (1 + (cfg.revisitPenalty ?? 0.8) * visitsAt(x.z, (visits[x.z] || 0) + (x.z === e.z ? 1 : 0), S1.level)) : 1);
     ev2.sort((a, b) => v2(b) / b.minutes - v2(a) / a.minutes);
     const b2 = ev2[0];
     const v1 = e.score * e.minutes; // the main choice's value for the first zone (revisit included)
@@ -541,7 +549,7 @@ async function beamSearch() {
         const revisit = 1 / (1 + (cfg.revisitPenalty ?? 0.8) * visitsAt(e.z, node.visits[e.z] || 0, node.S.level));
         const xpStep = Math.max(1, Math.round((XP_TO_LEVEL[e.s.level] || 1000) * 0.05));
         const S2 = { hearth: node.S.hearth, level: e.s.level, xp: Math.floor((e.s.xp || 0) / xpStep) * xpStep, completed: [...e.s.completed].sort((a, b) => a - b), active: e.s.active, pos: e.s.pos, zone: e.z, dungeonsRun: e.s.dungeonsRun };
-        const n2 = { S: S2, seq: [...node.seq, e.z], minutes: node.minutes + e.minutes, gained: node.gained + e.gained, value: (node.value || 0) + e.value * revisit, visits: { ...node.visits, [e.z]: (node.visits[e.z] || 0) + 1 } };
+        const n2 = { S: S2, seq: [...node.seq, e.z], minutes: node.minutes + e.minutes, gained: node.gained + e.gained, value: (node.value || 0) + revisited(e.value, e.carry, revisit), visits: { ...node.visits, [e.z]: (node.visits[e.z] || 0) + 1 } };
         n2.rate = n2.value / Math.max(1, n2.minutes); // ranked by value, like the main choice
         n2.xpRate = n2.gained / Math.max(1, n2.minutes); // reported as XP per hour
         (S2.level >= cfg.targetLevel ? done : next).push(n2);
@@ -570,7 +578,8 @@ async function beamSearch() {
   const hereLeg = !cfg.startStateFile && !cfg.forceLevel && !cfg.rankOnly && state.pos && CITIES.has(state.pos.zone) ? state.pos.zone : null;
   if (hereLeg) {
     const tag = 'leg-0-' + hereLeg;
-    const c = legConfig(hereLeg, state.level, { zones: [hereLeg], start: state.pos, optimize: true, optimizeSeconds: Math.min(5, cfg.optimizeSeconds || 5), title: zoneName[hereLeg] + ' first', routeOut: path.join(work, tag + '.lua'), legOut: path.join(work, tag + '.leg.json'), stateOut: path.join(work, tag + '.state.json') });
+    const c = legConfig(hereLeg, state.level, { zones: [hereLeg], start: state.pos, optimize: true, ...optWork(0.5), optimizeCapSec: 60, title: zoneName[hereLeg] + ' first', routeOut: path.join(work, tag + '.lua'), legOut: path.join(work, tag + '.leg.json'), stateOut: path.join(work, tag + '.state.json') });
+    // (the 60 s cap is one deadline for the leg's whole search, all its runs, so the leg finishes well inside the 120 s)
     const r = await run(c, tag, 120);
     if (r.code) console.log('  (no ' + zoneName[hereLeg] + ' errands planned: ' + r.err.split(/\r?\n/).slice(-2).join(' ') + ')');
     else {
@@ -588,9 +597,10 @@ async function beamSearch() {
   // times). Cleared as soon as a leg makes progress.
   let emptyAt = new Set();
   for (let n = 0; n < (cfg.maxLegs || 12) && state.level < cfg.targetLevel; n++) {
-    const cands = candidates(state.level).filter((z) => !emptyAt.has(z));
+    state = { ...state, active: pruneLog(state) };
+    const cands = [...new Set([...candidates(state.level), ...(cfg.openZones === false ? [] : openZones(state))])].filter((z) => !emptyAt.has(z));
     const t0 = Date.now();
-    const evals = await pool(cands, PAR, async (z) => {
+    const evalOne = async (z) => {
       const c = legConfig(z, state.level, { loose: n >= 2, optimize: false, workers: cfg.evalWorkers || 2, start: null, stateOut: path.join(work, `eval-${n}-${z}.state.json`) });
       const r = await run(c, `eval-${n}-${z}`, cfg.evalTimeoutSec || 150);
       if (r.code) return { z, score: -1, err: r.err.split('\n').slice(-3).join(' ') };
@@ -606,8 +616,9 @@ async function beamSearch() {
       // cfg.otherContinentFactor < 1 makes the other continent beat staying by a margin (off: at 0.8 a 1-60 plan took 5
       // fewer boats but 16% longer, and one path stalled at 34 - the quests are where they are)
       const stay = otherContinent(state, z) ? (cfg.otherContinentFactor ?? 1) : 1;
-      return { z, gained, minutes, turnins: s.turnins, score: minutes > 0 ? (value / minutes) * revisit * stay : 0, s };
-    });
+      return { z, gained, minutes, turnins: s.turnins, score: minutes > 0 ? (revisited(value, s.carryValue, revisit) / minutes) * stay : 0, s };
+    };
+    const evals = await pool(cands, PAR, evalOne);
     evals.sort((a, b) => b.score - a.score);
     // a zone you have no safe way to reach (Zephras Isle for a level-1 human: the portal is Skyborne-only) is no option
     if (cfg.rankOnly) { fs.writeFileSync(cfg.rankOut, JSON.stringify(evals.filter((e) => e.score > 0 && e.turnins >= (cfg.minTurnins || 5) && hop(state, e.z) < NO_WAY).map((e) => ({ z: e.z, name: zoneName[e.z], xph: Math.round(e.score * 60), turnins: e.turnins })))); return; }
@@ -638,7 +649,9 @@ async function beamSearch() {
     if (!best) { best = evals.find((e) => e.score > 0 && e.turnins >= 1) || null; if (best) console.log(`  no zone has ${cfg.minTurnins || 5}+ hand-ins at this level: a short leg in ${zoneName[best.z]}`); }
     // a short leg that pays less than grinding the level is a zone hop for scraps (an Alliance plan at 33 hopped six
     // zones for a hand-in each, then stopped): grind instead, and the quests a level up open
-    if (best && cfg.grind && cfg.grindOverShortLeg && best.turnins < (cfg.minTurnins || 5)) {
+    const supply = best && cfg.grind && cfg.grindOverShortLeg && best.turnins < (cfg.minTurnins || 5) ? questSupply(state) : null;
+    if (supply && supply.have >= supply.need) console.log(`  quests left can carry you (${Math.round(supply.have / 1000)}k of ${Math.round(supply.need / 1000)}k xp to ${cfg.targetLevel || 60}): the short leg, not a grind`);
+    if (supply && supply.have < supply.need) {
       const g = grindLeg(state, evals, cands);
       const gRate = g && g.state.minutes > 0 ? (XP_TO_LEVEL[state.level] - (state.xp || 0)) / g.state.minutes : 0;
       if (gRate > best.score) { console.log(`  grinding pays more (${Math.round(gRate * 60)} xp/h) than the short leg in ${zoneName[best.z]}`); best = null; }
@@ -658,6 +671,17 @@ async function beamSearch() {
         continue;
       }
     }
+    // before a grind (a failure: the player's rule), look wider - every zone with even one hand-in in reach: a chain's
+    // next part, a quest in your log (openZones with no hand-in floor). At 44 a human had ~100-120k XP of such parts
+    // a band - Bloodsail Buccaneers, Bring Me His Head, Ledger from Tanaris - one or two a zone, so no zone opened and
+    // the plan ground (tools/band-budget.js). A short leg for them beats the grind
+    if (!best && cfg.grind && cfg.openZones !== false && cfg.wideBeforeGrind !== false) {
+      const wide = openZones(state, 1).filter((z) => !cands.includes(z) && !emptyAt.has(z));
+      if (wide.length) {
+        const more = (await pool(wide, PAR, evalOne)).filter((e) => e.score > 0 && e.turnins >= 1).sort((a, b) => b.score - a.score);
+        if (more.length) { best = more[0]; console.log(`  nothing in the usual zones: a short leg for what's open in ${zoneName[best.z]} (${best.turnins} turn-ins, ${Math.round(best.score * 60)} xp/h) - not a grind`); }
+      }
+    }
     if (!best) {
       // no quests anywhere: grind a level where the mobs fit, then look again
       // grinding is a last resort, off unless asked for (cfg.grind): a plan that needs it is a planner gap to fix
@@ -671,17 +695,38 @@ async function beamSearch() {
     }
     // plan the chosen leg properly
     const tag = `leg-${n + 1}-${best.z}`;
-    const c = legConfig(best.z, state.level, { loose: false, optimize: true, optimizeSeconds: cfg.optimizeSeconds || 12, routeOut: path.join(work, tag + '.lua'), legOut: path.join(work, tag + '.leg.json'), stateOut: path.join(work, tag + '.state.json') });
-    let r = await run(c, tag);
-    // a one-off failure (a shared file busy, a host that died) shouldn't end the whole plan: once more, then give up
-    if (r.code) { console.log('leg failed, trying it once more: ' + r.err.slice(-200)); r = await run(c, tag); }
+    // a delivery to pick up on the way (errandFor): the leg is planned from its giver, with it in your log
+    let errand = errandFor(state, best.z, legConfig(best.z, state.level, {}).zones, best.score);
+    const planLeg = async (E) => {
+      const S = E ? { ...state, pos: { zone: E.zone, x: E.spot.x, y: E.spot.y }, active: { ...state.active, ...Object.fromEntries(E.quests.map((e) => [e.id, { complete: true, objectives: [] }])) } } : state;
+      const c = legConfig(best.z, state.level, { loose: false, optimize: true, ...optWork(1), routeOut: path.join(work, tag + '.lua'), legOut: path.join(work, tag + '.leg.json'), stateOut: path.join(work, tag + '.state.json') }, S);
+      let r = await run(c, tag);
+      // a one-off failure (a shared file busy, a host that died) shouldn't end the whole plan: once more, then give up
+      if (r.code) { console.log('leg failed, trying it once more: ' + r.err.slice(-200)); r = await run(c, tag); }
+      if (r.code) return { r };
+      return { r, leg: JSON.parse(fs.readFileSync(c.legOut, 'utf8')), s: JSON.parse(fs.readFileSync(c.stateOut, 'utf8')) };
+    };
+    let { r, leg, s } = await planLeg(errand);
+    // the errand counts only for what the leg really hands in (the pick-up of one it doesn't is a trip for nothing: the
+    // safety net would drop it and leave the flight there); its detour is part of the leg's time. When it hands in none
+    // of them, you never go to the giver: the leg is planned again from where you really are (planned from the giver's
+    // spot, its first stretch started somewhere the player never was)
+    if (errand && !r.code) {
+      const handed = new Set(leg.steps.filter((x) => x.k === 'turnin').map((x) => x.q));
+      const kept = errand.quests.filter((e) => handed.has(e.id));
+      if (!kept.length) { console.log(`  (errand from ${errand.who} not handed in on the leg after all: planned again from where you are)`); errand = null; ({ r, leg, s } = await planLeg(null)); }
+      else {
+        for (const e of errand.quests) if (!handed.has(e.id) && s.active) delete s.active[e.id]; // never picked up after all
+        errand.quests = kept;
+        s.minutes = (s.minutes || 0) + errand.detour;
+        console.log(`  errand on the way: ${errand.quests.map((e) => e.name + ' (' + e.xp + ' xp' + (e.chain > 0 ? ', opens ~' + e.chain + ' more' : '') + ')').join(', ')} from ${errand.who} in ${zoneName[errand.zone]}, ~${errand.detour} min out of the way`);
+      }
+    }
     if (r.code) { console.log('leg failed: ' + r.err.slice(-500)); break; }
     fs.writeFileSync(path.join(work, tag + '.txt'), r.out);
-    const leg = JSON.parse(fs.readFileSync(c.legOut, 'utf8'));
-    const s = JSON.parse(fs.readFileSync(c.stateOut, 'utf8'));
     if (!leg.steps.length) { console.log(`  -> ${zoneName[best.z]} came up empty when planned for real: ruled out until something changes`); emptyAt.add(best.z); continue; }
     emptyAt = new Set();
-    legs.push({ zone: best.z, leg, state: s, options, beforeFile, levelBefore: state.level });
+    legs.push({ zone: best.z, leg, state: s, options, beforeFile, levelBefore: state.level, errand: errand && errand.quests.length ? errand : null });
     console.log(`  -> ${regionName(best.z, regionOf(best.z, state.level, state.completed))}: ${leg.steps.length} steps, level ${state.level} -> ${s.level} (${s.level >= 60 ? 100 : Math.round(100 * s.xp / XP_TO_LEVEL[s.level])}%), ~${s.minutes} min`);
     visits[best.z] = (visits[best.z] || 0) + 1;
     knownFP.add(best.z);
@@ -696,15 +741,29 @@ async function beamSearch() {
     const fromZone = k > 0 ? legs[k - 1].zone : (st.branchFrom || (st.pos ? st.pos.zone : cfg.startZone));
     const choice = legs[k].here ? null : { leg: k + 1 - (legs[0].here ? 1 : 0), at: steps.length + 1, level: legs[k].levelBefore, chosen: zone, options: legs[k].options, beforeFile: legs[k].beforeFile, remaining: legs.length - k };
     if (choice) choices.push(choice);
+    // the leg's steps begin here, its trip and an errand on the way included (carryDeliveries and chainEnds find a step's
+    // leg by this: from after the errand, its pick-up counted as the previous leg's, at that leg's level)
+    legs[k].from = steps.length;
+    // an errand on the way (errandFor): to its giver first, the pick-up, then on to the leg. The "where next?" point
+    // stays on the first travel step, else it moves past the pick-up to the leg's own trip
+    const E = legs[k].errand;
+    if (E) {
+      const em = uiMap[E.zone], before = [...steps].reverse().find((s) => s.m);
+      sections.push({ title: 'On the way: ' + zoneName[E.zone], zone: zoneName[E.zone] });
+      if (!before || before.m !== em) steps.push({ k: 'fly', dest: zoneName[E.zone], to: em, text: zoneName[E.zone], sec: sections.length, note: (E.boat ? 'Across the sea: the card lists the boats and rides.' : 'Fly, or ride if there is no flight path yet.') + '  A pick-up on the way to ' + zoneName[zone] + '.' });
+      else if (choice) choice.at = steps.length + E.quests.length + 1;
+      for (const e of E.quests) steps.push({ k: 'accept', npc: E.who, r: 6, minLevel: e.reqLevel > 1 ? e.reqLevel : undefined, q: e.id, name: e.name, level: e.level, m: em, x: +(E.spot.x / 100).toFixed(4), y: +(E.spot.y / 100).toFixed(4), zone: zoneName[E.zone], sec: sections.length, lvl: legs[k].levelBefore,
+        note: 'Delivery - handed in in ' + zoneName[zone] + ' (' + e.xp + ' xp' + (e.chain > 0 ? ', and it opens more there' : '') + ').' });
+    }
     // the trip goes where the leg really starts: a region leg can open in a neighbour or a city ("fly to the Badlands"
     // then straight away "fly to Ironforge" was two travel steps in a row)
     const firstAt = leg.steps.find((s) => s.m && s.k !== 'fly');
     const startM = firstAt ? firstAt.m : uiMap[zone];
-    const prevAt = k > 0 ? [...legs[k - 1].leg.steps].reverse().find((s) => s.m) : null;
+    const prevAt = E ? [...steps].reverse().find((s) => s.m) : k > 0 ? [...legs[k - 1].leg.steps].reverse().find((s) => s.m) : null;
     const sameMap = prevAt && prevAt.m === startM;
-    if (fromZone !== zone && !sameMap && !(leg.steps[0] && leg.steps[0].k === 'fly')) {
+    if ((E ? E.zone : fromZone) !== zone && !sameMap && !(leg.steps[0] && leg.steps[0].k === 'fly')) {
       const zone2 = firstAt && firstAt.zone ? firstAt.zone : zoneName[zone];
-      const boat = continent[fromZone] !== continent[zone];
+      const boat = continent[E ? E.zone : fromZone] !== continent[zone];
       const next = k > 0 ? '  Next leg: ' + leg.title : '';
       sections.push({ title: 'Travel', zone: zone2 });
       // one travel step per zone change, across the sea too: the addon's trip planner (Travel.lua, the same network
@@ -713,7 +772,6 @@ async function beamSearch() {
       steps.push({ k: 'fly', dest: zone2, to: startM, text: zone2, sec: sections.length,
         note: (boat ? 'Across the sea: the card lists the boats and rides.' : 'Fly, or ride if there is no flight path yet.') + next });
     }
-    legs[k].from = steps.length;
     const off = sections.length;
     sections.push(...leg.sections);
     // tm (hearth steps): minutes since this leg began -> since the route began, on the clock the hearth cooldown is
@@ -732,6 +790,7 @@ async function beamSearch() {
   // a travel step straight into another one leads nowhere (the leg it opened was emptied by the passes above): the
   // second one is the trip (a choice mark moves to it)
   for (let i = steps.length - 2; i >= 0; i--) if (steps[i].k === 'fly' && !steps[i].boat && steps[i + 1].k === 'fly') { if (steps[i]._choice && !steps[i + 1]._choice) steps[i + 1]._choice = steps[i]._choice; steps.splice(i, 1); }
+  chainEnds(steps, legs);
   steps.forEach((s, i) => { s.id = i + 1; });
   for (const c of choices) { const i = steps.findIndex((s) => s._choice === c.leg); if (i >= 0) c.at = i + 1; }
   const lua = (v) => (typeof v === 'string' ? JSON.stringify(v) : String(v));
@@ -744,7 +803,9 @@ async function beamSearch() {
   L.push('  sections = {'); for (const s of sections) L.push('    ' + ser(s) + ','); L.push('  },');
   L.push('  steps = {'); for (const s of steps) L.push('    ' + ser({ ...s, _choice: undefined }) + ','); L.push('  },', '}');
   fs.writeFileSync(cfg.routeOut, L.join('\n') + '\n');
-  if (cfg.pathOut) fs.writeFileSync(cfg.pathOut, JSON.stringify({ dropped, legs: legs.filter((l) => !l.here).map((l) => zoneName[l.zone]), startLevel: st.level || cfg.level, endLevel: last.level, endXp: last.xp, choices, minutes: legs.reduce((a, l) => a + (l.state.minutes || 0), 0), sections, steps }));
+  if (cfg.pathOut) fs.writeFileSync(cfg.pathOut, JSON.stringify({ dropped, legs: legs.filter((l) => !l.here).map((l) => zoneName[l.zone]), startLevel: st.level || cfg.level, endLevel: last.level, endXp: last.xp,
+    // where the plan leaves you, in the startStateFile shape: a faction trunk starts from the race starts' end states (tools/tree.js)
+    endState: { state: { ...state, ...last, completed: last.completed || state.completed, active: last.active || state.active }, visits }, choices, minutes: legs.reduce((a, l) => a + (l.state.minutes || 0), 0), sections, steps }));
   console.log(`\nroute: ${legs.filter((l) => !l.here).map((l) => zoneName[l.zone]).join(' > ')}; ${steps.length} steps -> ${cfg.routeOut}`);
 })();
 

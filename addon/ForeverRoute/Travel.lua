@@ -103,6 +103,28 @@ local function net()
   return netNodes
 end
 Travel.HasNetwork = function(m) net(); return netMaps[m] == true end
+-- where a trip can leave the walk on map m: your side's flight masters (known or not) and the piers - the places a
+-- trip between two far stops starts or lands at (Next indexes the plan's far gaps by the walks to them before it
+-- knows which one the trip takes) -> { world positions }
+local portsOf, portsKey = {}, nil
+function Travel.Ports(m)
+  net()
+  local letter = Travel.Side() == "horde" and "H" or "A"
+  local key = tostring(netNodes) .. letter .. tostring(ns.FLIGHT)
+  if portsKey ~= key then portsOf, portsKey = {}, key end
+  local out = portsOf[m]
+  if out then return out end
+  out = {}
+  for _, n in ipairs(netNodes or {}) do
+    if (n.m == m or n.m2 == m) and ((n.kind == "fp" and (not n.side or n.side:find(letter, 1, true))) or n.kind == "dock") then out[#out + 1] = n.w end
+  end
+  if #out == 0 then
+    -- (no network here: the flight masters of your side alone)
+    for _, f in ipairs((ns.FLIGHT and ns.FLIGHT[m]) or {}) do local w = world(m, f[1], f[2]); if w then out[#out + 1] = w end end
+  end
+  portsOf[m] = out
+  return out
+end
 -- can a trip start here? Not from a place the network has no stop in: the Deeprun Tram is its own little world
 -- (between the Ironforge and Stormwind stops), and so is a dungeon
 -- (a map the network names is always on it; any other map is on it only if it lies in a world the network has stops in)
@@ -346,10 +368,12 @@ function Travel.Plan(from, to, opts)
       if N[2].w[3] == w[3] and N[2].m == inn.m then edge(h, 2, d(N[h], N[2]) * Travel.OFFNET / Travel.Speed(), "ride") end
     end
   end
-  -- Dijkstra
-  local dist, prev, how, done, kindOf = {}, {}, {}, {}, {}
+  -- Dijkstra, on the time you spend playing: a flight or a boat is time you can look away (the player: "flying is an
+  -- AFK activity vs walking requires being fully engaged AND has to navigate mobs and PvP"), so its seconds count at
+  -- Travel.AFK_WEIGHT. secs: the real time, for the plan's clock; afk: the seconds of it on a flight or boat
+  local dist, prev, how, done, kindOf, secs, afk = {}, {}, {}, {}, {}, {}, {}
   for i = 1, #N do dist[i] = math.huge end
-  dist[1] = 0
+  dist[1], secs[1], afk[1] = 0, 0, 0
   while true do
     local u, best = nil, math.huge
     for i = 1, #N do if not done[i] and dist[i] < best then u, best = i, dist[i] end end
@@ -357,7 +381,9 @@ function Travel.Plan(from, to, opts)
     done[u] = true
     for _, e in ipairs(adj[u]) do
       local v, c = e[1], e[2]
-      if not done[v] and dist[u] + c < dist[v] then dist[v], prev[v], how[v], kindOf[v] = dist[u] + c, u, e[3], e[4] end
+      local away = (e[3] == "fly" or e[3] == "boat") and c or 0
+      local cost = c - away + away * Travel.AFK_WEIGHT
+      if not done[v] and dist[u] + cost < dist[v] then dist[v], prev[v], how[v], kindOf[v], secs[v], afk[v] = dist[u] + cost, u, e[3], e[4], secs[u] + c, afk[u] + away end
     end
   end
   if dist[2] == math.huge then return nil end
@@ -447,7 +473,8 @@ function Travel.Plan(from, to, opts)
       end
     end
   end
-  return legs, dist[2]
+  -- the trip's real seconds, its seconds on a flight or boat, and what it costs you in time spent playing
+  return legs, secs[2], afk[2], dist[2]
 end
 
 -- A trip inside one zone is a walk - unless a flight you know lands so much nearer the spot that flying is clearly
@@ -460,6 +487,8 @@ end
 -- Cheap, because the card asks on every refresh and most steps are in your zone: a short walk plans nothing; neither
 -- does a walk no flight could beat (your nearest flight point is too far, or you know fewer than two); and what was
 -- decided holds while you stay within SHORTCUT_CELL yards and nothing else changed.
+Travel.AFK_WEIGHT = 0.35     -- a second on a flight or a boat, as time spent playing (taking off and landing need you)
+Travel.SHORTCUT_SLOWER = 0.2 -- a flight that means less time on foot may take this share longer than the walk
 Travel.SHORTCUT_MIN = 120    -- a walk shorter than this (seconds) is never worth a flight: nothing is planned at all
 Travel.SHORTCUT_SAVES = 45   -- the flight must save at least this many seconds...
 Travel.SHORTCUT_SHARE = 0.15 -- ...and this share of the walk
@@ -498,8 +527,9 @@ function Travel.Shortcut(from, to)
       if w and w[3] == from.w[3] and knowsFP(m, f[3]) then point(w) end
     end
   end
-  if not (count >= 2 and near * Travel.OFFNET / speed + Travel.FLY_EXTRA <= walk - margin(walk)) then return nil end
-  local legs, secs = Travel.Plan(from, to, { hearth = false })
+  -- (the quickest a flight could be, in time on foot: the walk to the flight point and the take-off)
+  if not (count >= 2 and near * Travel.OFFNET / speed + Travel.FLY_EXTRA <= walk - margin(walk) * Travel.AFK_WEIGHT) then return nil end
+  local legs, secs, afk = Travel.Plan(from, to, { hearth = false })
   if not (legs and legs[1] and secs) then return nil end
   local rides = true
   for _, l in ipairs(legs) do if l.how ~= "ride" then rides = false; break end end
@@ -507,9 +537,15 @@ function Travel.Shortcut(from, to)
   -- on foot along the roads may beat the straight-line guess: the flight has to beat the better of the two
   local _, foot = Travel.Plan({ m = from.m, x = from.x, y = from.y, w = from.w }, { m = to.m, x = to.x, y = to.y, name = to.name, w = to.w }, { ground = true })
   if foot and foot < walk then walk = foot end
-  if secs > walk - margin(walk) then return nil end
+  -- the flight wins on time spent playing: its time on foot plus a share of its time in the air, by a margin, and not
+  -- much slower on the clock (a flight and a short walk beats walking the length of Stranglethorn: the player)
+  local onFoot = secs - (afk or 0)
+  local playing = onFoot + (afk or 0) * Travel.AFK_WEIGHT
+  if playing > walk - margin(walk) or secs > walk * (1 + Travel.SHORTCUT_SLOWER) then return nil end
   -- said on the card and the arrow: why you are sent to a flight master for a step in your own zone
-  legs[1].text = legs[1].text .. " - about " .. math.max(1, math.floor((walk - secs) / 60 + 0.5)) .. " min quicker than walking there"
+  local saved = math.max(1, math.floor((walk - onFoot) / 60 + 0.5))
+  legs[1].text = legs[1].text .. (secs <= walk - margin(walk) and (" - about " .. math.max(1, math.floor((walk - secs) / 60 + 0.5)) .. " min quicker than walking there")
+    or (" - about as quick as walking, and " .. saved .. " min less on foot"))
   memo.legs, memo.secs, memo.walk = legs, secs, walk
   return legs, secs, walk
 end

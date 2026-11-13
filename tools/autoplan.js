@@ -65,7 +65,7 @@ function runPlan(kind) {
     }
   } catch (e) { log('  learning failed: ' + String(e.message).split('\n')[0]); }
   // the fast pass reuses the last dungeon routes and polishes less; the full pass does everything carefully
-  const cfg = { ...now, routesOut: path.join(work, 'Route.lua'), requestZone, followZone, followLegs, followId, ...(kind === 'fast' ? { reuseDungeons: path.join(ROOT, 'paths-auto-full', 'dungeons.json'), optimizeSeconds: 5 } : { beam: 4 }) };
+  const cfg = { ...now, routesOut: path.join(work, 'Route.lua'), requestZone, followZone, followLegs, followId, ...(kind === 'fast' ? { reuseDungeons: path.join(ROOT, 'paths-auto-full', 'dungeons.json'), optimizeEffort: 0.5 } : { beam: 4 }) };
   if (requestZone) log('  you asked to start in ' + requestZone);
   const cfgFile = path.join(work, 'campaign.json'); fs.writeFileSync(cfgFile, JSON.stringify(cfg));
   const args = ['--max-old-space-size=8000', path.join(__dirname, 'paths.js'), cfgFile, '3', kind === 'full' ? '2' : '0', '--work', work];

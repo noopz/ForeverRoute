@@ -1,0 +1,2439 @@
+{
+ "race": "human",
+ "cls": "warrior",
+ "zoneName": {
+  "1": "Zone A",
+  "2": "Zone B",
+  "3": "Zone C",
+  "4": "Zone D",
+  "5": "Zone E City",
+  "6": "Zone F",
+  "7": "Zone G",
+  "3277": "Warsong Gulch"
+ },
+ "dungeonAreas": {
+  "99": {
+   "name": "Deadmines"
+  }
+ },
+ "npcs": {
+  "7": {
+   "id": 7,
+   "name": "N7",
+   "spawns": [
+    {
+     "zone": 1,
+     "x": 40,
+     "y": 40
+    }
+   ]
+  }
+ },
+ "quests": {
+  "1": {
+   "id": 1,
+   "name": "Q1",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 100
+  },
+  "2": {
+   "id": 2,
+   "name": "Q2",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    1
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 200
+  },
+  "3": {
+   "id": 3,
+   "name": "Q3",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    2
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 300
+  },
+  "4": {
+   "id": 4,
+   "name": "Q4",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    },
+    {
+     "type": "npc",
+     "id": 3,
+     "name": "N3",
+     "spawns": [
+      {
+       "zone": 3,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 2,
+     "name": "N2",
+     "spawns": [
+      {
+       "zone": 2,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 400
+  },
+  "5": {
+   "id": 5,
+   "name": "Q5",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 2,
+     "name": "N2",
+     "spawns": [
+      {
+       "zone": 2,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 2,
+     "name": "N2",
+     "spawns": [
+      {
+       "zone": 2,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    4
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 2,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 500
+  },
+  "6": {
+   "id": 6,
+   "name": "Q6",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 600
+  },
+  "7": {
+   "id": 7,
+   "name": "Q7",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    6
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 700
+  },
+  "8": {
+   "id": 8,
+   "name": "Q8",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    6
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 800
+  },
+  "9": {
+   "id": 9,
+   "name": "Q9",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [
+    8
+   ],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 900
+  },
+  "10": {
+   "id": 10,
+   "name": "Q10",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 2,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 1000
+  },
+  "11": {
+   "id": 11,
+   "name": "Q11",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    10
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 1100
+  },
+  "12": {
+   "id": 12,
+   "name": "Q12",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 99,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 1200
+  },
+  "13": {
+   "id": 13,
+   "name": "Q13",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    12
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 1300
+  },
+  "14": {
+   "id": 14,
+   "name": "Q14",
+   "reqLevel": 35,
+   "level": 40,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 1400
+  },
+  "15": {
+   "id": 15,
+   "name": "Q15",
+   "reqLevel": 35,
+   "level": 40,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    14
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 1500
+  },
+  "16": {
+   "id": 16,
+   "name": "Q16",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 1600
+  },
+  "17": {
+   "id": 17,
+   "name": "Q17",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [
+    18
+   ],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 1700
+  },
+  "18": {
+   "id": 18,
+   "name": "Q18",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [
+    17
+   ],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 1800
+  },
+  "19": {
+   "id": 19,
+   "name": "Q19",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    17,
+    18
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 1900
+  },
+  "20": {
+   "id": 20,
+   "name": "Q20",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 2000,
+   "nextInChain": 21
+  },
+  "21": {
+   "id": 21,
+   "name": "Q21",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [
+    20
+   ],
+   "xp": 2100
+  },
+  "22": {
+   "id": 22,
+   "name": "Q22",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 3277,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 2200
+  },
+  "23": {
+   "id": 23,
+   "name": "Q23",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    22
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 3277,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 2300
+  },
+  "24": {
+   "id": 24,
+   "name": "Q24",
+   "reqLevel": 1,
+   "level": 19,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 3,
+     "name": "N3",
+     "spawns": [
+      {
+       "zone": 3,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 3,
+     "name": "N3",
+     "spawns": [
+      {
+       "zone": 3,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 3,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 2400
+  },
+  "25": {
+   "id": 25,
+   "name": "Q25",
+   "reqLevel": 1,
+   "level": 19,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 3,
+     "name": "N3",
+     "spawns": [
+      {
+       "zone": 3,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 3,
+     "name": "N3",
+     "spawns": [
+      {
+       "zone": 3,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    24
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 3,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 2500
+  },
+  "26": {
+   "id": 26,
+   "name": "Q26",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 4,
+     "name": "N4",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "H"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 2600
+  },
+  "27": {
+   "id": 27,
+   "name": "Q27",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    26
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 2700
+  },
+  "28": {
+   "id": 28,
+   "name": "Q28",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 2800
+  },
+  "29": {
+   "id": 29,
+   "name": "Q29",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    30,
+    28
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 2900
+  },
+  "30": {
+   "id": 30,
+   "name": "Q30",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 2,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 3000
+  },
+  "31": {
+   "id": 31,
+   "name": "Q31",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 5,
+     "name": "N5",
+     "spawns": [
+      {
+       "zone": 4,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 5,
+     "name": "N5",
+     "spawns": [
+      {
+       "zone": 4,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 4,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 3100
+  },
+  "32": {
+   "id": 32,
+   "name": "Q32",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 5,
+     "name": "N5",
+     "spawns": [
+      {
+       "zone": 4,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 5,
+     "name": "N5",
+     "spawns": [
+      {
+       "zone": 4,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    31
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 4,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 3200
+  },
+  "33": {
+   "id": 33,
+   "name": "Q33",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [
+    34
+   ],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 3300
+  },
+  "34": {
+   "id": 34,
+   "name": "Q34",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [
+    33
+   ],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 3400
+  },
+  "35": {
+   "id": 35,
+   "name": "Q35",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    34
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 3500
+  },
+  "36": {
+   "id": 36,
+   "name": "Q36",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 8,
+     "name": "N8",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "H"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 8,
+     "name": "N8",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "H"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 3600
+  },
+  "37": {
+   "id": 37,
+   "name": "Q37",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 8,
+     "name": "N8",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "H"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 8,
+     "name": "N8",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "H"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    36
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 3700
+  },
+  "38": {
+   "id": 38,
+   "name": "Q38",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "item",
+     "id": 500,
+     "name": "A Letter",
+     "drops": [
+      7
+     ]
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 3800
+  },
+  "39": {
+   "id": 39,
+   "name": "Q39",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 1,
+     "name": "N1",
+     "spawns": [
+      {
+       "zone": 1,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    38
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 1,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 3900
+  },
+  "40": {
+   "id": 40,
+   "name": "Q40",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 6,
+     "name": "N6",
+     "spawns": [
+      {
+       "zone": 5,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 6,
+     "name": "N6",
+     "spawns": [
+      {
+       "zone": 5,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 5,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 4000
+  },
+  "41": {
+   "id": 41,
+   "name": "Q41",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 6,
+     "name": "N6",
+     "spawns": [
+      {
+       "zone": 5,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 6,
+     "name": "N6",
+     "spawns": [
+      {
+       "zone": 5,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    40
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 5,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 0
+  },
+  "42": {
+   "id": 42,
+   "name": "Q42",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 9,
+     "name": "N9",
+     "spawns": [
+      {
+       "zone": 6,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 9,
+     "name": "N9",
+     "spawns": [
+      {
+       "zone": 6,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 6,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 4200
+  },
+  "43": {
+   "id": 43,
+   "name": "Q43",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 9,
+     "name": "N9",
+     "spawns": [
+      {
+       "zone": 6,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 9,
+     "name": "N9",
+     "spawns": [
+      {
+       "zone": 6,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    42
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 6,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 4300
+  },
+  "44": {
+   "id": 44,
+   "name": "Q44",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 10,
+     "name": "N10",
+     "spawns": [
+      {
+       "zone": 7,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 10,
+     "name": "N10",
+     "spawns": [
+      {
+       "zone": 7,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 7,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 4400
+  },
+  "45": {
+   "id": 45,
+   "name": "Q45",
+   "reqLevel": 1,
+   "level": 8,
+   "races": 0,
+   "classes": 0,
+   "starters": [
+    {
+     "type": "npc",
+     "id": 10,
+     "name": "N10",
+     "spawns": [
+      {
+       "zone": 7,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "finishers": [
+    {
+     "type": "npc",
+     "id": 10,
+     "name": "N10",
+     "spawns": [
+      {
+       "zone": 7,
+       "x": 50,
+       "y": 50
+      }
+     ],
+     "friendly": "A"
+    }
+   ],
+   "objectives": [],
+   "preGroup": [],
+   "preSingle": [
+    44
+   ],
+   "children": [],
+   "inGroupWith": [],
+   "exclusive": [],
+   "zone": 7,
+   "flags": 0,
+   "special": 0,
+   "breadcrumbs": [],
+   "xp": 4500
+  }
+ },
+ "steps": [
+  {
+   "k": "accept",
+   "q": 1,
+   "lvl": 5,
+   "zone": "Zone A"
+  },
+  {
+   "k": "accept",
+   "q": 6,
+   "lvl": 5,
+   "zone": "Zone A"
+  },
+  {
+   "k": "turnin",
+   "q": 6,
+   "lvl": 6,
+   "zone": "Zone A"
+  },
+  {
+   "k": "accept",
+   "q": 33,
+   "lvl": 6,
+   "zone": "Zone A"
+  },
+  {
+   "k": "turnin",
+   "q": 33,
+   "lvl": 6,
+   "zone": "Zone A"
+  },
+  {
+   "k": "accept",
+   "q": 17,
+   "lvl": 6,
+   "zone": "Zone A"
+  },
+  {
+   "k": "turnin",
+   "q": 17,
+   "lvl": 7,
+   "zone": "Zone A"
+  },
+  {
+   "k": "turnin",
+   "q": 19,
+   "lvl": 7,
+   "zone": "Zone A"
+  },
+  {
+   "k": "accept",
+   "q": 21,
+   "lvl": 8,
+   "zone": "Zone A"
+  },
+  {
+   "k": "turnin",
+   "q": 21,
+   "lvl": 9,
+   "zone": "Zone A"
+  },
+  {
+   "k": "turnin",
+   "q": 28,
+   "lvl": 9,
+   "zone": "Zone A"
+  },
+  {
+   "k": "fly",
+   "lvl": 9,
+   "zone": "Zone B"
+  },
+  {
+   "k": "fly",
+   "lvl": 9,
+   "zone": "Zone D"
+  },
+  {
+   "k": "hearth",
+   "lvl": 9,
+   "zone": "Zone D"
+  },
+  {
+   "k": "accept",
+   "q": 16,
+   "lvl": 9,
+   "zone": "Zone B"
+  },
+  {
+   "k": "turnin",
+   "q": 16,
+   "lvl": 9,
+   "zone": "Zone B"
+  },
+  {
+   "k": "grind",
+   "lvl": 8,
+   "zone": "Zone E"
+  },
+  {
+   "k": "grind",
+   "zone": "Zone F"
+  },
+  {
+   "k": "obj",
+   "lvl": 9,
+   "m": 9007,
+   "zone": "Somewhere"
+  },
+  {
+   "k": "fly",
+   "lvl": 10,
+   "zone": "Zone A"
+  },
+  {
+   "k": "obj",
+   "q": 1,
+   "lvl": 10,
+   "zone": "Zone A"
+  },
+  {
+   "k": "grind",
+   "lvl": 11,
+   "zone": "Zone C"
+  },
+  {
+   "k": "grind",
+   "lvl": 20,
+   "zone": "Zone C"
+  }
+ ],
+ "zoneAliases": {
+  "5": "Zone E"
+ },
+ "mapArea": {
+  "9007": 7
+ }
+}

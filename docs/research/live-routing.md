@@ -46,9 +46,19 @@ The "sent to Stormwind for one hand-in" reports had several causes:
   - A step without a place (grind, note) or a "go to" step (a dungeon run) ends the window. It stays where the plan has it.
   - While the plan's next step is a trip, the trip is the step.
   - A pick-up not yet offered (an earlier chain quest not handed in) isn't a candidate.
-- **Optional prizes:**
-  - Finished quests whose hand-in is within 500 yd, wherever the plan has them. Prize = what coming back later costs: the hand-in, 30 s for carrying it, and the detour from the plan's own way.
-  - Stops the route inserted for off-plan quests. Prize = the quest's XP at your XP rate.
+- **Optional prizes** (the candidates; one price decides, below):
+  - Finished quests whose hand-in is within 500 yd, wherever the plan has them (at a hub, or where the chain goes on).
+  - Stops the route inserted for off-plan quests.
+  - Pick-ups the built-in plan passed as behind you: the nearest 6 within 2000 yd, at most 2 levels above you (how far below you is the price's call; `Next.BehindLevelOk`, the rule `tools/replay.js` counts by too).
+  - A later visit the plan makes to where you are, all of it doable now (`Next.VisitHere`).
+- **One price: now or later** (`Next.Prize`, `Next.DeferCost`). A stop is worth the least of:
+  - what it pays: its quest's XP at your level and XP rate (`Engine.QuestXP`: the game's cut for a quest far below you, 80% at 6 levels down to 10% at 10 or more; a gray quest still pays that, it is gray mobs that pay nothing), less the work still between you and that XP (the objective steps your quest log doesn't have finished: their planner `work` and the walks to them, and the walk on to the hand-in when that work is known; 150 s an objective for a plan without it);
+  - what leaving it for later costs: the stop itself, 30 s for carrying the quest, and the cheapest detour from the plan's remaining way. Within a zone that way is the walk. Across zones it is the plan's real trip (`Travel.Plan` without the hearthstone, remembered per pair of steps until the flight paths you know, your speed or your level change), so only the walks at its ends (to the flight master or the plan's own pier, and from where you land) can take a stop on the way. Across one of the plan's hearths it is the walk to wherever you cast it (one way: you hearth from there) and the way on from the inn the plan bound you at. A far gap is found by the walks to every flight master and pier of its two maps (`Travel.Ports`) until its trip is priced, then by its own. Besides its own place in the plan, a later pass counts only where the solve would offer the stop then: a hand-in at a hub or where its chain goes on, the pass within 500 yd of it. Infinite when none of that remains: the plan never comes back.
+  - A solve starts at most 4 trip searches for its prices (`Next.ASK_PER_PICK`, ~30 ms each): learning a flight path forgets every remembered trip. A price still missing one counts as "the plan comes by" (never sent for on a guess) and is asked again next solve.
+
+  A hand-in at a hub the plan returns to is worth about 40 s, so it waits for the hand-in run unless it is a few seconds away. One the plan never passes again is worth its XP. A gray quest pays its cut either way. A quest behind you is never done by the plan, so it is worth its XP less its work. A later visit here is worth the plan's trip into and out of it (by its real trips, at least 2 min), shared among its stops. The price depends only on the plan, the flight paths you know, your speed and your level, never on where you stand: prizes skip the hysteresis margin, so a price that moved as you walk would flip the card.
+
+  Up to 1.4.6 each had a formula of its own: a straight line between the step's two plan neighbours (riding speed across a zone the plan flies over, and nothing when a neighbour was in another instance), a hub test for "the plan passes again", 30% of the XP for "still worth it", and a flat 150 s an objective.
 
 - **The hub loop (the dopamine factor).** Quest for a good while, return to a hub, hand in a pile and watch the XP bar climb: WoW is built around that loop, and the guide sets it up rather than chipping it away. An early hand-in (one the plan has further on) is offered only at a hub or where its chain goes on right there.
   - A hub is a place with 4 or more plan steps within 70 yd (`Next.HUB_STEPS`, `Next.HUB_YD`).
@@ -63,7 +73,7 @@ The "sent to Stormwind for one hand-in" reports had several causes:
 - **Travel:** straight-line yards × 1.25 ÷ your speed. Past 900 yd or across the sea, the trip planner's time (flights, boats, hearth), remembered per pair of steps until you learn a flight path.
 - **Service:** accept 8 s, hand-in 10 s, objective 90 s, flight path 15 s, train 40 s, bind 15 s.
 - **The plan is the cost-to-go.** A window is scored by its own time plus the time to finish the rest of the window's planned stops in plan order from where it ends, then on to the plan's first stop past the window (the anchor). Plan order skips any stop that can't be done yet (pick-up first, log room). That is the real length of the route from here, so a reorder wins only when it really is shorter.
-- **Deferral is an option.** A prize not taken is left for later at no cost, which is exactly what the prize says it's worth. A hand-in across the world isn't worth the trip (its prize is about a minute); one beside you is.
+- **Deferral is an option.** A prize not taken is left for later at no cost, which is exactly what the prize says it's worth. A hand-in across the world isn't worth the trip when the plan comes back for it (its prize is the detour then, about a minute); one beside you is.
 - **Stability.** Passing over a planned stop costs 45 s, scaled by how far the chosen stop takes you (in full at 60 s or more). Doing what's right here isn't the confusing kind of out of order; being sent somewhere else is (Fox et al., plan stability).
 - **Capacity:** a pick-up never takes the log over its maximum.
 

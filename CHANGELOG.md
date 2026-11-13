@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.7 - 2026-11-13
+- Flying is time you can look away; walking isn't. A trip that flies and walks a little now wins over walking the whole way when it's about as quick: the card says "about as quick as walking, and N min less on foot".
+- The card's footer says where the plan goes next: "Next zone: Duskwood, after 4 quests here" (it said "planned for level 33 · plan goes to level 43").
+- The route list's header reads "To level 43 · about 38 h left · 26 of 893 steps done"; when the plan was made is in its tooltip.
+- "Not doing this quest" and "the giver doesn't offer it" are small buttons (a red X, a struck-out !) with tooltips, beside Map, instead of two lines of text.
+- Map opens the world map where the step is - for a trip, where it takes you - and its pin flashes once the map shows it.
+- The "N won't do" link stays put while you hover the card (it moved away under the mouse).
+- Quests with the same name and different givers are alternatives: once you've taken one, the others leave your route.
+- The next step weighs going now against coming back later with the real trip, so a stop it fits in is one that's worth it.
+- Plans from the companion app: far less grinding (a quest that pays better than grinding is never dropped as "too many kills" or "annoying"), quests up to 3 levels above you from level 20, chains that run through several zones are followed (The Tower of Althalaxx), quests whose work is in another zone are picked up and carried, and walking lines go round the other faction's towns.
+
 ## 1.4.6 - 2026-11-13
 - Arrived somewhere the plan comes back to later (you hearthed to Stormwind, flew into a town): if all of that later visit can be done now, it's done now and the trip back is dropped - "the plan comes back here for this later".
 - Already where your plan goes after its next trip (you flew on ahead, or rode there yourself): the card starts on the plan's quests where you are, and the trip waits.

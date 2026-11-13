@@ -901,6 +901,19 @@ test("the card nudges you to drop quests you won't do", function()
   local ok, err = pcall(function()
     ns.SelectRoute(ns.MainRoutes()[1].id, true)
     ns.Fire("FR_STATE")
+    -- hovering the card brings the controls up where the link sits: the link moves to the left and stays clickable
+    -- (it used to hide, so the mouse on its way to it made it vanish - tester)
+    local c = ForeverRouteCard
+    assertTrue(c.dropWanted, "the far-away quest should show the won't-do link")
+    do
+      ns.Card.Hover(true)
+      assertTrue(c.drop:IsShown(), "the won't-do link hid while you hover the card")
+      local p = { c.drop:GetPoint(1) }
+      assertEquals("LEFT", p[1])
+      ns.Card.PlaceDrop(false)
+      assertTrue(c.drop:IsShown())
+      assertEquals("TOPRIGHT", ({ c.drop:GetPoint(1) })[1])
+    end
   end)
   C_QuestLog.GetNumQuestLogEntries, C_QuestLog.GetInfo = saved.n, saved.i
   if not ok then error(err, 0) end
@@ -1537,6 +1550,64 @@ test("a breadcrumb is passed once its quest is yours (Argos has no Corruption Ab
     ns.Engine.Refresh()
     assertTrue(ns.Engine.Status(1) ~= "done")
   end)
+  end)
+  UnitLevel = svL
+  if not okT then error(errT, 0) end
+end)
+
+test("an alternative is passed once another is yours (no Briarthorn for Menara Voidrender, taken from Demisette Cloyce)", function()
+  local svL = UnitLevel; UnitLevel = function() return 31 end -- the test client is 70: everything would be outlevelled
+  local route = { id = "alt", steps = {
+    { id = 1, k = "accept", q = 4736, name = "In Search of Menara Voidrender", npc = "Briarthorn", level = 31, m = 1455, x = 0.51, y = 0.08 },
+    { id = 2, k = "turnin", q = 4736, name = "In Search of Menara Voidrender", npc = "Menara Voidrender", level = 31, m = 1413, x = 0.49, y = 0.57 },
+  } }
+  local okT, errT = pcall(function()
+    assertTrue(ns.QUEST_EX and ns.QUEST_EX[4736] ~= nil, "the alternatives table is loaded")
+    -- done in Stormwind: Briarthorn's is closed, pick-up and hand-in
+    withState({ [4738] = { done = true, objectives = {} } }, function()
+      ForeverRouteData = route
+      ns.Engine.Refresh()
+      assertEquals("done", ns.Engine.Status(1))
+      assertEquals("done", ns.Engine.Status(2))
+    end)
+    -- in your log from Stormwind: the same
+    withState({ [4738] = { on = true, objectives = {} } }, function()
+      ForeverRouteData = route
+      ns.Engine.Refresh()
+      assertEquals("done", ns.Engine.Status(1))
+    end)
+    -- neither: Briarthorn's stays
+    withState({}, function()
+      ForeverRouteData = route
+      ns.Engine.Refresh()
+      assertTrue(ns.Engine.Status(1) ~= "done")
+    end)
+    -- Briarthorn's own in your log (taken there after all): its hand-in stays whatever else you have
+    withState({ [4736] = { on = true, objectives = {} }, [4738] = { done = true, objectives = {} } }, function()
+      ForeverRouteData = route
+      ns.Engine.Refresh()
+      assertTrue(ns.Engine.Status(2) ~= "done")
+    end)
+  end)
+  UnitLevel = svL
+  if not okT then error(errT, 0) end
+end)
+
+test("a quest's own prerequisite is not an alternative (Stars of Elune stays after Returning Home)", function()
+  -- QuestieDB names Stars of Elune's breadcrumbs both as its prerequisites (one of them) and in its exclusive list;
+  -- read as written, handing in Returning Home closed the quest it leads to (tools/exclusive-alternatives.js closers)
+  local svL = UnitLevel; UnitLevel = function() return 10 end
+  local route = { id = "elune", steps = {
+    { id = 1, k = "accept", q = 5627, name = "Stars of Elune", npc = "Priestess Alathea", level = 10, m = 1457, x = 0.39, y = 0.81 },
+    { id = 2, k = "turnin", q = 5627, name = "Stars of Elune", npc = "Priestess Alathea", level = 10, m = 1457, x = 0.39, y = 0.81 },
+  } }
+  local okT, errT = pcall(function()
+    for _, e in ipairs(ns.QUEST_EX[5627] or {}) do assertTrue(e ~= 5629, "Returning Home is not among Stars of Elune's alternatives") end
+    withState({ [5629] = { done = true, objectives = {} } }, function()
+      ForeverRouteData = route
+      ns.Engine.Refresh()
+      assertTrue(ns.Engine.Status(1) ~= "done", "Stars of Elune is still to do")
+    end)
   end)
   UnitLevel = svL
   if not okT then error(errT, 0) end
@@ -2869,6 +2940,31 @@ test("zone picker: picking a zone with a ready route switches to it at once and 
     assertEquals(zr, ForeverRouteData)
     assertEquals("Duskwood", ns.char.requestZone)
     assertNil(ns.char.requestHandled) -- the next plan's path starting there still takes over
+  end)
+  ForeverRouteRoutes, ns.char.requestZone, ns.char.requestHandled = sv.routes, sv.req, sv.handled
+  ns.SelectRoute(sv.title, true)
+  if not ok then error(err, 0) end
+end)
+
+test("zone picker on a built-in plan: one zone route per zone and level band, the one for your level is offered and taken", function()
+  local sv = { routes = ForeverRouteRoutes, data = ForeverRouteData, req = ns.char.requestZone, handled = ns.char.requestHandled, title = ns.char.routeTitle }
+  local function zr(zone, level, xph) return { id = "zone:" .. zone .. ":" .. level, title = "Zone: " .. zone, zoneRoute = true, zoneName = zone, level = level, xph = xph, meta = { legs = zone }, sections = { { title = "x" } }, steps = { { id = 1, k = "goto", text = "y", sec = 1 } } } end
+  local main = { id = "path:A", title = "A", meta = { legs = "Redridge Mountains" }, sections = { { title = "x" } }, steps = { { id = 1, k = "goto", text = "x", sec = 1 } } }
+  local dw24, dw30, ash24, stv36 = zr("Duskwood", 24, 9000), zr("Duskwood", 30, 8000), zr("Ashenvale", 24, 12000), zr("Stranglethorn Vale", 36, 15000)
+  ForeverRouteRoutes = { main, dw24, dw30, ash24, stv36 }
+  local ok, err = pcall(function()
+    -- at 29: Duskwood's 30 band (in reach: up to 2 above), not its 24; Stranglethorn's 36 is out of reach
+    assertEquals(dw30, ns.ZoneRouteFor("Duskwood", 29))
+    assertNil(ns.ZoneRouteFor("Stranglethorn Vale", 29))
+    local at = ns.ZoneRoutesAt(29)
+    assertEquals(2, #at)
+    assertEquals(ash24, at[1]) -- best XP per hour first
+    -- at 24: Duskwood's 24 band (its 30 is 6 above)
+    assertEquals(dw24, ns.ZoneRouteFor("Duskwood", 24))
+    -- a plan's own zone route without a level still works as before
+    local plain = { id = "zone:Wetlands", title = "Zone: Wetlands", zoneRoute = true, zoneName = "Wetlands", meta = { legs = "Wetlands" }, sections = { { title = "x" } }, steps = { { id = 1, k = "goto", text = "y", sec = 1 } } }
+    ForeverRouteRoutes = { main, plain }
+    assertEquals(plain, ns.ZoneRouteFor("Wetlands", 40))
   end)
   ForeverRouteRoutes, ns.char.requestZone, ns.char.requestHandled = sv.routes, sv.req, sv.handled
   ns.SelectRoute(sv.title, true)
@@ -5164,7 +5260,7 @@ test("Target button: floats just above the card (never on it) on the card's laye
   if not ok then error(err, 0) end
 end)
 
-test("the 'not doing this quest' and 'giver doesn't offer it' links have a row of their own: never over the title, the detail, the distance, Map, an objective's count or the note, at every card width and scale", function()
+test("the 'not doing this quest' (red X) and 'giver doesn't offer it' buttons are small icons beside Map with a tooltip each: never over the title, the detail, the distance, Map, an objective's count or the note, at every card width and scale", function()
   local sv = { w = ns.db.cardWidth, ui = ns.db.uiScale, pos = ns.db.cardPos, tp = ns.db.targetPos }
   local route = { id = "nl", title = "nl", sections = { { title = "x" } }, steps = {
     { k = "accept", q = 99783, name = "A Threat Within the Walls of the Abbey of Northshire", npc = "Deputy Willem", zone = "Northshire Valley", m = 1429, x = 0.48, y = 0.43, sec = 1, note = "He stands outside the abbey, by the road." },
@@ -5183,6 +5279,17 @@ test("the 'not doing this quest' and 'giver doesn't offer it' links have a row o
       local links = {}
       for name, b in pairs({ ["not doing this quest"] = cur.nope, ["giver doesn't offer it"] = cur.notOffered }) do if b:IsShown() then links[name] = box(b) end end
       assertNotNil(links["not doing this quest"], what .. ": no 'not doing this quest' on a quest step")
+      -- icons, not words: no bigger than the tool row's height, a tooltip that says what each does, the X in red
+      -- ("not just giant text, red x and tooltips seem more useful here" - tester)
+      for name, b in pairs({ ["not doing this quest"] = cur.nope, ["giver doesn't offer it"] = cur.notOffered }) do
+        if b:IsShown() then
+          must(b:GetWidth() <= ns.Card.TOOL + 0.5 and b:GetHeight() <= ns.Card.TOOL + 0.5, what .. ": '" .. name .. "' is " .. b:GetWidth() .. " wide, not an icon")
+          must(type(b.tip) == "table" and #b.tip >= 2 and #b.tip[2] > 20, what .. ": '" .. name .. "' has no tooltip that explains it")
+          if cur.map:IsShown() then must(math.abs(b:GetTop() - cur.map:GetTop()) < 0.5, what .. ": '" .. name .. "' is not in the row with Map") end
+        end
+      end
+      local r, g = cur.nope.icon:GetVertexColor()
+      must(r > 0.9 and g < 0.5, what .. ": the 'not doing this quest' X is not red")
       local others = { title = box(cur.titleText), distance = box(cur.dist) }
       if (cur.detail:GetText() or "") ~= "" then others.detail = box(cur.detail) end
       if cur.map:IsShown() then others.Map = box(cur.map) end
@@ -5437,7 +5544,7 @@ local function shortcutWorld(fn)
   local HBD = LibStub("HereBeDragons-2.0")
   local B = ns.TravelData.BOUNDS
   local sv = { conv = HBD.GetWorldCoordinatesFromZone, pos = ns.State.Position, taxi = ns.State.knownTaxi, info = C_Map.GetMapInfo, data = ForeverRouteData,
-    lvl = UnitLevel, inn = ns.Travel.HearthInn, onTaxi = UnitOnTaxi, flight = ns.FLIGHT, saves = ns.Travel.SHORTCUT_SAVES, share = ns.Travel.SHORTCUT_SHARE }
+    lvl = UnitLevel, inn = ns.Travel.HearthInn, onTaxi = UnitOnTaxi, flight = ns.FLIGHT, saves = ns.Travel.SHORTCUT_SAVES, share = ns.Travel.SHORTCUT_SHARE, slower = ns.Travel.SHORTCUT_SLOWER }
   HBD.GetWorldCoordinatesFromZone = function(_, x, y, m) local b = B[m]; if not b then return nil end return b[1] + x * (b[2] - b[1]), b[3] + y * (b[4] - b[3]), b[5] end
   local names = { [1431] = "Duskwood", [1436] = "Westfall", [1433] = "Redridge Mountains", [1429] = "Elwynn Forest", [1453] = "Stormwind City", [1444] = "Feralas" }
   C_Map.GetMapInfo = function(m) return names[m] and { name = names[m] } or (sv.info and sv.info(m)) end
@@ -5449,7 +5556,7 @@ local function shortcutWorld(fn)
   ns.State.Position = function() return w.at[1], w.at[2], w.at[3] end
   local ok, err = pcall(fn, w)
   HBD.GetWorldCoordinatesFromZone, ns.State.Position, ns.State.knownTaxi, C_Map.GetMapInfo, ForeverRouteData = sv.conv, sv.pos, sv.taxi, sv.info, sv.data
-  UnitLevel, ns.Travel.HearthInn, UnitOnTaxi, ns.FLIGHT, ns.Travel.SHORTCUT_SAVES, ns.Travel.SHORTCUT_SHARE = sv.lvl, sv.inn, sv.onTaxi, sv.flight, sv.saves, sv.share
+  UnitLevel, ns.Travel.HearthInn, UnitOnTaxi, ns.FLIGHT, ns.Travel.SHORTCUT_SAVES, ns.Travel.SHORTCUT_SHARE, ns.Travel.SHORTCUT_SLOWER = sv.lvl, sv.inn, sv.onTaxi, sv.flight, sv.saves, sv.share, sv.slower
   if not ok then error(err, 0) end
 end
 local function sven() return { k = "turnin", q = 164, name = "Deliveries to Sven", npc = "Sven Yorgen", m = 1431, x = 0.0778, y = 0.3407, zone = "Duskwood", r = 6 } end
@@ -5513,9 +5620,35 @@ test("same zone: the flight has to win by a margin, and the walk it is held agai
     -- on foot only: no flight leg in a ground plan
     local g = ns.Travel.Plan({ m = 1431, x = 0.7749, y = 0.4429 }, { m = 1431, x = 0.0778, y = 0.3407 }, { ground = true })
     for _, l in ipairs(g) do assertEquals("ride", l.how) end
-    -- ask for more than the flight saves: walk
-    ns.Travel.SHORTCUT_SAVES = (walk - secs) + 5
+    -- ask for more than the flight saves in time spent playing (its time on foot, and its time in the air at
+    -- AFK_WEIGHT): walk
+    local _, s2, afk = ns.Travel.Plan({ m = 1431, x = 0.7749, y = 0.4429 }, { m = 1431, x = 0.0778, y = 0.3407 }, { hearth = false })
+    local playing = (s2 - afk) + afk * ns.Travel.AFK_WEIGHT
+    ns.Travel.SHORTCUT_SAVES = (walk - playing) + 5
     assertNil(ns.Travel.Shortcut({ m = 1431, x = 0.7600, y = 0.4900 }, { m = 1431, x = 0.0778, y = 0.3407 })) -- (another spot: what was decided for a spot holds there)
+  end)
+end)
+
+test("same zone: a flight that is about as quick as the walk but keeps you off your feet is taken - flying is time away, walking is not (the player)", function()
+  shortcutWorld(function(w)
+    ns.State.knownTaxi = { ["Darkshire, Duskwood"] = true, ["Sentinel Hill, Westfall"] = true }
+    local from, to = { m = 1431, x = 0.7749, y = 0.4429 }, { m = 1431, x = 0.0778, y = 0.3407 }
+    local _, walk = ns.Travel.Plan({ m = from.m, x = from.x, y = from.y }, { m = to.m, x = to.x, y = to.y }, { ground = true })
+    local _, secs, afk = ns.Travel.Plan({ m = from.m, x = from.x, y = from.y }, { m = to.m, x = to.x, y = to.y }, { hearth = false })
+    assertTrue(afk > 0, "the trip has a flight in it")
+    local playing = (secs - afk) + afk * ns.Travel.AFK_WEIGHT
+    -- a margin the clock time doesn't make but the time spent playing does: the flight, said as "less on foot"
+    ns.Travel.SHORTCUT_SHARE = 0
+    ns.Travel.SHORTCUT_SAVES = math.max(1, ((walk - secs) + (walk - playing)) / 2)
+    if walk - secs < ns.Travel.SHORTCUT_SAVES then
+      local legs = ns.Travel.Shortcut({ m = from.m, x = from.x, y = from.y }, { m = to.m, x = to.x, y = to.y })
+      assertNotNil(legs, "a flight that saves time spent playing, not clock time, is taken")
+      assertTrue(legs[1].text:find("less on foot", 1, true) ~= nil, legs[1].text)
+    end
+    -- but not one much slower on the clock than the walk
+    ns.Travel.SHORTCUT_SAVES = 1
+    ns.Travel.SHORTCUT_SLOWER = (secs / walk) - 1.05
+    assertNil(ns.Travel.Shortcut({ m = from.m, x = 0.7700, y = 0.4600 }, { m = to.m, x = to.x, y = to.y }))
   end)
 end)
 
@@ -5921,4 +6054,116 @@ test("planned path: never drawn while a live line is on its way or drawn - not a
     must(P2 ~= nil and P2 ~= P and ns.Pins.Line() ~= nil and ns.Pins.Line().P == P2, "the new target's live line is not drawn")
     assertEquals(0, ns.Pins.PathDots())
   end)
+end)
+
+-- a route through two zones with a trip between: Duskwood (two quests), a flight, Redridge
+local function twoZoneRoute()
+  return { id = "tz", title = "tz", meta = { startLevel = 21, endLevel = "30 (62%)", hours = 10 }, sections = { { title = "Darkshire" }, { title = "Lakeshire" } }, steps = {
+    { id = 1, k = "accept", q = 201, name = "Wolves", npc = "Lars", zone = "Duskwood", m = 1431, x = 0.75, y = 0.48, r = 6, sec = 1, lvl = 21 },
+    { id = 2, k = "accept", q = 203, name = "Spiders", npc = "Lars", zone = "Duskwood", m = 1431, x = 0.75, y = 0.48, r = 6, sec = 1, lvl = 21 },
+    { id = 3, k = "obj", q = 201, text = "Kill 5 Wolf", match = "Wolf", zone = "Duskwood", m = 1431, x = 0.40, y = 0.40, r = 60, sec = 1, lvl = 21 },
+    { id = 4, k = "turnin", q = 201, name = "Wolves", npc = "Lars", zone = "Duskwood", m = 1431, x = 0.75, y = 0.48, r = 6, sec = 1, lvl = 22 },
+    { id = 5, k = "fly", dest = "Redridge Mountains", to = 1433, text = "Redridge Mountains", sec = 2 },
+    { id = 6, k = "accept", q = 202, name = "Gnolls", npc = "Marshal", zone = "Redridge Mountains", m = 1433, x = 0.30, y = 0.45, r = 6, sec = 2, lvl = 23 },
+  } }
+end
+
+test("card footer: where you go next and after how much here - not the plan's levels ('planned for level 33 · plan goes to level 43' was meaningless - tester)", function()
+  ForeverRouteTest.withState({}, function()
+    ForeverRouteData = twoZoneRoute()
+    ns.Engine.Refresh()
+    assertEquals("Next zone: " .. ns.Style.ShortZone("Redridge Mountains") .. ", after 2 quests here", ns.Card.FooterText(1))
+    -- a trip says where it goes on the card itself: no footer line
+    assertEquals("", ns.Card.FooterText(5))
+    -- the plan's last zone
+    assertEquals("Last zone on this plan", ns.Card.FooterText(6))
+    -- a dungeon route has its own way back: nothing
+    ForeverRouteData.dungeon = true
+    assertEquals("", ns.Card.FooterText(1))
+    ForeverRouteData.dungeon = nil
+    -- what the card shows: no level talk
+    ForeverRouteData = twoZoneRoute(); ns.Engine.Refresh(); ns.Card.Update()
+    local t = ForeverRouteCard.eta:GetText() or ""
+    must(not t:find("level", 1, true) and not t:find("planned", 1, true), "the footer still talks about plan levels: " .. t)
+  end)
+  ns.Card.Update()
+end)
+
+test("route list header: the level the plan ends at, the time left and the steps done; when and from what it was planned only in its tooltip", function()
+  -- (tester: "Level 33 to 43 (62%) · ~39.3 h · 26 of 893 done · planned 8 h ago from your 23:47 save" - meaningless)
+  local m = { startLevel = 33, endLevel = "43 (62%)", hours = 39.3 }
+  local t = ns.List.MetaText(m, 26, 893)
+  assertEquals("To level 43  ·  about 38 h left  ·  26 of 893 steps done", t)
+  must(not t:find("save", 1, true) and not t:find("planned", 1, true) and not t:find("%%"), "jargon in the header: " .. t)
+  assertEquals("To level 30  ·  about 4.5 h left  ·  5 of 10 steps done", ns.List.MetaText({ endLevel = "30 (10%)", hours = 9 }, 5, 10))
+  assertEquals("To level 30  ·  about 30 min left  ·  9 of 10 steps done", ns.List.MetaText({ endLevel = 30, hours = 5 }, 9, 10))
+  assertEquals("3 of 10 steps done", ns.List.MetaText(nil, 3, 10))
+  -- the tooltip: when the companion planned it, and from which save
+  local sv = { plan = ForeverRoutePlan, key = ns.planKey }
+  local ok, err = pcall(function()
+    ns.planKey = nil
+    ForeverRoutePlan = { generated = time() - 3 * 3600, fromSave = time() - 4 * 3600 }
+    local tip = ns.List.MetaTip()
+    assertEquals("Planned 3 h ago", tip[1])
+    must(tip[2] and tip[2]:find("saved", 1, true), "the tooltip doesn't say which save it was planned from")
+    -- a built-in plan: which build of it (what a bug report needs)
+    ns.planKey = { starter = "X" }
+    local stamps = ForeverRouteStarterStamp
+    ForeverRouteStarterStamp = { X = "plans 2026-11-11 · QuestieDB 1.0.14 · planner abc1234" }
+    tip = ns.List.MetaTip()
+    ForeverRouteStarterStamp = stamps
+    assertEquals("Built-in plan", tip[1]); assertEquals("plans 2026-11-11 · QuestieDB 1.0.14 · planner abc1234", tip[2])
+  end)
+  ForeverRoutePlan, ns.planKey = sv.plan, sv.key
+  if not ok then error(err, 0) end
+end)
+
+test("Map opens the step's destination, not where you stand: a trip opens the zone it goes to and flashes its first stop; the flash waits until the pin is on the screen", function()
+  ForeverRouteTest.withState({}, function()
+    ForeverRouteData = twoZoneRoute()
+    ns.Engine.Refresh()
+    -- a step with a spot: its map and its own pin
+    local m, pin = ns.MapSpot(3)
+    assertEquals(1431, m); assertEquals(3, pin)
+    -- a trip: the zone it goes to (it was the flight master in the zone you are in), the first stop there flashes
+    m, pin = ns.MapSpot(5)
+    assertEquals(1433, m); assertEquals(6, pin)
+    -- a stop whose place nobody knows: its zone, nothing to flash
+    ForeverRouteData.steps[3].unknown = true
+    m, pin = ns.MapSpot(3)
+    assertEquals(1431, m); assertNil(pin)
+    -- no map at all
+    ForeverRouteData.steps[2] = { id = 2, k = "note", text = "read this", sec = 1 }
+    assertNil((ns.MapSpot(2)))
+  end)
+  -- the flash: a pin the map hasn't shown yet doesn't use it up; it plays once the pin shows
+  local used = ns.Pins._used
+  local played = 0
+  local shown = false
+  local fake = { where = "world", index = 4242, IsVisible = function() return shown end,
+    blink = { Stop = function() end, Play = function() played = played + 1 end } }
+  local sv = C_Timer.After
+  local timers = {}
+  C_Timer.After = function(_, f) timers[#timers + 1] = f end
+  local ok, err = pcall(function()
+    used[#used + 1] = fake
+    must(not ns.Pins.Blink(4242), "it blinked a pin not on the screen")
+    assertEquals(0, played)
+    must(#timers == 1, "no second look for a pin not on the screen yet")
+    shown = true
+    table.remove(timers, 1)()
+    assertEquals(1, played)
+    assertEquals(0, #timers)
+    -- never shown: it gives up (no flash long after)
+    shown, played, timers = false, 0, {}
+    C_Timer.After = function(_, f) timers[#timers + 1] = f end
+    ns.Pins.Blink(4242)
+    local n = 0
+    while #timers > 0 and n < 100 do n = n + 1; table.remove(timers, 1)() end
+    must(n < ns.Pins.BLINK_TRIES + 1, "the flash kept looking for its pin: " .. n .. " times")
+    assertEquals(0, played)
+  end)
+  C_Timer.After = sv
+  for k = #used, 1, -1 do if used[k] == fake then table.remove(used, k) end end
+  if not ok then error(err, 0) end
 end)

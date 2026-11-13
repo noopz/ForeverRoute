@@ -124,8 +124,14 @@ function Paths.Draw()
   -- zone request row
   local plan = ForeverRoutePlan or {}
   local zones = {}
-  for _, z in ipairs(plan.zones or {}) do zones[#zones + 1] = { name = z.name, xph = z.xph } end
-  for _, z in ipairs(plan.later or {}) do zones[#zones + 1] = { name = z, later = true } end
+  local listed = {}
+  for _, z in ipairs(plan.zones or {}) do zones[#zones + 1] = { name = z.name, xph = z.xph }; listed[z.name] = true end
+  -- a built-in plan's zone routes for your level (its tree has one per zone and level band): every one of them is a
+  -- zone you can switch to now, no planner needed
+  for _, r in ipairs(ns.ZoneRoutesAt and ns.ZoneRoutesAt() or {}) do
+    if not listed[r.zoneName] then zones[#zones + 1] = { name = r.zoneName, xph = r.xph }; listed[r.zoneName] = true end
+  end
+  for _, z in ipairs(plan.later or {}) do if not listed[z] then zones[#zones + 1] = { name = z, later = true } end end
   f.reqLabel:ClearAllPoints(); f.reqLabel:SetPoint("TOPLEFT", PAD, -y - 4); y = y + 22
   local x, rowY = PAD, y
   for k, b in ipairs(f.reqZones) do if k > #zones then b:Hide() end end
@@ -145,9 +151,14 @@ function Paths.Draw()
     local ready = false; for _, r in ipairs(list) do if r.requested == req then ready = true end end
     local known = false; for _, z in ipairs(plan.zones or {}) do if z.name == req then known = true end end
     local zr = ns.ZoneRouteFor and ns.ZoneRouteFor(req)
+    if zr then known = true end
+    -- the built-in plan (no companion to plan it): a zone route is the way there; "Back to my path" returns to the plan
+    local companion = ns.HasCompanion and ns.HasCompanion()
     help = ready and ("|cff5cdc7aA path starting in " .. req .. " is ready - it's in the list above.|r")
-      or (zr and ("|cff5cdc7aOn your way to " .. req .. ".|r Your next plan builds the rest of your path from there."))
-      or ("|cffffd25aAsked for " .. req .. ".|r /reload to send it to the planner (about 5 min), then /reload again.")
+      or (zr and (companion and ("|cff5cdc7aOn your way to " .. req .. ".|r Your next plan builds the rest of your path from there.")
+        or ("|cff5cdc7aOn your way to " .. req .. ".|r When you're done there, \"Back to my path\" picks the plan up again - it skips what you did.")))
+      or (companion and ("|cffffd25aAsked for " .. req .. ".|r /reload to send it to the planner (about 5 min), then /reload again.")
+        or ("|cffffd25aNo ready route into " .. req .. " at your level.|r The card still takes you through whatever you pick up there."))
     if not known then help = help .. "  |cffff8c4dFew quests there at your level yet, so it may be slow until you level a bit.|r" end
   else
     help = "Zone too crowded, or fancy a change? Click a zone to go there now: the route takes you there with the pick-ups on the way, and your path is rebuilt from it. Numbers are XP per hour at your level."

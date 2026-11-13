@@ -2,7 +2,8 @@
 # Every built-in plan: each Alliance race and class Forever allows (Mac agent, Wowhead/Zockify/Method, 2026-11-09) is
 # planned from level 1 to 60 (tools/starter.js), audited (lint-route.js), and played by the simulated player
 # (tools/simplay.js, personas below). One line per plan in reports/starters.md; the full output per plan in
-# reports/starters/<race>-<class>.txt. Skyborne starts on Zephras Isle.
+# reports/starters/<race>-<class>.txt, and each plan's chain-loss report (tools/chain-report.js, written by
+# tools/starter.js) in paths-starter/<race>-<class>/chain-report.txt. Skyborne starts on Zephras Isle.
 # usage: tools/starters-all.sh [combo ...]   (default: all)   FR_PERSONAS=clean,skip,nodungeon FR_SIM_PAR=n FR_SIM_CACHE=0
 #        FR_SIM_CKPT=0: each simulated player plays from level 1 (by default it resumes at the last leg of the plan that
 #        is unchanged since its last run: tools/simckpt.js)
@@ -24,13 +25,15 @@ fi
 export FR_SIM_CACHE=${FR_SIM_CACHE:-1}
 mkdir -p reports/starters
 SUM=reports/starters.md
-[ -f "$SUM" ] || printf '# Built-in plans\n\n| plan | to level | hours | steps | audit | simulated player |\n|---|---|---|---|---|---|\n' > "$SUM"
+[ -f "$SUM" ] || printf '# Built-in plans\n\n| plan | to level | hours | steps | audit | backtracks | chain XP lost | simulated player |\n|---|---|---|---|---|---|---|---|\n' > "$SUM"
 for c in $COMBOS; do
   race=${c%-*}; cls=${c#*-}; out=reports/starters/$c.txt
   rm -rf "paths-starter/$c"
-  node tools/starter.js "$race" "$cls" 60 "${FR_PATHS:-1}" > "$out" 2>&1 || { echo "| $c | planner failed | | | | |" >> "$SUM"; continue; }
+  node tools/starter.js "$race" "$cls" 60 "${FR_PATHS:-1}" > "$out" 2>&1 || { echo "| $c | planner failed | | | | | | |" >> "$SUM"; continue; }
   line=$(grep -e "h, [0-9]* steps" "$out" | head -1)
   lvl=$(echo "$line" | sed -E 's/.*: 1 -> ([0-9]+).*/\1/'); hrs=$(echo "$line" | sed -E 's/.*~([0-9.]+) h.*/\1/'); stp=$(echo "$line" | sed -E 's/.*h, ([0-9]+) steps.*/\1/')
+  # chain XP lost / parts: the quest XP of the chain parts the plan reaches and leaves out (tools/chain-report.js)
+  chain=$(grep -m1 '^chain XP lost:' "$out" | sed -E 's/^chain XP lost: ([0-9]+) XP in ([0-9]+) part.*/\1 \/ \2/')
   F=paths-starter/$c/Route.lua; issues=0
   for id in $(grep -oE '^ {4}id = "path:[^"]+"' "$F" | sed -E 's/.*"(.*)"/\1/'); do
     a=$(node tools/lint-route.js "$F" qdb/db.json "$id" "$cls,$race"); echo "$a" >> "$out"
@@ -41,6 +44,6 @@ for c in $COMBOS; do
   FR_STALL=90 node tools/simplay.js "starter:$c" "$PERSONAS" >> "$out" 2>&1
   sim=$(grep -E "persona\(s\) played" "$out" | tail -1 | sed -E 's/^[^,]*, [0-9]+ s\. //')
   finds=$(sed -n '/What the player/,$p' "$out" | grep -E "^  (tick|back|loop|stuck|trip) x" | sed -E 's/ x([0-9]+):.*/ \1/' | sort | uniq -c | awk '{print $2"="$3}' | tr '\n' ' ')
-  echo "| $c | $lvl | $hrs | $stp | $issues | $back | $sim ${finds} |" >> "$SUM"
+  echo "| $c | $lvl | $hrs | $stp | $issues | $back | $chain | $sim ${finds} |" >> "$SUM"
 done
 echo "done" >> reports/starters/ALLDONE

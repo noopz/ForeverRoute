@@ -82,6 +82,18 @@ local function build()
   f.hide:SetPoint("RIGHT", f.change, "LEFT", -4, 0)
   f.pathChips = CreateFrame("Frame", nil, f.paths); f.pathChips:SetPoint("TOPLEFT", 10, -26); f.pathChips:SetSize(380, 18)
   f.pathMeta = Style.Text(f.paths, 10, C.sub); f.pathMeta:SetWordWrap(false)
+  -- the plan's details (when and from what it was planned) on hovering that line, not in it
+  f.metaHit = CreateFrame("Frame", nil, f.paths); f.metaHit:EnableMouse(true)
+  f.metaHit:RegisterForDrag("LeftButton") -- (the window still drags from here)
+  f.metaHit:SetScript("OnDragStart", function() f:StartMoving() end); f.metaHit:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
+  f.metaHit:SetScript("OnEnter", function(self)
+    local lines = List.MetaTip()
+    if #lines == 0 then return end
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM"); GameTooltip:SetText(lines[1], 1, 1, 1, 1, true)
+    for k = 2, #lines do GameTooltip:AddLine(lines[k], 0.75, 0.8, 0.88, true) end
+    GameTooltip:Show()
+  end)
+  f.metaHit:SetScript("OnLeave", GameTooltip_Hide)
   for k = 1, VISIBLE do
     local r = CreateFrame("Button", nil, f); r:SetHeight(ROW)
     r:SetPoint("RIGHT", -14, 0)
@@ -151,23 +163,12 @@ function List.Draw()
     local hc = Style.Chips(f.pathChips, legs, 396, 5)
     f.pathChips:SetHeight(hc)
     f.pathMeta:ClearAllPoints(); f.pathMeta:SetPoint("TOPLEFT", f.pathChips, "BOTTOMLEFT", 0, -6); f.pathMeta:SetPoint("RIGHT", f.paths, "RIGHT", -10, 0)
-    -- how fresh the plan is (the companion app replans after every save)
-    local fresh = ""
-    local plan = ForeverRoutePlan
-    if plan and plan.generated and time then
-      local ago = math.max(0, time() - plan.generated)
-      local agoText = ago < 120 and "just now" or ago < 7200 and (math.floor(ago / 60) .. " min ago") or (math.floor(ago / 3600) .. " h ago")
-      fresh = "  ·  planned " .. agoText .. (plan.fromSave and plan.fromSave > 0 and date and (" from your " .. date("%H:%M", plan.fromSave) .. " save") or "")
-    end
-    -- a built-in plan: which build of it (CLAUDE.md, Versioning) - "plans 2026-11-11 · QuestieDB 1.0.14 · planner b2aef9e"
-    local sk = ns.planKey and ns.planKey.starter
-    local stamp = sk and type(ForeverRouteStarterStamp) == "table" and ForeverRouteStarterStamp[sk]
-    if sk then fresh = "  ·  built-in plan" .. (stamp and (" (" .. stamp .. ")") or "") end
-    f.pathMeta:SetText(string.format("Level %s to %s%s  ·  %d of %d done%s", m.startLevel or "?", m.endLevel or "?", m.hours and ("  ·  ~" .. m.hours .. " h") or "", done, total, fresh))
+    f.pathMeta:SetText(List.MetaText(m, done, total))
     f.pathMeta:SetWordWrap(true); f.pathMeta:SetWidth(396)
+    f.metaHit:ClearAllPoints(); f.metaHit:SetAllPoints(f.pathMeta); f.metaHit:Show()
     f.paths:SetHeight(26 + hc + 10 + f.pathMeta:GetStringHeight() + 8)
   else
-    f.pathName:SetText("No route loaded"); f.pathFast:Hide(); Style.Chips(f.pathChips, {}, 396); f.pathMeta:SetText(""); f.paths:SetHeight(30)
+    f.pathName:SetText("No route loaded"); f.pathFast:Hide(); Style.Chips(f.pathChips, {}, 396); f.pathMeta:SetText(""); f.metaHit:Hide(); f.paths:SetHeight(30)
   end
   f.change:SetShown(#list > 1 and not (data and data.dungeon))
   f.dung:SetShown(#ns.DungeonRoutes() > 0)
@@ -209,6 +210,47 @@ function List.Draw()
   local h = f.track:GetHeight()
   f.thumb:SetHeight(math.max(16, h * math.min(1, VISIBLE / n)))
   f.thumb:ClearAllPoints(); f.thumb:SetPoint("TOPRIGHT", f.track, "TOPRIGHT", 0, -(h - f.thumb:GetHeight()) * (f.offset / math.max(1, n - VISIBLE)))
+end
+
+-- The header's line: where the plan takes you and what's left of it - "To level 43  ·  about 37 h left  ·  26 of 893
+-- steps done". It was "Level 33 to 43 (62%) · ~39.3 h · 26 of 893 done · planned 8 h ago from your 23:47 save": the
+-- start level is behind you, the hours were the whole plan's, and the save time is the planner's business -
+-- "meaningless and confusing" (tester). When and from what it was planned is in the tooltip (List.MetaTip).
+-- The time left is the plan's hours scaled by the steps not done yet: a rough guide, so whole hours (minutes under one).
+function List.MetaText(m, done, total)
+  m = m or {}
+  local parts = {}
+  local to = tostring(m.endLevel or ""):match("^%s*(%d+)")
+  if to then parts[#parts + 1] = "To level " .. to end
+  local h = tonumber(m.hours)
+  if h and total and total > 0 then
+    local left = h * math.max(0, total - (done or 0)) / total
+    parts[#parts + 1] = left < 1 and string.format("about %d min left", math.max(1, math.floor(left * 60 + 0.5)))
+      or left < 10 and string.format("about %.1f h left", left) or string.format("about %d h left", math.floor(left + 0.5))
+  end
+  if total and total > 0 then parts[#parts + 1] = string.format("%d of %d steps done", done or 0, total) end
+  return table.concat(parts, "  ·  ")
+end
+-- the tooltip on that line: how fresh the plan is (the companion replans after every save), or which build of a
+-- built-in plan it is (CLAUDE.md, Versioning - "plans 2026-11-11 · QuestieDB 1.0.14 · planner b2aef9e": what a bug
+-- report needs)
+function List.MetaTip()
+  local lines = {}
+  local sk = ns.planKey and ns.planKey.starter
+  if sk then
+    local stamp = type(ForeverRouteStarterStamp) == "table" and ForeverRouteStarterStamp[sk]
+    lines[1] = "Built-in plan"
+    if stamp then lines[2] = stamp end
+    return lines
+  end
+  local plan = ForeverRoutePlan
+  if plan and plan.generated and time then
+    local ago = math.max(0, time() - plan.generated)
+    local agoText = ago < 120 and "just now" or ago < 7200 and (math.floor(ago / 60) .. " min ago") or (math.floor(ago / 3600) .. " h ago")
+    lines[1] = "Planned " .. agoText
+    if plan.fromSave and plan.fromSave > 0 and date then lines[2] = "From your game as it was at " .. date("%H:%M", plan.fromSave) .. ", when it last saved (a reload or logging out saves it)." end
+  end
+  return lines
 end
 
 function List.Entries() return entries end   -- for tests

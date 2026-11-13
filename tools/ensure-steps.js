@@ -18,6 +18,7 @@ function flyLater(steps) {
   }
   return steps.map(({ moved, ...x }) => x);
 }
+const { closers } = require('./exclusive-alternatives');
 function makeEnsure(db, conv) {
   const Q = db.quests, N = db.npcs, O = db.objects;
   const T = Object.fromEntries(conv.map((t) => [t.area_id, t]));
@@ -43,6 +44,53 @@ function makeEnsure(db, conv) {
   const match = (o) => (o.kind === 'item' ? o.name : o.kind === 'kill' ? (N[o.npc] || {}).name : undefined);
   const norm = (s) => (s || '').toLowerCase();
 
+  // two alternatives both picked up on the route, neither yours before it (the later one would not be offered): which
+  // one goes. The first pick-up alone used to win, so a breadcrumb taken in one city could close the alternative whose
+  // own chain the route went on with. Kept, in this order: one whose prerequisites the route meets; the one more of the
+  // route's later pick-ups need (all of preGroup, or one of preSingle that the other doesn't also satisfy); the one worth
+  // more XP; the first. -> the set of quests to drop
+  function alternativeLosers(steps, ctx, inLog) {
+    const done = new Set(ctx.done);
+    const first = new Map(); // quest -> index of its first pick-up on the route
+    steps.forEach((s, i) => { if (s.k === 'accept' && s.q > 0 && Q[s.q] && !inLog.has(s.q) && !done.has(s.q) && !first.has(s.q)) first.set(s.q, i); });
+    const turned = new Set(steps.filter((s) => s.k === 'turnin' && s.q > 0).map((s) => s.q));
+    const met = (p) => done.has(p) || turned.has(p);
+    const viable = (id) => { const q = Q[id], one = q.preSingle || []; return (q.preGroup || []).every(met) && (!one.length || one.some(met)); };
+    const needs = (id, other) => {
+      let n = 0;
+      for (const r of first.keys()) {
+        if (r === id || r === other) continue;
+        const R = Q[r];
+        if ((R.preGroup || []).includes(id) || ((R.preSingle || []).includes(id) && !(R.preSingle || []).includes(other))) n++;
+      }
+      return n;
+    };
+    const better = (a, b) => {
+      const va = viable(a), vb = viable(b);
+      if (va !== vb) return va ? a : b;
+      const na = needs(a, b), nb = needs(b, a);
+      if (na !== nb) return na > nb ? a : b;
+      const xa = Q[a].xp || 0, xb = Q[b].xp || 0;
+      if (xa !== xb) return xa > xb ? a : b;
+      return first.get(a) <= first.get(b) ? a : b;
+    };
+    const loser = new Set();
+    // pairs in route order: an earlier pick-up that closes a later one
+    const order = [...first.keys()].sort((a, b) => first.get(a) - first.get(b));
+    for (let j = 0; j < order.length; j++) {
+      const b = order[j];
+      if (loser.has(b)) continue;
+      const cl = new Set(closers(Q, Q[b]));
+      for (let i = 0; i < j; i++) {
+        const a = order[i];
+        if (loser.has(a) || !cl.has(a)) continue;
+        loser.add(better(a, b) === a ? b : a);
+        if (loser.has(b)) break;
+      }
+    }
+    return loser;
+  }
+
   // ctx (optional): { done: quests completed before the route, active: quests in your log } - for the prerequisite sweep
   return function ensureSteps(steps, ctx) {
     // a flight that's followed by errands somewhere else (Stormwind books before 'Fly to Redridge'): do the errands
@@ -67,11 +115,19 @@ function makeEnsure(db, conv) {
     let prereqDropped = 0;
     if (ctx && ctx.done) {
       const have = new Set(ctx.done), inLog = new Set((ctx.active || []).map(Number)), drop = new Set();
+      // ...and a pick-up whose alternative (the quest's exclusive list: In Search of Menara Voidrender from Briarthorn
+      // or from Demisette Cloyce) is done before the route, in your log, or taken earlier on it: the game no longer
+      // offers it. Legs planned one zone at a time each saw only their own (tester: sent to Briarthorn for it, done)
+      // (through closers, exclusive-alternatives.js: a quest's own prerequisite in that list does not close it)
+      const taken = new Set([...ctx.done, ...inLog]);
+      const loser = alternativeLosers(steps, ctx, inLog);
       for (const s of steps) {
         if (!(s.q > 0)) continue;
         if (s.k === 'accept' && !inLog.has(s.q) && !drop.has(s.q) && Q[s.q]) {
           const q = Q[s.q], g = q.preGroup || [], one = q.preSingle || [];
           if (!(g.every((p) => have.has(p)) && (!one.length || one.some((p) => have.has(p))))) drop.add(s.q);
+          else if (loser.has(s.q) || closers(Q, q).some((e) => taken.has(e))) drop.add(s.q);
+          else taken.add(s.q);
         }
         if (s.k === 'turnin' && !drop.has(s.q)) have.add(s.q);
       }

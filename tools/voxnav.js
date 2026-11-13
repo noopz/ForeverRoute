@@ -240,6 +240,9 @@ class VoxNav {
     let left = 0, isT = null;
     if (targets) { isT = new Uint8Array(F); for (const t of targets) if (t >= 0 && !isT[t]) { isT[t] = 1; left++; } }
     const W = this.W, H = this.H, cell = this.cell, z = this.z, cs = this.cs, ceil = this.ceil, swim = this.swim, tanMax = this.tanMax;
+    // colCost: a cost factor per ground column (Float32Array W*H, or none): ground to walk round, not over - the other
+    // faction's towns for a walking path (waypoints.js avoid)
+    const colCost = this.colCost || null;
     const extra = this.extra === undefined ? this.trailLinks() : this.extra;
     const ok = (f, g, run) => {
       const dz = z[g] - z[f];
@@ -264,7 +267,7 @@ class VoxNav {
         for (let g = cs[ncol]; g < cs[ncol + 1]; g++) {
           if (done[g]) continue;
           const m = ok(f, g, run); if (!m) continue;
-          const nd = df + run * m;
+          const nd = df + run * m * (colCost ? colCost[ncol] : 1);
           if (nd < d[g]) { d[g] = nd; if (prev) prev[g] = f; push(nd, g); }
         }
       }
@@ -280,7 +283,7 @@ class VoxNav {
           if (a1 < 0 || a2 < 0) continue;
           const mA = ok(f, a1, K / 2), mB = ok(a1, g, K / 2), mC = ok(f, a2, K / 2), mD = ok(a2, g, K / 2);
           if (!mA || !mB || !mC || !mD) continue;
-          const nd = df + K * Math.max(mA, mB, mC, mD);
+          const nd = df + K * Math.max(mA, mB, mC, mD) * (colCost ? Math.max(colCost[ncol], colCost[m1], colCost[m2]) : 1);
           if (nd < d[g]) { d[g] = nd; if (prev) prev[g] = f; push(nd, g); }
         }
       }

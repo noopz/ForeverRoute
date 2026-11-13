@@ -29,12 +29,23 @@ local function withWorld(route, fn, opts)
   local at = opts and opts.at or {}
   local w = { m = at.m or 1431, x = at.x or 0.5, y = at.y or 0.5, level = at.level or 21, quests = at.quests or {} }
   local sv = { zone = HBD.GetPlayerZonePosition, wpos = HBD.GetPlayerWorldPosition, conv = HBD.GetWorldCoordinatesFromZone,
-    best = C_Map.GetBestMapForUnit, lvl = UnitLevel, pins = ns.db.pins, arrow = ns.db.arrow }
+    best = C_Map.GetBestMapForUnit, lvl = UnitLevel, xpmax = UnitXPMax, pins = ns.db.pins, arrow = ns.db.arrow }
   HBD.GetWorldCoordinatesFromZone = function(_, x, y, m) local b = B[m]; if not b then return nil end return b[1] + x * (b[2] - b[1]), b[3] + y * (b[4] - b[3]), b[5] end
   HBD.GetPlayerZonePosition = function() return w.x, w.y, w.m end
   HBD.GetPlayerWorldPosition = function() return HBD:GetWorldCoordinatesFromZone(w.x, w.y, w.m) end
   C_Map.GetBestMapForUnit = function() return w.m end
   UnitLevel = function() return w.level end
+  -- the XP a level takes, as the game has it below 60 (the simulator's own character is 70: its bar is not the
+  -- world's level, and the live solve prices quests by it - Next.Prize). For every world, not one test: a quest's XP
+  -- at your rate is what an offered quest is worth, and with the 70's bar (many times a 21-30 one) every quest was
+  -- worth a fraction of what it is to the level the test plays. The side quest tests (A Noble Brew at Zardeth, its
+  -- objectives, Brewer's Trade) fail on that bar: their pick-ups priced below their work. No test's threshold was
+  -- moved for it. (At 60 and up the game shows no bar to fill: the 59's, so XP still prices as XP.)
+  UnitXPMax = function()
+    local L = math.max(1, math.min(59, w.level))
+    local diff = L <= 28 and 0 or L == 29 and 1 or L == 30 and 3 or L == 31 and 6 or 5 * (L - 30)
+    return math.floor(((8 * L) + diff) * (45 + 5 * L) / 100 + 0.5) * 100
+  end
   ns.db.pins, ns.db.arrow = true, true
   local checks = { arrow = 0, pins = 0 }
   local function agree(what)
@@ -110,7 +121,7 @@ local function withWorld(route, fn, opts)
     end
   end)
   HBD.GetPlayerZonePosition, HBD.GetPlayerWorldPosition, HBD.GetWorldCoordinatesFromZone = sv.zone, sv.wpos, sv.conv
-  C_Map.GetBestMapForUnit, UnitLevel, ns.db.pins, ns.db.arrow = sv.best, sv.lvl, sv.pins, sv.arrow
+  C_Map.GetBestMapForUnit, UnitLevel, UnitXPMax, ns.db.pins, ns.db.arrow = sv.best, sv.lvl, sv.xpmax, sv.pins, sv.arrow
   C_Timer.After, UnitOnTaxi, ns.State.knownTaxi, ns.Arrow.aboard = sv.after, sv.taxi, sv.known, sv.aboard
   if not ok then error(err, 0) end
 end

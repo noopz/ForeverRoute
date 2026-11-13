@@ -39,6 +39,16 @@ planner.on('close', (code) => { if (!wrote) { console.log('the planner stopped w
 function finish() {
 const inner = fs.readFileSync(path.join(work, 'Route.lua'), 'utf8');
 if (!/id = "path:/.test(inner)) { console.log('the planner made no path: Starter.lua not written'); process.exit(1); }
+// the chain-loss report beside the plan (tools/chain-report.js: the chain parts it reaches and leaves out, and why),
+// and its one line in the output for reports/starters.md. Read from the planner's own path-0.json: the plan file
+// leaves out a pick-up that is never handed in, and with it the "picked up, never handed in" class
+try {
+  const CR = require('./chain-report');
+  const rep = CR.reportFor(path.join(work, 'path-0.json'), { race, cls });
+  fs.writeFileSync(path.join(work, 'chain-report.txt'), CR.formatReport(rep, key + (EXP ? '-' + EXP : '')));
+  fs.writeFileSync(path.join(work, 'chain-report.json'), JSON.stringify(rep, null, 1));
+  console.log(CR.summaryLine(rep));
+} catch (e) { console.log('chain report not written: ' + e.message); }
 if (EXP) { console.log(`wrote ${path.relative(ROOT, path.join(work, 'Route.lua'))} (experiment ${EXP}: no addon written)`); return; }
 // one load-on-demand addon per race-class (addon/ForeverRoute_Starter_<race>_<class>): 20 built-in plans are ~30 MB of
 // Lua, so each loads only for a character of its race and class with no plan of its own (Core.lua LoadMyPlan)

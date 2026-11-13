@@ -18,9 +18,9 @@ const [charDir, routeFile0, src0] = process.argv.slice(2);
 if (!charDir) { console.log('usage: node tools/live-check.js <character SavedVariables dir> [Route.lua] [addon dir]'); process.exit(2); }
 const routeFile = routeFile0 || path.join(require('./game-dir').addonDir(), 'Route.lua');
 const src = src0 || path.join(ROOT, 'addon', 'ForeverRoute');
-const SIM = path.join(ROOT, 'sim', 'pkg', require('fs').readFileSync(path.join(__dirname, 'sim-version.txt'), 'utf8').trim()) /* tools/sim-version.txt: the simulator in use */;
+const { SIM, BIN: SIM_BIN, simEnv } = require('./sim-path'); // the simulator for this platform (tools/sim-path.js, sim-version.txt)
 const skip = (why) => { console.log('live check skipped: ' + why); process.exit(0); };
-if (!fs.existsSync(path.join(SIM, 'wow-sim.exe'))) skip('no simulator');
+if (!fs.existsSync(SIM_BIN)) skip('no simulator');
 if (!fs.existsSync(routeFile)) skip('no plan file');
 let c; try { c = readChar(charDir); } catch (e) { skip('no save in ' + charDir); }
 // the character, from its save folder (".../<Name>-<Realm>/SavedVariables"): the planner names its block after it
@@ -83,9 +83,9 @@ try {
   fs.writeFileSync(path.join(dest, 'tests', 'live_test.lua'), text);
   fs.mkdirSync(path.join(work, 'wtf'), { recursive: true });
   // the results go to stderr as well as stdout: keep both
-  const r = spawnSync(path.join(SIM, 'wow-sim.exe'), ['--allow-ui-version-mismatch', '--addons-path', work, '--session-wtf-path', path.join(work, 'wtf'),
+  const r = spawnSync(SIM_BIN, ['--allow-ui-version-mismatch', '--addons-path', work, '--session-wtf-path', path.join(work, 'wtf'),
     '--class', 'Warlock', '--race', 'Gnome', 'run-tests', 'ForeverRoute'],
-  { cwd: SIM, env: { ...process.env, WOW_INSTALL_PATH: require('./game-dir').WOW }, encoding: 'utf8', timeout: 600000, maxBuffer: 1 << 26, stdio: ['ignore', 'pipe', 'pipe'] });
+  { cwd: SIM, env: simEnv(), encoding: 'utf8', timeout: 600000, maxBuffer: 1 << 26, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = String(r.stdout || '') + '\n' + String(r.stderr || '') + (r.error ? '\n' + r.error.message : '');
   out = out.replace(/\x1b\[[0-9;]*m/g, '');
   if (process.env.FR_KEEP) fs.writeFileSync(path.join(work, 'out.txt'), out); // FR_KEEP=1: keep the work folder to look at

@@ -7,7 +7,7 @@ const fs = require('fs');
 // [doneFile]: a JSON list of quests the character had completed when the plan was made - then every pick-up must have
 // its prerequisites done before it (before the route, or handed in earlier on it)
 const [routeFile, dbFile, wantId, who, doneFile] = process.argv.slice(2);
-const { RACE_BIT, CLASS_BIT, LEVEL_ABOVE, DUNGEON_ABOVE } = require('./world'); // the game's rules, shared by every stage
+const { RACE_BIT, CLASS_BIT, levelAbove, DUNGEON_ABOVE } = require('./world'); // the game's rules, shared by every stage
 
 const [whoClass, whoRace] = String(who || '').toLowerCase().replace(/[^a-z,]/g, '').split(',');
 const text = fs.readFileSync(routeFile, 'utf8');
@@ -45,7 +45,7 @@ const who0 = (() => { try { return doneFile && fs.existsSync(doneFile) ? JSON.pa
 const inLogAtStart = new Set(((who0 && !Array.isArray(who0) && who0.log) || []).map(Number));
 steps.forEach((s, i) => {
   const n = i + 1, lvl = s.lvl || lastLvl; if (s.lvl) lastLvl = s.lvl;
-  const q = s.q > 0 ? db.quests[s.q] : null, above = dungeonQ.has(s.q) ? DUNGEON_ABOVE : LEVEL_ABOVE; // the same gate the planner uses (world.js)
+  const q = s.q > 0 ? db.quests[s.q] : null, above = dungeonQ.has(s.q) ? DUNGEON_ABOVE : levelAbove(lvl || 1); // the same gate the planner uses (world.js)
   // a quest's level only matters if it makes you fight or loot: a delivery or talk quest (The Hermit) is safe at any level you can take it
   const fights = q && (q.objectives || []).some((o) => o.kind === 'kill' || (o.npcDrops || []).length || (o.objectDrops || []).length);
   if (s.k === 'accept' && q && fights && lvl && q.level > lvl + above && !inLogAtStart.has(s.q)) issues.push(`#${n} accept ${s.name} (quest ${q.level}) at level ${lvl}`);
@@ -87,6 +87,24 @@ if (doneFile && fs.existsSync(doneFile)) {
     const missing = group.filter((p) => !done.has(p));
     if (single.length && !single.some((p) => done.has(p))) missing.push(single.length === 1 ? single[0] : 'one of ' + single.join('/'));
     if (missing.length) issues.push(`#${i + 1} accept ${s.name}: needs ${missing.map((p) => (typeof p === 'number' && db.quests[p] ? db.quests[p].name + ' (' + p + ')' : p)).join(', ')} done first`);
+  });
+}
+// alternatives (a quest's exclusive list: one quest from givers in several towns, doing one closes the others): never
+// a pick-up of one when another was done before the route, is in your log, or was picked up earlier on it. A warlock
+// who had taken In Search of Menara Voidrender from Demisette Cloyce was sent to Briarthorn for it (tester).
+// Through closers (exclusive-alternatives.js): a quest's own prerequisite in that list does not close it - Returning
+// Home before Stars of Elune, which needs it, flagged the night elf priest plan
+{
+  const { closers } = require('./exclusive-alternatives');
+  const taken = new Map(); // quest -> where it was had ('done' / 'in your log' / '#step')
+  for (const q of Array.isArray(who0) ? who0 : ((who0 && who0.done) || [])) taken.set(+q, 'done');
+  for (const q of inLogAtStart) taken.set(q, 'in your log');
+  steps.forEach((s, i) => {
+    const q = s.k === 'accept' && s.q > 0 ? db.quests[s.q] : null;
+    if (!q || inLogAtStart.has(s.q)) return;
+    const other = closers(db.quests, q).find((e) => taken.has(e));
+    if (other) { const w = taken.get(other), on = db.quests[other] && db.quests[other].name !== q.name ? db.quests[other].name + ' ' : ''; issues.push(`#${i + 1} accept ${s.name}: its alternative ${on}(${other}) is ${w.startsWith('#') ? 'picked up at ' + w : w} - the game no longer offers this one`); }
+    if (!taken.has(s.q)) taken.set(s.q, '#' + (i + 1));
   });
 }
 // the hearthstone has an hour's cooldown: hearth steps carry tm, the planned minutes since the route began

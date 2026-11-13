@@ -1,5 +1,7 @@
 // Apply tools/forever-overrides.json (quest facts Forever changed) to a quest database object, or to qdb/db.json.
-// build-db.js calls apply() on every build; run this file directly to patch an existing db.json in place.
+// build-db.js calls apply() on every build; run this file directly to patch an existing db.json in place - it then
+// marks the same-name alternatives again too (tools/exclusive-alternatives.js), as a build does after the overrides,
+// so the planner's db.json and the addon's QuestData.lua (tools/gen-quest-data.js, from that db.json) agree.
 // usage: node tools/apply-overrides.js [db.json]
 const fs = require('fs');
 const path = require('path');
@@ -50,6 +52,13 @@ if (require.main === module) {
   const f = process.argv[2] || path.join(__dirname, '..', 'qdb', 'db.json');
   const db = JSON.parse(fs.readFileSync(f, 'utf8'));
   const done = apply(db);
-  if (done.length) { const tmp = f + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(db)); fs.renameSync(tmp, f); }
+  // the alternatives, from scratch after the overrides (a giver or hand-in fixed there, or notAlternative, counts)
+  const ALT = require('./exclusive-alternatives');
+  const links = () => JSON.stringify(Object.values(db.quests).map((q) => [q.exclusive || [], q.exclusiveMarked || []]));
+  const was = links(), groups = ALT.mark(db);
+  const marksChanged = links() !== was;
+  if (done.length || marksChanged) { const tmp = f + '.tmp'; fs.writeFileSync(tmp, JSON.stringify(db)); fs.renameSync(tmp, f); }
   console.log(done.length ? done.join('\n') : 'already applied');
+  console.log(`exclusive alternatives: ${groups.length} groups${marksChanged ? ' (marks updated)' : ''}`);
+  for (const g of groups) console.log('  ' + ALT.describe(db, g));
 }

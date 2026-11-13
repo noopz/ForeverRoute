@@ -13,10 +13,10 @@ const SPK = opt('secPerKill', 22), travelH = opt('travel', 0);
 const db = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'qdb', 'db.json'), 'utf8'));
 const lua = fs.readFileSync(args[0], 'utf8').split(/\r?\n/);
 // the first route's steps
-const s0 = lua.findIndex((l) => l === '    steps = {');
+const s0 = lua.findIndex((l) => /^\s*steps = \{$/.test(l));
 let level = 1, xp = 0, workS = 0, grindS = 0, quests = 0, killS = 0;
 const add = (n) => { const r = W.addXp(level, xp, n); level = r.level; xp = r.xp; };
-for (let i = s0 + 1; lua[i] !== '    },' && level < 60; i++) {
+for (let i = s0 + 1; !/^\s*\},$/.test(lua[i]) && level < 60; i++) {
   const l = lua[i];
   const k = (l.match(/\bk = "(\w+)"/) || [])[1];
   const q = +((l.match(/\bq = (\d+)/) || [])[1] || 0);
@@ -32,6 +32,6 @@ for (let i = s0 + 1; lua[i] !== '    },' && level < 60; i++) {
   }
 }
 // what's left to 60: grind mobs at your level
-while (level < 60) { const per = W.killXp(level, level) || 1; const need = W.XP_TO_LEVEL[level] - xp; const n = Math.ceil(need / per); grindS += n * SPK; add(n * per); }
+while (level < 60) { const per = W.killXp(level, level) || 1; const need = W.XP_TO_LEVEL[level] - xp; const n = Math.ceil(need / per); grindS += W.grindSeconds(n, SPK); add(n * per); } // grinding as people do it (world.grindSeconds), a level at a time
 const hours = (workS + grindS) / 3600 + travelH;
 console.log(JSON.stringify({ plan: path.basename(path.dirname(args[0])) + '/' + path.basename(args[0]), quests, workH: +(workS / 3600).toFixed(1), grindH: +(grindS / 3600).toFixed(1), travelH, hours: +hours.toFixed(1) }));

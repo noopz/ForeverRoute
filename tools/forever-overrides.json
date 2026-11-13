@@ -154,6 +154,12 @@
       "special": 1,
       "_whySpecial": "A daily (Wowhead Forever tooltip, dataEnv 16: daily 1; the Nightmare Incursion missions) - our data had it as a one-time quest, and a plan went to Duskwood for them"
     },
+    "91734": {
+      "finishers": [
+        "npc:8587"
+      ],
+      "_why": "Remote Contact from Andron Gant (Undercity) has no hand-in in the quest data. Wowhead Forever tooltip (quest=91734, dataEnv 16): \"Speak to Jediga in Azshara.\", word for word the same as Jes'rimon's (91735) and Magatha Grimtotem's (91737), both handed in to Jediga (npc 8587). With its hand-in it is one of the three alternatives (tools/exclusive-alternatives.js)"
+    },
     "92457": {
       "reqLevel": 30,
       "_why": "Seen in game 2026-11-11 (City of Dalaran quest list): Available from Level 30 - the quest data says 24"

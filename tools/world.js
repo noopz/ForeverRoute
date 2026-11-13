@@ -7,6 +7,7 @@
 //   CAPITAL_AREAS       capital cities by zone area id (no mobs to grind, no quests of their own for the zone choice)
 //   CAPITAL_MAPS        the capitals by uiMap id (both factions: a plan only ever enters its own)
 //   QUEST_LOG_MAX       quests the log holds on Forever
+//   grindSeconds(k, s)  how long k kills of pure grinding take a person (rest between pulls, attention fading)
 const XP_TO_LEVEL = [0, 400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600, 8800, 10100, 11400, 12900, 14400, 16000, 17700, 19400, 21300, 23200, 25200, 27300, 29400, 31700, 34000, 36400, 38900, 41400, 44300, 47400, 50800, 54500, 58600, 62800, 67100, 71600, 76100, 80800, 85700, 90700, 95800, 101000, 106300, 111800, 117500, 123200, 129100, 135100, 141200, 147500, 153900, 160400, 167100, 173900, 180800, 187900, 195000, 202300, 209800];
 
 // the Classic formula, corrected by what your kills really gave (tools/learn.js -> setLearned): a factor per level
@@ -23,6 +24,17 @@ function killXp(mob, L) {
   const x = classicKillXp(mob, L);
   const f = XP_FACTOR && XP_FACTOR[mob - L];
   return f ? Math.round(x * f) : x;
+}
+
+// Pure grinding as people play it, not kill after kill: 2-3 pulls, then a minute or two to eat, drink and get health
+// back; and after about 15 minutes with no quest progress, attention wanders (tabbing out, chatting, wandering off),
+// so the rest goes half again slower. secPerKill is the fight itself (a quest's kills: tools/learn.js measures it).
+// opts (cfg.grind): pullsPerRest 2.5, restSec 90, focusMin 15, distracted 1.5.
+function grindSeconds(kills, secPerKill, opts) {
+  const o = opts || {};
+  const per = secPerKill + (o.restSec ?? 90) / (o.pullsPerRest ?? 2.5);
+  const t = kills * per, focus = 60 * (o.focusMin ?? 15);
+  return t <= focus ? t : focus + (t - focus) * (o.distracted ?? 1.5);
 }
 
 // a quest's XP at your level L: full up to 5 levels above the quest, then 20% less per level, never under 10%
@@ -42,12 +54,38 @@ const RACE_BIT = { human: 1, orc: 2, dwarf: 4, nightelf: 8, undead: 16, tauren: 
 function raceOk(mask, race) { const b = RACE_BIT[race]; if (!mask || !b) return true; return (BigInt(Math.round(mask)) & BigInt(b)) !== 0n; }
 const CLASS_BIT = { warrior: 1, paladin: 2, hunter: 4, rogue: 8, priest: 16, shaman: 64, mage: 128, warlock: 256, druid: 1024 };
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+// A faction trunk (the plan every race and class of a faction rides, docs/research/shared-trunk.md) plans as race
+// "alliance" / "horde" and class "none": it takes only what every one of the faction's races may take, and no class
+// quest - those are the branches. Skyborne start elsewhere and join later, so they don't narrow the trunk.
+const FACTION_RACES = { alliance: ['human', 'dwarf', 'gnome', 'nightelf'], horde: ['orc', 'troll', 'tauren', 'undead'] };
+const ALL_CLASSES = Object.values(CLASS_BIT).reduce((a, b) => a | b, 0);
+function raceFits(mask, race) {
+  const r = norm(race);
+  if (FACTION_RACES[r]) return !mask || FACTION_RACES[r].every((x) => raceOk(mask, x));
+  return raceOk(mask, r);
+}
+function classFits(mask, klass) {
+  const k = norm(klass);
+  if (!mask) return true;
+  if (k === 'none') return (mask & ALL_CLASSES) === ALL_CLASSES;
+  const cb = CLASS_BIT[k];
+  return !cb || !!(mask & cb);
+}
 function canTake(q, race, klass) {
   if (!q) return false;
-  const rb = RACE_BIT[norm(race)], cb = CLASS_BIT[norm(klass)];
-  if (q.races && rb && !raceOk(q.races, norm(race))) return false;
-  if (q.classes && cb && !(q.classes & cb)) return false;
-  return true;
+  return raceFits(q.races, race) && classFits(q.classes, klass);
+}
+
+// zone names as the planner's steps spell them: the map conversion's names, but for the ones the first planner named
+// itself and the steps still use (Stormwind, where the conversion says 'Stormwind City'). One list for the planner
+// (route2.js) and the tools that read its steps back (chain-report.js): a step's zone name only matches a quest's area
+// when both sides spell it the same
+const PLANNER_ZONE_NAMES = { 1: 'Dun Morogh', 12: 'Elwynn Forest', 38: 'Loch Modan', 40: 'Westfall', 44: 'Redridge Mountains', 10: 'Duskwood', 11: 'Wetlands', 148: 'Darkshore', 1519: 'Stormwind', 1537: 'Ironforge' };
+// area id -> zone name for the steps, from the conversion's transforms (qdb/conversion.json geometry.transforms)
+function plannerZoneNames(transforms) {
+  const out = { ...PLANNER_ZONE_NAMES };
+  for (const t of transforms || []) if (!out[t.area_id] && t.target_name) out[t.area_id] = t.target_name;
+  return out;
 }
 
 const CAPITAL_AREAS = new Set([1519, 1537, 1657, 1497, 1637, 1638]); // Stormwind, Ironforge, Darnassus, Undercity, Orgrimmar, Thunder Bluff
@@ -56,6 +94,13 @@ const QUEST_LOG_MAX = 40;
 // how far above your level the route sends you (the player's choice, 2026-11-08: "up to +2"): quests whose level is at
 // most this much above yours, and mobs at most this much above you. Dungeon quests are done in a group: a little more.
 const LEVEL_ABOVE = +(process.env.FR_LEVEL_ABOVE || 2); // FR_LEVEL_ABOVE: trial runs only (what would +3 do?) - the player chose 2
+// how far above you a quest or its mobs may be, by your level: on Forever yellow is up to 2 above, orange 3-4. Below 20
+// it's yellow only. From 20, with talents and a kit, a class handles the first orange level (the player's rule, checked
+// against Forever's colors). FR_LEVEL_ABOVE pins one value for trial runs. The extra fight time for mobs above you is
+// in route2 (objective work).
+const levelAbove = (L) => (process.env.FR_LEVEL_ABOVE ? LEVEL_ABOVE : L >= 20 ? 3 : 2);
+// the lowest level at which something of level q is within the gate
+const minLevelFor = (q) => { for (let L = 1; L <= 60; L++) if (q <= L + levelAbove(L)) return L; return 60; };
 const DUNGEON_ABOVE = 4;
 
 // training trips are batched (the player's choice, 2026-11-08): go when two ranks are waiting, or right away if the
@@ -98,4 +143,4 @@ function leadsOn(q, quests) {
   if (FOLLOW_SRC !== quests) { FOLLOW_SRC = quests; FOLLOW = new Set(); for (const o of Object.values(quests)) for (const p of [...(o.preSingle || []), ...(o.preGroup || [])]) FOLLOW.add(+p); }
   return FOLLOW.has(+q.id) || !!(q.nextInChain && quests[q.nextInChain]);
 }
-module.exports = { unknownWork, unknownWorkLabel, leadsOn, RACE_HOME, START_ZONES, droppers, raceOk, XP_TO_LEVEL, killXp, classicKillXp, setLearned, questXp, addXp, RACE_BIT, CLASS_BIT, canTake, CAPITAL_AREAS, CAPITAL_MAPS, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, TRAIN_BATCH, trainNow };
+module.exports = { levelAbove, minLevelFor, FACTION_RACES, raceFits, classFits, grindSeconds, unknownWork, unknownWorkLabel, leadsOn, RACE_HOME, START_ZONES, droppers, raceOk, XP_TO_LEVEL, killXp, classicKillXp, setLearned, questXp, addXp, RACE_BIT, CLASS_BIT, canTake, CAPITAL_AREAS, CAPITAL_MAPS, PLANNER_ZONE_NAMES, plannerZoneNames, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, TRAIN_BATCH, trainNow };

@@ -551,6 +551,17 @@ function Engine.Breadcrumbed(s)
   for _, t in ipairs(to) do if State.OnQuest(t) or State.IsCompleted(t) then return true end end
   return false
 end
+-- a quest one of whose alternatives is yours (in your log or done): one quest given in several towns, and you took it
+-- in another - the game no longer offers this one, so none of its steps is left to do (ns.QUEST_EX, QuestData.lua).
+-- A warlock who had taken In Search of Menara Voidrender from Demisette Cloyce in Stormwind was sent to Briarthorn
+-- in Ironforge for it (tester)
+function Engine.Excluded(s)
+  State = State or ns.State
+  local ex = s and s.q and ns.QUEST_EX and ns.QUEST_EX[s.q]
+  if not ex or State.OnQuest(s.q) or State.IsCompleted(s.q) then return false end
+  for _, t in ipairs(ex) do if State.OnQuest(t) or State.IsCompleted(t) then return true end end
+  return false
+end
 local function statusRaw(i)
   State = State or ns.State
   local s = steps()[i]
@@ -564,7 +575,7 @@ local function statusRaw(i)
   -- far below you and not in your log: off the route (all its steps), the same cut the planner makes - so a plan made
   -- for someone lower (the built-in plan from level 1, or yours after a dungeon run) passes over what you've outgrown,
   -- and a trip to a zone with nothing left for you is passed too (the "went ahead" rule below)
-  if Engine.Outlevelled(s) or Engine.GrayHandIn(s) or Engine.Breadcrumbed(s) or Engine.BehindYou(s) then return "done" end
+  if Engine.Outlevelled(s) or Engine.GrayHandIn(s) or Engine.Breadcrumbed(s) or Engine.Excluded(s) or Engine.BehindYou(s) then return "done" end
   local k = s.k
   if k == "hearth" then
     local can, why = Engine.HearthUsable(i)
@@ -1437,6 +1448,8 @@ function Engine.Available(j)
   if s.k == "turnin" then return State.OnQuest(s.q) and true or false end
   if s.k ~= "accept" then return true end
   for _, p in ipairs(Engine.PrereqsOf(s.q)) do if not State.IsCompleted(p) then return false end end
+  -- (nor once you took one of its alternatives elsewhere: Engine.Excluded)
+  if Engine.Excluded(s) then return false end
   -- and the quest data's own prerequisites, whatever the plan carries (QuestData.lua ns.QUEST_PRE): all of g, one of s.
   -- A plan without Gleaning Our Future sent a player to Prospector Whelgar for For Further Study, which needs it - tester
   local pre = ns.QUEST_PRE and ns.QUEST_PRE[s.q]

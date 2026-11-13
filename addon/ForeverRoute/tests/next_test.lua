@@ -393,3 +393,161 @@ test("next: you just arrived where the plan comes back to later (hearthed to Sto
     if not ok then error(err, 0) end
   end)
 end)
+
+-- One price for "now or later" (Next.Prize, Next.DeferCost): coming back later is priced by the plan's real way, not
+-- by a straight line between its steps. The plan's worlds below: towns it was at before (Thorium Point, Darkshire:
+-- hubs, four steps each), then Southshore, a flight to Duskwood, and Raven Hill - 1,500 yd west of where the flight
+-- lands. Thorium Point lies under the straight line from Southshore to Duskwood (the Engine.InsertStop case, de03647),
+-- but the flight passes nothing: a hand-in there is never on the way, so it is worth its XP. One beside the Darkshire
+-- flight master is on the way - the walk from where you land to Raven Hill starts there - though no stop of the plan
+-- is anywhere near it: only the trip's own walk (Travel.Plan's landing, P) puts it on the way.
+local function deferWorld(steps, fn, at)
+  local sv = { info = C_Map.GetMapInfo, routes = ns.DungeonRoutes, flight = ns.FLIGHT }
+  local names = { [1424] = "Hillsbrad Foothills", [1427] = "Searing Gorge", [1428] = "Burning Steppes", [1431] = "Duskwood", [1433] = "Redridge Mountains" }
+  C_Map.GetMapInfo = function(m) local i = (sv.info and sv.info(m)) or {}; if names[m] then return { mapID = m, name = names[m], mapType = i.mapType, parentMapID = i.parentMapID } end return i end
+  ns.DungeonRoutes = function() return {} end
+  local A = ns.FLIGHT_BY.Alliance
+  ns.FLIGHT = { [1424] = A[1424], [1427] = A[1427], [1428] = A[1428], [1431] = A[1431], [1433] = A[1433] }
+  for i, s in ipairs(steps) do s.id = i; s.sec = 1 end
+  local route = { id = "defer", title = "defer", sections = { { title = "Defer" } }, steps = steps }
+  local ok, err = pcall(ForeverRouteTest.withWorld, route, function(w)
+    w:knows({ "Southshore, Hillsbrad", "Darkshire, Duskwood", "Thorium Point, Searing Gorge" })
+    fn(w, ForeverRouteData.steps)
+  end, { anyTarget = true, at = at or { m = 1424, x = 0.5052, y = 0.5183, level = 30 } })
+  C_Map.GetMapInfo, ns.DungeonRoutes, ns.FLIGHT = sv.info, sv.routes, sv.flight
+  ns.Next._askLeft(nil)
+  if not ok then error(err, 0) end
+end
+-- four steps at one place: a hub (Next.HUB_STEPS), where a finished quest's hand-in is offered whenever you pass
+local function hub(out, q, m, x, y)
+  for k = 0, 1 do
+    out[#out + 1] = { k = "accept", q = q + k, name = "Hub " .. (q + k), npc = "Hub", m = m, x = x, y = y, r = 6, level = 30 }
+    out[#out + 1] = { k = "turnin", q = q + k, name = "Hub " .. (q + k), npc = "Hub", m = m, x = x, y = y, r = 6, level = 30 }
+  end
+end
+
+test("next: leaving a stop for later is priced by the plan's real trip - a flight passes nothing under it, and the walk from where it lands passes the Darkshire flight master (Thorium Point, Darkshire)", function()
+  local tp = ns.FLIGHT_BY.Alliance[1427][1]
+  local steps = {}
+  hub(steps, 905301, 1427, tp[1], tp[2])
+  hub(steps, 905311, 1431, 0.7760, 0.4440)
+  steps[#steps + 1] = { k = "fly", to = 1424, dest = "Hillsbrad Foothills", text = "Hillsbrad Foothills" }
+  steps[#steps + 1] = { k = "accept", q = 98219, name = "The Shamed Lieutenant", npc = "Lieutenant Farren Orinelle", m = 1424, x = 0.5146, y = 0.5839, r = 6, level = 30 }
+  local from = #steps
+  steps[#steps + 1] = { k = "fly", to = 1431, dest = "Duskwood", text = "Duskwood" }
+  steps[#steps + 1] = { k = "obj", q = 905399, text = "Raven Hill", match = "Raven Hill", m = 1431, x = 0.20, y = 0.55, r = 60, work = 60 }
+  deferWorld(steps, function(w, list)
+    local under = { k = "turnin", q = 905301, name = "Under the Line", level = 30, m = 1427, x = tp[1], y = tp[2], r = 6 }
+    local landing = { k = "turnin", q = 905311, name = "Where You Land", level = 30, m = 1431, x = 0.7760, y = 0.4440, r = 6 }
+    assertTrue(ns.Next._isHub(list, under) and ns.Next._isHub(list, landing), "the test's premise: both hand-ins are at hubs")
+    local P = ns.Next._wpos
+    -- (the straight line from Southshore to Raven Hill passes near Thorium Point: a straight-line price was a small detour)
+    local a, b, s = P(list[from]), P(list[#list]), P(under)
+    local straight = math.sqrt((a[1] - s[1]) ^ 2 + (a[2] - s[2]) ^ 2) + math.sqrt((s[1] - b[1]) ^ 2 + (s[2] - b[2]) ^ 2) - math.sqrt((a[1] - b[1]) ^ 2 + (a[2] - b[2]) ^ 2)
+    assertTrue(straight < 1500, "the test's premise: Thorium Point is near the straight line (" .. math.floor(straight) .. " yd out of the way)")
+    -- (and no stop of the plan from Southshore on is near the Darkshire flight master: only the trip's walk is)
+    local l = P(landing)
+    for j = from, #list do local t = P(list[j]); if t then assertTrue(t[3] ~= l[3] or math.sqrt((t[1] - l[1]) ^ 2 + (t[2] - l[2]) ^ 2) > 1200, "the test's premise: step " .. j .. " is near the landing") end end
+    -- the trip is asked: count it, and see where it lands
+    local calls, plan = 0, ns.Travel.Plan
+    ns.Travel.Plan = function(...) calls = calls + 1; return plan(...) end
+    local d = ns.Next.DeferCost(list, landing, from)
+    ns.Travel.Plan = plan
+    assertTrue(calls > 0, "the plan's trip was never asked (Travel.Plan)")
+    assertTrue(d < ns.Next.SERVICE.turnin + ns.Next.CARRY + 30, "beside the flight master the plan lands at: on the way (" .. tostring(d) .. " s)")
+    assertEquals(d, ns.Next.Prize(list, landing, from), "a stop the plan comes by is worth leaving for then: the trip back, not its XP")
+    assertEquals(math.huge, ns.Next.DeferCost(list, under, from), "the flight passes Thorium Point: the plan never comes by")
+    local pays = ns.Engine.QuestXP(30, 30) / (UnitXPMax("player") / 5400)
+    assertTrue(math.abs(ns.Next.Prize(list, under, from) - pays) < 1, "never on the way: worth its XP")
+    -- (where you stand doesn't move a price: it is the plan's, and a price that moved would flip the card)
+    w:go(1431, 0.70, 0.50)
+    assertEquals(d, ns.Next.DeferCost(list, landing, from))
+    -- a stop that isn't a hand-in at a hub is never offered on a pass: the walk past it is no second chance
+    local field = { k = "obj", q = 905398, text = "Beside the flight master", m = 1431, x = 0.7760, y = 0.4440, r = 30 }
+    assertEquals(math.huge, ns.Next.DeferCost(list, field, from), "an objective in open country: the plan never offers it again")
+  end)
+end)
+
+-- Across the plan's own hearth the way is the hearth: the walk to wherever you cast it (no way back - you hearth from
+-- there), then on from the inn the plan bound you at. The trip planner without the hearthstone would fly from
+-- Southshore, and price a stop 300 yd east of the plan's last Southshore step as the walk there and back to the
+-- flight master.
+test("next: leaving a stop for later across the plan's hearth - the walk before it, one way, and from the inn on", function()
+  local steps = {}
+  steps[#steps + 1] = { k = "bind", name = "Scarlet Raven Inn", npc = "Innkeeper Trelayne", m = 1431, x = 0.7395, y = 0.4446, r = 6 }
+  hub(steps, 905321, 1424, 0.6083, 0.5839)
+  hub(steps, 905331, 1431, 0.40, 0.48)
+  steps[#steps + 1] = { k = "fly", to = 1424, dest = "Hillsbrad Foothills", text = "Hillsbrad Foothills" }
+  steps[#steps + 1] = { k = "accept", q = 98219, name = "The Shamed Lieutenant", npc = "Lieutenant Farren Orinelle", m = 1424, x = 0.5146, y = 0.5839, r = 6, level = 30 }
+  local from = #steps
+  steps[#steps + 1] = { k = "hearth", text = "Darkshire", dest = "Darkshire" }
+  steps[#steps + 1] = { k = "obj", q = 905399, text = "Raven Hill", match = "Raven Hill", m = 1431, x = 0.20, y = 0.55, r = 60, work = 60 }
+  deferWorld(steps, function(w, list)
+    local P = ns.Next._wpos
+    local east = { k = "turnin", q = 905321, name = "East of Southshore", level = 30, m = 1424, x = 0.6083, y = 0.5839, r = 6 }
+    local a, s = P(list[from]), P(east)
+    local walk = math.sqrt((a[1] - s[1]) ^ 2 + (a[2] - s[2]) ^ 2)
+    local function want() return ns.Next.SERVICE.turnin + ns.Next.CARRY + walk * 1.25 / ns.Travel.Speed() end
+    assertTrue(math.abs(ns.Next.DeferCost(list, east, from) - want()) < 1, "the walk there, one way, before the hearth: " .. ns.Next.DeferCost(list, east, from) .. " s, not " .. want())
+    -- after the hearth: the walk from the inn to Raven Hill passes a hub half way
+    local mid = { k = "turnin", q = 905331, name = "On the Way West", level = 30, m = 1431, x = 0.40, y = 0.48, r = 6 }
+    assertTrue(ns.Next.DeferCost(list, mid, from) < ns.Next.SERVICE.turnin + ns.Next.CARRY + 60, "on the walk from the inn: on the way")
+    -- the price follows your speed: mounted at 40 the walk is shorter (and remembered under the speed it was priced at)
+    w:ding(40)
+    assertTrue(math.abs(ns.Next.DeferCost(list, east, from) - want()) < 1, "priced again at the mounted speed")
+  end)
+end)
+
+-- A price still missing a trip (a solve's searches are bounded, Next.ASK_PER_PICK) is taken as "the plan comes by" -
+-- never as "it never does", which would send you off for it on a guess - and is asked again next time.
+test("next: a price still missing its trip is taken as on the way until it is priced, and not remembered", function()
+  local steps = {}
+  hub(steps, 905311, 1431, 0.7760, 0.4440)
+  steps[#steps + 1] = { k = "fly", to = 1424, dest = "Hillsbrad Foothills", text = "Hillsbrad Foothills" }
+  steps[#steps + 1] = { k = "accept", q = 98219, name = "The Shamed Lieutenant", npc = "Lieutenant Farren Orinelle", m = 1424, x = 0.5146, y = 0.5839, r = 6, level = 30 }
+  local from = #steps
+  steps[#steps + 1] = { k = "fly", to = 1431, dest = "Duskwood", text = "Duskwood" }
+  steps[#steps + 1] = { k = "obj", q = 905399, text = "Raven Hill", match = "Raven Hill", m = 1431, x = 0.20, y = 0.55, r = 60, work = 60 }
+  deferWorld(steps, function(w, list)
+    -- (a hand-in at the Darkshire hub: only the walk from where the flight lands passes it, and that trip is not priced yet)
+    local landing = { k = "turnin", q = 905311, name = "Where You Land", level = 30, m = 1431, x = 0.7760, y = 0.4440, r = 6 }
+    ns.Next._askLeft(0)
+    assertEquals(ns.Next.SERVICE.turnin + ns.Next.CARRY, ns.Next.DeferCost(list, landing, from), "no search left: on the way, for now")
+    ns.Next._askLeft(nil)
+    local d = ns.Next.DeferCost(list, landing, from)
+    assertTrue(d >= ns.Next.SERVICE.turnin + ns.Next.CARRY and d < math.huge, "priced once it may ask")
+  end)
+end)
+
+-- What a quest pays (Next.BehindPrize): Engine.QuestXP at your level - a quest far below you still pays its cut (gray
+-- mobs give nothing; gray quests don't) - less the work still to do for it: only the objectives your log doesn't have
+-- finished, and the walk on to the hand-in only after work whose length is known.
+test("next: a quest's price - its XP even when gray, less only the objectives still to do", function()
+  local steps = {
+    { k = "accept", q = 905401, name = "Two Things", npc = "Giver", m = 1431, x = 0.70, y = 0.45, r = 6, level = 30 },
+    { k = "obj", q = 905401, text = "Thing A", match = "Thing A", m = 1431, x = 0.60, y = 0.45, r = 30, work = 100, walk = 200 },
+    { k = "obj", q = 905401, text = "Thing B", match = "Thing B", m = 1431, x = 0.50, y = 0.45, r = 30, work = 50, walk = 300 },
+    { k = "turnin", q = 905401, name = "Two Things", npc = "Giver", m = 1431, x = 0.70, y = 0.45, r = 6, level = 30, walk = 400 },
+    { k = "accept", q = 905402, name = "Old Errand", npc = "Giver", m = 1431, x = 0.70, y = 0.45, r = 6, level = 10 },
+    { k = "accept", q = 905403, name = "No Numbers", npc = "Giver", m = 1431, x = 0.70, y = 0.45, r = 6, level = 30 },
+    { k = "obj", q = 905403, text = "Thing C", match = "Thing C", m = 1431, x = 0.60, y = 0.45, r = 30 },
+    { k = "turnin", q = 905403, name = "No Numbers", npc = "Giver", m = 1431, x = 0.70, y = 0.45, r = 6, level = 30, walk = 400 },
+  }
+  deferWorld(steps, function(w, list)
+    local rate = UnitXPMax("player") / 5400
+    local spd = ns.Travel.Speed()
+    local function prize(j, L) return ns.Next.BehindPrize(list, list[j], L) end
+    -- both objectives to do: their work, their walks and the walk on to the hand-in
+    assertTrue(math.abs(prize(1, 30) - (ns.Engine.QuestXP(30, 30) / rate - 150 - (200 + 300 + 400) * 1.25 / spd)) < 0.5, "both to do: " .. prize(1, 30))
+    -- one done in your log: only the other's
+    w:quest(905401, { on = true, objectives = { { text = "Thing A: 1/1", finished = true, have = 1, need = 1 }, { text = "Thing B: 0/1", finished = false, have = 0, need = 1 } } })
+    assertTrue(math.abs(prize(1, 30) - (ns.Engine.QuestXP(30, 30) / rate - 50 - (300 + 400) * 1.25 / spd)) < 0.5, "one to do: " .. prize(1, 30))
+    -- work not known (a plan made before steps carried it): the flat guess, and no walk on that isn't known either
+    assertTrue(math.abs(prize(6, 30) - (ns.Engine.QuestXP(30, 30) / rate - ns.Next.BEHIND_WORK)) < 0.5, "work not known: " .. prize(6, 30))
+    -- a level 10 quest at 16 is gray, and still pays its cut (80%)
+    w:ding(16)
+    rate = UnitXPMax("player") / 5400
+    assertTrue(ns.Engine.QuestXP(10, 16) > 0)
+    assertTrue(math.abs(prize(5, 16) - (ns.Engine.QuestXP(10, 16) / rate - ns.Next.BEHIND_WORK)) < 0.5, "gray, still paid: " .. prize(5, 16))
+  end, { m = 1431, x = 0.70, y = 0.45, level = 30 })
+end)

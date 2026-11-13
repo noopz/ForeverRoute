@@ -220,11 +220,16 @@ function specialRoutes() {
   // a change - without waiting for a replan. The next replan then builds your whole path from the zone you picked.
   const zoneJobs = ranked.slice(0, base.zoneRoutes ?? 6).map((r) => ({ z: r.z, name: r.name, xph: r.xph, tag: 'zone-' + r.z, pathOut: path.join(work, 'zone-' + r.z + '.json') }));
   await pool(zoneJobs, Math.max(1, Math.floor((cpus - 1) / 2)), async (j) => {
-    if (!REUSE || !fs.existsSync(j.pathOut)) await run({ ...base, firstZone: j.z, forceLegs: [j.z], maxLegs: 1, parallel: 2, optimizeSeconds: base.optimizeSeconds || 5,
+    if (!REUSE || !fs.existsSync(j.pathOut)) await run({ ...base, firstZone: j.z, forceLegs: [j.z], maxLegs: 1, parallel: 2, optimizeEffort: (base.optimizeEffort ?? 1) * 0.5,
       workDir: path.join(work, 'work-' + j.tag), routeOut: path.join(work, j.tag + '.lua'), pathOut: j.pathOut }, j.tag);
     j.route = readJson(j.pathOut); if (j.route) finish(j.route);
   });
   console.log('zone routes: ' + zoneJobs.filter((j) => j.route).map((j) => j.name + ' (' + j.route.steps.length + ' steps)').join(', '));
+  // zone routes built elsewhere (a faction tree's, tools/zone-routes.js): one per zone and level band, each a leg from
+  // the trunk's state there - the path picker offers the ones that fit your level ({ name, z, level, pathOut, xph })
+  const extraZones = (base.extraZoneRoutes || []).map((x) => ({ ...x, route: readJson(x.pathOut) })).filter((x) => x.route);
+  for (const x of extraZones) finish(x.route);
+  if (extraZones.length) console.log('zone routes from the tree: ' + extraZones.length);
 
   // branches: at every later zone boundary, each runner-up zone within reach of the pick gets its own plan from there
   const jobs = [];
@@ -246,7 +251,7 @@ function specialRoutes() {
   console.log(`planning ${jobs.length} branches, ${conc} at a time`);
   let done = 0;
   await pool(jobs, conc, async (j) => {
-    if (!REUSE || !fs.existsSync(j.pathOut)) await run({ ...base, startStateFile: j.c.beforeFile, firstZone: j.o.z, maxLegs: base.maxLegs || 12, parallel: 2, optimizeSeconds: base.branchOptimizeSeconds || base.optimizeSeconds || 10,
+    if (!REUSE || !fs.existsSync(j.pathOut)) await run({ ...base, startStateFile: j.c.beforeFile, firstZone: j.o.z, maxLegs: base.maxLegs || 12, parallel: 2, optimizeEffort: base.branchOptimizeEffort ?? base.optimizeEffort,
       workDir: path.join(work, 'work-' + j.tag), routeOut: path.join(work, j.tag + '.lua'), pathOut: j.pathOut }, j.tag);
     j.route = readJson(j.pathOut); if (j.route) finish(j.route);
     done++; console.log(`  [${done}/${jobs.length}] ${j.tag}: ${j.route ? uniq(j.route.legs).join(' > ') + ` -> ${j.route.endLevel}` : 'failed'}`);
@@ -299,7 +304,7 @@ function specialRoutes() {
   function spliceInPath(p) {
     for (const r of SPECIALS.filter((x) => x.inPath)) {
       // once its hardest quest is within the level gate too (Poisons opens at 20, Klaven's Tower is a level-24 quest)
-      const need = Math.max(r.minLevel, (r.questLevel || 0) - require('./world').LEVEL_ABOVE);
+      const need = Math.max(r.minLevel, require('./world').minLevelFor(r.questLevel || 0));
       let at = p.steps.findIndex((x, i) => i > 0 && x.k === 'fly' && (x.lvl || p.steps[i - 1].lvl || 0) >= need);
       if (at < 0) { const last = p.steps[p.steps.length - 1]; if (!last || (last.lvl || 0) < need) continue; at = p.steps.length; }
       // only what the path does before this point counts as done: a later pickup of the same quest (Elanaria is also
@@ -353,6 +358,7 @@ function specialRoutes() {
     emit({ ...d, endLevel: d.startLevel, endXp: 0 }, 'Dungeon: ' + d.name + (d.variant ? ' (quick)' : ''), 'dungeon:' + slug(d.name) + (d.variant ? ':quick' : ''), { dungeon: true, dungeonName: d.name, variant: d.variant, cut: d.cut ? d.cut.join(', ') : undefined, questLevel: d.questLevel, needsLevel: d.needsLevel, quests: d.quests.join(', '), chainCount: d.chainQuests.length, xp: d.xp }, null);
   }
   for (const j of zoneJobs) if (j.route) emit(j.route, 'Zone: ' + j.name, 'zone:' + slug(j.name), { zoneRoute: true, zoneName: j.name, xph: j.xph }, null);
+  for (const x of extraZones) emit(x.route, 'Zone: ' + x.name + ' (' + x.level + '+)', 'zone:' + slug(x.name) + ':' + x.level, { zoneRoute: true, zoneName: x.name, xph: x.xph, level: x.level }, null);
   for (const r of SPECIALS) emit(r, 'Special: ' + r.name, 'special:' + (r.id || slug(r.name)), { dungeon: true, special: true, dungeonName: r.name, tag: r.tag, why: r.why, questLevel: r.questLevel, needsLevel: r.needsLevel, quests: r.questNames.join(', '), chainCount: 0 }, null);
   L.push('}');
   // where each quest in your log is handed in, so the addon can slot in a hand-in for a quest you finished that the
@@ -400,7 +406,7 @@ function specialRoutes() {
     const lists = L.filter((x) => typeof x === 'object');
     const db = JSON.parse(fs.readFileSync(relRoot(base.db), 'utf8'));
     const conv = JSON.parse(fs.readFileSync(relRoot(base.conversion), 'utf8')).geometry.transforms;
-    const n = await addWaypoints(lists, { terrainDir: relRoot(base.terrainDir), conv, db, cacheFile: base.waypointsCache ? relRoot(base.waypointsCache) : path.join(work, 'waypoints-cache.json'), workers: Math.max(1, Math.min(base.waypointsCache ? cpus - 1 : 6, cpus - 2)), log: (m) => console.log(m) });
+    const n = await addWaypoints(lists, { faction: base.faction || 'alliance', terrainDir: relRoot(base.terrainDir), conv, db, cacheFile: base.waypointsCache ? relRoot(base.waypointsCache) : path.join(work, 'waypoints-cache.json'), workers: Math.max(1, Math.min(base.waypointsCache ? cpus - 1 : 6, cpus - 2)), log: (m) => console.log(m) });
     console.log(`waypoints: ${n} steps have a walking path`);
   }
   const text = L.flatMap((x) => (typeof x === 'string' ? [x] : x.steps.map((s, i) => { const { ensured: _e, _choice: _c, ...rest } = s; return '      ' + ser({ ...rest, id: i + 1 }) + ','; })));

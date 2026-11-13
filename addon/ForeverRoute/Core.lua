@@ -317,8 +317,33 @@ function ns.ZoneRoutes()
   for _, r in ipairs(ns.Routes()) do if r.zoneRoute then out[#out + 1] = r end end
   return out
 end
-function ns.ZoneRouteFor(zone)
-  for _, r in ipairs(ns.ZoneRoutes()) do if r.zoneName == zone then return r end end
+-- a zone route that fits a level: a built-in plan's tree has one per zone and level band (r.level: planned from the
+-- trunk at that level - tools/zone-routes.js); the newest one you are in reach of (its level up to 2 above yours). A
+-- plan's own zone routes carry no level: the first for the zone, as before
+local function fits(r, level) return not r.level or not level or (r.level <= level + 2 and r.level >= level - 6) end
+function ns.ZoneRouteFor(zone, level)
+  level = level or (UnitLevel and UnitLevel("player")) or nil
+  local best
+  for _, r in ipairs(ns.ZoneRoutes()) do
+    if r.zoneName == zone and fits(r, level) then
+      if not r.level then return r end
+      if not best or r.level > best.level then best = r end
+    end
+  end
+  return best
+end
+-- the zones you could go to now (one route each, the best fit for your level): what "fancy a change?" offers
+function ns.ZoneRoutesAt(level)
+  level = level or (UnitLevel and UnitLevel("player")) or nil
+  local seen, out = {}, {}
+  for _, r in ipairs(ns.ZoneRoutes()) do
+    if r.zoneName and not seen[r.zoneName] and r.level and fits(r, level) then
+      local pick = ns.ZoneRouteFor(r.zoneName, level)
+      if pick then seen[r.zoneName] = true; out[#out + 1] = pick end
+    end
+  end
+  table.sort(out, function(a, b) return (a.xph or 0) > (b.xph or 0) end)
+  return out
 end
 function ns.DungeonRoutes()
   local out = {}
@@ -515,25 +540,53 @@ function ns.TakeChoice(opt, owner, key)
   end
 end
 
+-- Where the Map button takes you for step i: the map to open and the step whose pin to flash there.
+--   a step with a spot of its own: its map, its pin
+--   a trip (a fly step with no spot): the zone it goes to, and the pin of the first stop there. It used the arrow's
+--     target, which for a trip is the flight master in the zone you are in - so the map opened where you stand, not
+--     where you're going ("this just seems to open the map on your character and not the destination" - tester)
+--   a spot nobody knows (s.unknown): its zone, no pin
+-- -> uiMapID, step index (or nil); nil when the step has no place on a map
+function ns.MapSpot(i)
+  local list = ForeverRouteData and ForeverRouteData.steps
+  local s = i and list and list[i]
+  if not s then return nil end
+  if s.m and s.x and not s.unknown then return s.m, i end
+  if s.to and s.k == "fly" then
+    for j = i + 1, #list do
+      local t = list[j]
+      if t.k == "fly" or t.k == "hearth" then break end
+      if t.m == s.to and t.x and not t.unknown and not ns.Engine.IsDone(j) then return s.to, j end
+    end
+    return s.to, nil
+  end
+  return s.m, nil
+end
+
 function ns.ShowOnMap(i)
   local s = i and ForeverRouteData and ForeverRouteData.steps[i]
   if not s then return end
-  local m = s.m
-  if not m and ns.Engine.TravelTarget then m = ns.Engine.TravelTarget(s) end
-  if not m and s.to then m = s.to end
+  local m, pin = ns.MapSpot(i)
   if not m then ns.Print("That step has no map spot (it's inside a dungeon, or a note)."); return end
   if InCombatLockdown() then ns.Print("Can't open the map in combat."); return end
   if i ~= ns.Engine.current then ns.Engine.view = i end
   ns.Fire("FR_STEP", ns.Engine.Shown()) -- pins follow the step being looked at
+  local function setMap()
+    if WorldMapFrame and WorldMapFrame:IsShown() and WorldMapFrame.SetMapID and WorldMapFrame:GetMapID() ~= m then WorldMapFrame:SetMapID(m) end
+  end
   local ok, err = pcall(function()
     if WorldMapFrame and not WorldMapFrame:IsShown() then
       if OpenWorldMap then OpenWorldMap(m) elseif ToggleWorldMap then ToggleWorldMap() end
     end
-    if WorldMapFrame and WorldMapFrame.SetMapID then WorldMapFrame:SetMapID(m) end
+    setMap()
   end)
   if not ok then ns.LogError("map", err) end
-  -- and make its pin blink, so the eye finds it among the map's own markers (tester)
-  if ns.Pins and ns.Pins.Blink then C_Timer.After(0.05, function() ns.Pins.Blink(i) end) end
+  -- again a moment later: an opening map goes to the zone you're in (the game's map does that as it opens, map addons
+  -- can do it a frame later), which undid the step's map
+  C_Timer.After(0, function() pcall(setMap) end)
+  C_Timer.After(0.2, function() pcall(setMap) end)
+  -- and make its pin flash, so the eye finds it among the map's own markers (tester)
+  if pin and ns.Pins and ns.Pins.Blink then ns.Pins.Blink(pin) end
 end
 
 function ns.Print(msg)

@@ -72,7 +72,7 @@ Visiting is per NPC. Every eligible task is either scheduled or skipped with a r
 10. **Closure**: every accept is turned in or explicitly carried, and every eligible quest is scheduled or has a stated reason. Broken by: ensure l.48-50, hub-gated visiting.
 11. **Training** happens on the trainer's map, with travel there and back. Broken by: writeRoute l.799-804.
 12. **State continuity**: leg k+1's start = the fold of leg k's emitted steps. Broken by: route2 l.601 combined with campaign l.335.
-13. **Determinism**: the same input gives the same steps. Broken by: the wall-clock cap (optimize l.60) and the cache depending on what is in it.
+13. **Determinism**: the same input gives the same steps. Broken by: the cache depending on what is in it (loose matches), and a leg whose search hits the optimizer's safety cap (optimize.js anneal, stopAt; cfg.optimizeCapSec, one deadline for the leg's whole search): route2 says OPTIMIZER CAP, campaign logs it and keeps that leg out of the cache. (2026-11-12: the wall-clock budget this item first named is gone - the work is a number of moves in a fixed number of runs, optimize.js workFor/RUNS, not seconds and not one run per core; the cap is far above a normal search.)
 
 Lint every route (including packed branches, dungeon routes and specials) in paths.js after `ensure()`, and make autoplan `check()` refuse the install on 1-7, 9, 11 or 12.
 

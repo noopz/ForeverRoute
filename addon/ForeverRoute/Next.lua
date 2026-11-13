@@ -14,13 +14,13 @@ local HBD = LibStub("HereBeDragons-2.0")
 
 Next.WINDOW = 14        -- planned stops the solve looks at
 Next.SCAN = 90          -- steps scanned for them
-Next.NEAR_READY = 500   -- yards: finished quests further than this are left to the plan
+Next.NEAR_READY = 500   -- yards: finished quests further than this are left to the plan (a bound on the candidates: Next.Prize decides)
 Next.MARGIN = 40        -- seconds: a new pick must beat keeping the current one by this much (no flip-flopping)
 Next.CARRY = 30         -- seconds: what carrying a finished quest costs (a log slot, the risk it goes gray)
-Next.BEHIND_YD = 2000   -- yards: a pick-up the built-in plan passed as behind you, this close and still worth XP, is offered
+Next.BEHIND_YD = 2000   -- yards: a pick-up the built-in plan passed as behind you, this close, is a candidate (Next.Prize decides)
 Next.BEHIND_MAX = 6     -- ...the nearest this many
 Next.HOLD_NEAR = 400    -- yards: a prize this close can come before the plan's trip or grind step
-Next.BEHIND_WORK = 150  -- seconds: the work one of its objectives is taken to be (and the way to it)
+Next.BEHIND_WORK = 150  -- seconds: an objective's work and the way to it, for a step that doesn't carry the planner's (s.work)
 Next.DISMISS_SECS = 900 -- "not now" on a while-you're-here stop: it stays off for this long...
 Next.DISMISS_YD = 500    -- ...or until you are this far from where you said it
 Next.dismissed = {}      -- step index -> { t, x, y, inst }: where and when
@@ -50,7 +50,16 @@ Next._wpos = wpos
 -- once per place you set out from and ZONE you go to - the trip to the first stop in that zone - and any other stop in the
 -- same zone adds its straight-line distance from that one. Asked for every far stop on every refresh, it was 90% of the
 -- addon's time (34,000 searches in one simulated 1-60, ten times slower than before). "From" is a step of the plan, or
--- where you stand to the nearest 250 yd. Remembered until you learn a flight path.
+-- where you stand to the nearest 250 yd. Remembered until you learn a flight path, mount up or level (priceSig).
+local function speedNow() return (ns.Travel and ns.Travel.Speed and ns.Travel.Speed()) or 7 end
+local function knownTaxiCount() local n = 0; for _, _ in pairs((ns.State and ns.State.knownTaxi) or {}) do n = n + 1 end; return n end
+-- what a remembered trip or price depends on besides the plan: the flight paths you know, your speed (a mount at 40)
+-- and your level (the trip planner keeps you out of zones far above you). Taken once a solve (Next.Pick) - not by
+-- walking your flight paths on every price; outside a solve, each time.
+local sigNow
+local function priceSig()
+  return sigNow or (knownTaxiCount() .. ":" .. speedNow() .. ":" .. ((UnitLevel and UnitLevel("player")) or 1))
+end
 local zoneMemo, zoneTaxi, startKeys = setmetatable({}, { __mode = "k" }), nil, 0
 local function travelSecs(a, b)
   local wa, wb = a.w, b.w
@@ -64,7 +73,7 @@ local function travelSecs(a, b)
     local yd = math.sqrt((wa[1] - wb[1]) ^ 2 + (wa[2] - wb[2]) ^ 2)
     if yd < 900 or (a.m and a.m == b.m) or not (ns.Travel and ns.Travel.Plan) then return yd * 1.25 / speed end
   end
-  local n = 0; for _ in pairs((ns.State and ns.State.knownTaxi) or {}) do n = n + 1 end
+  local n = priceSig()
   if zoneTaxi ~= n then zoneMemo = setmetatable({}, { __mode = "k" }); zoneTaxi, startKeys = n, 0 end
   local from = a.st or ("at:" .. math.floor(wa[1] / 250) .. ":" .. math.floor(wa[2] / 250) .. ":" .. tostring(wa[3]))
   -- (another zone: one trip per zone, plus the walk from its first stop; the same zone: each far stop on its own - a
@@ -96,25 +105,322 @@ local function rate()
   return math.max(1, need / 5400)
 end
 
--- what coming back for a finished quest later costs, in seconds: the hand-in, carrying it, and the detour from the
--- plan's own way to its NPC (none when the plan stops there anyway)
-local function laterCost(list, j)
-  local s = list[j]
-  local w = wpos(s)
-  local cost = (Next.SERVICE.turnin or 10) + Next.CARRY
-  if not w then return cost end
-  local prev, nxt
-  for k = j - 1, math.max(1, j - 30), -1 do if wpos(list[k]) then prev = list[k]; break end end
-  for k = j + 1, math.min(#list, j + 30) do if wpos(list[k]) then nxt = list[k]; break end end
-  local function d(a, b) local A, B = wpos(a), wpos(b); if not (A and B) or A[3] ~= B[3] then return nil end return math.sqrt((A[1] - B[1]) ^ 2 + (A[2] - B[2]) ^ 2) end
-  local dp, dn, pn = prev and d(prev, s), nxt and d(s, nxt), prev and nxt and d(prev, nxt)
-  if dp and dn and pn then
-    local speed = (ns.Travel and ns.Travel.Speed and ns.Travel.Speed()) or 7
-    cost = cost + math.max(0, dp + dn - pn) * 1.25 / speed
-  end
-  return cost
+-- ---------------------------------------------------------------------------------------------------------------
+-- Now or later: one price for every stop the solve may take out of the plan's order (a finished quest's hand-in the
+-- plan has further on, a stop the route took in, a quest behind you, a later visit to where you are):
+--   prize = the least of what it pays (its quest's XP at your rate, less the work still between you and that XP) and
+--           what leaving it for later costs (Next.DeferCost: the plan comes back for it - the stop itself, carrying the
+--           quest, and the detour from the plan's own way to it there).
+-- A stop the plan comes back to is worth that detour and no more: never "all the way to Ironforge from the Burning
+-- Steppes for one hand-in". One it never comes back to is worth its XP: left, it is lost. A gray quest pays a little
+-- either way (Engine.QuestXP). Earlier each of these had a formula of its own (a hub test for "the plan passes
+-- again", 30% of the XP for "still worth it", 150 s an objective), and the detour was a straight line between the
+-- step's two plan neighbours: riding speed across a zone the plan flies over, and nothing at all when a neighbour was
+-- in another instance.
+-- The detour here is the plan's real way: within a zone the walk (as the solve prices it, travelSecs); where the plan
+-- flies, sails or rides across zones (Travel.Plan, without your hearthstone) the walks at each end of that trip - to
+-- the flight master or the plan's own pier, and from where you land; and across one of the plan's hearths, the walk
+-- before it (you hearth from wherever you are) and the walk from the inn it bound you at. Thorium Point lies under
+-- the straight line from Southshore to Duskwood; the trip does not pass it (de03647: the same fix for
+-- Engine.InsertStop's gaps, in yards).
+-- A later pass counts only where the solve would offer the stop then: a hand-in at a hub or where its chain goes on,
+-- within Next.NEAR_READY of the way (Next.Pick's rule). Any other stop is done at its own place in the plan or not at
+-- all - a pass through open country beside it is no second chance.
+-- None of it depends on where you stand, only on the plan, the flight paths you know, your speed and level: a prize
+-- that moved as you walked would flip the card (prizes skip the hysteresis, Next.MARGIN).
+-- ---------------------------------------------------------------------------------------------------------------
+Next.DEFER_CELL = 400   -- yards: the grid the plan's way is indexed by
+Next.DEFER_ENOUGH = 60  -- seconds: a gap this cheap found among the walks - the far trips needn't be asked
+Next.DEFER_FAR = 3      -- trip-planner searches one stop's price may start (the soonest far gaps; remembered ones are free)
+-- trip-planner searches (~30 ms each) all the prices of one solve may start: learning a flight path forgets every
+-- remembered trip, and fifteen candidates asking four each was a frame of 1-2 s. A price still missing a search is
+-- asked again on the next solve, and meanwhile taken as "the plan comes by" - a stop is never sent for on a guess.
+Next.ASK_PER_PICK = 4
+local huge = math.huge
+local function yd(p, q) return math.sqrt((p[1] - q[1]) ^ 2 + (p[2] - q[2]) ^ 2) end
+-- the detour (seconds) of stopping at p on the walk x -> y, and how near that walk comes to p (yards); nil when they
+-- aren't in one world
+local function segDetour(x, y, p)
+  if not (x and y and p) or x[3] ~= p[3] or y[3] ~= p[3] then return nil end
+  local dx, dy = y[1] - x[1], y[2] - x[2]
+  local l2 = dx * dx + dy * dy
+  local t = l2 > 0 and math.max(0, math.min(1, ((p[1] - x[1]) * dx + (p[2] - x[2]) * dy) / l2)) or 0
+  return math.max(0, yd(x, p) + yd(p, y) - yd(x, y)) * 1.25 / speedNow(), yd(p, { x[1] + dx * t, x[2] + dy * t })
 end
-Next._laterCost = laterCost
+-- the searches left in this solve (nil: no bound - outside a solve): true takes one
+local askLeft
+local function mayAsk()
+  if askLeft == nil then return true end
+  if askLeft <= 0 then return false end
+  askLeft = askLeft - 1
+  return true
+end
+Next._askLeft = function(n) askLeft = n end -- (tests: a solve's bound, outside one)
+-- The plan's trip between two of its stops (step tables) that are far apart: its seconds, and the walk at each end -
+-- D, where it leaves the walk (the flight master, the pier), and P, where it comes back to it (where you land); or
+-- ride = true for one long ride. false: no way known. Remembered per pair of steps until the flight paths you know,
+-- your speed or your level change (priceSig). ask = false: only what is remembered (nil: not priced yet).
+local tripMemo, tripSig = setmetatable({}, { __mode = "k" }), nil
+local function farTrip(a, b, ask)
+  local sig = priceSig()
+  if tripSig ~= sig then tripMemo = setmetatable({}, { __mode = "k" }); tripSig = sig end
+  local row = tripMemo[a]
+  local e = row and row[b]
+  if e ~= nil or not ask then return e end
+  e = false
+  if ns.Travel and ns.Travel.Plan then
+    local ok, legs, secs = pcall(ns.Travel.Plan, { m = a.m, x = a.x, y = a.y }, { m = b.m, x = b.x, y = b.y }, { hearth = false })
+    if ok and legs and secs then
+      e = { secs = secs }
+      local function w(m, x, y) if not (m and x and y) then return nil end local wx, wy, wi = HBD:GetWorldCoordinatesFromZone(x, y, m); return wx and { wx, wy, wi } or nil end
+      local allRide = true
+      for _, l in ipairs(legs) do if l.how ~= "ride" then allRide = false end end
+      if allRide then e.ride = true
+      else
+        -- (the first leg that isn't a ride starts where the walk ends: a flight master or a pier; a teleport has no walk)
+        for _, l in ipairs(legs) do if l.how ~= "ride" then if l.how == "fly" or l.how == "boat" then e.D = w(l.sm, l.sx, l.sy) end break end end
+        local L = legs[#legs]
+        if #legs > 1 and L.how == "ride" then e.P = w(L.sm, L.sx, L.sy) end
+      end
+    end
+  end
+  -- (no trip found, in one world: the plan gets there somehow - priced as the ride, not as unreachable; the plan's own
+  -- order says it goes)
+  local A, B = not e and wpos(a), not e and wpos(b)
+  if A and B and A[3] == B[3] then e = { secs = yd(A, B) * 1.25 / speedNow(), ride = true } end
+  if not row then row = {}; tripMemo[a] = row end
+  row[b] = e
+  return e
+end
+-- seconds the plan takes from its stop a to its stop b (step tables): the walk, or the trip when they are far apart.
+-- ask = false: a far trip not priced yet is nil, and true second
+local function planSecs(a, b, ask)
+  local A, B = wpos(a), wpos(b)
+  if not (A and B) then return nil end
+  if A[3] == B[3] and (a.m == b.m or yd(A, B) < 900) then return yd(A, B) * 1.25 / speedNow() end
+  local e = farTrip(a, b, ask ~= false)
+  if e == nil then return nil, true end
+  return e and e.secs or nil
+end
+Next._planSecs = planSecs
+
+-- The plan's way, indexed: its located stops in order (travel steps are no stops), the gaps between them - with the
+-- plan's own trip steps in each: a hearth (the walk before it, then from the inn the plan bound you at) or a boat
+-- (its pier is where the walk ends) - and a grid of the gaps by the cells their walks pass. A far gap's walks are
+-- known only once its trip is (Travel.Plan), so until then it is indexed along the walks to every flight master and
+-- pier of its two maps (Travel.Ports) - one of them is where the trip leaves and lands - and once priced, along its
+-- own. Built once per plan list and length (a stop the route inserts makes a new one). Its stops are step tables, so a
+-- price survives the plan moving on.
+local wayMemo = setmetatable({}, { __mode = "k" })
+local function walkable(a, b) return a.w[3] == b.w[3] and (a.st.m == b.st.m or yd(a.w, b.w) < 900) end
+local function way(list)
+  local W = wayMemo[list]
+  if W and W.n == #list then return W end
+  W = { n = #list, stops = {}, at = {}, gaps = {}, grid = {}, ver = 0 }
+  local trips, bind = {}, nil
+  for j, s in ipairs(list) do
+    if Next.TRIP[s.k] then trips[#trips + 1] = s
+    else
+      local w = wpos(s)
+      if w then
+        local e = { j = j, st = s, w = w }
+        local k = #W.stops
+        if k > 0 then
+          local g = { a = W.stops[k], b = e }
+          for _, t in ipairs(trips) do if t.k == "hearth" then g.hearth = bind end end
+          -- (a hearth to an inn the plan never bound you at: where it lands isn't known - the trip planner's way)
+          if not g.hearth and trips[1] and trips[1].boat then g.pier = wpos(trips[1]) end
+          W.gaps[k] = g
+        end
+        W.stops[k + 1] = e
+        if not W.at[s] then W.at[s] = k + 1 end
+        if s.k == "bind" then bind = e end
+        trips = {}
+      end
+    end
+  end
+  local C = Next.DEFER_CELL
+  local function put(w, k)
+    local key = math.floor(w[1] / C) .. ":" .. math.floor(w[2] / C) .. ":" .. tostring(w[3])
+    local c = W.grid[key]
+    if not c then c = {}; W.grid[key] = c end
+    if c[#c] ~= k then c[#c + 1] = k end
+  end
+  -- (a walk across a zone passes the cells between its ends: a stop half way along is on the way)
+  local function line(x, y, k)
+    put(x, k); put(y, k)
+    if x[3] ~= y[3] then return end
+    local n = math.floor(yd(x, y) / (C / 2))
+    for t = 1, n do put({ x[1] + (y[1] - x[1]) * t / (n + 1), x[2] + (y[2] - x[2]) * t / (n + 1), x[3] }, k) end
+  end
+  W.line = line
+  local ports = (ns.Travel and ns.Travel.Ports) or function() return {} end
+  local function leg(x, y, k, pier)
+    if walkable(x, y) then line(x.w, y.w, k); return end
+    put(x.w, k); put(y.w, k)
+    if pier then line(x.w, pier, k) else for _, p in ipairs(ports(x.st.m)) do if p[3] == x.w[3] then line(x.w, p, k) end end end
+    for _, p in ipairs(ports(y.st.m)) do if p[3] == y.w[3] then line(p, y.w, k) end end
+  end
+  for k, g in ipairs(W.gaps) do
+    if g.hearth then put(g.a.w, k); leg(g.hearth, g.b, k)
+    else leg(g.a, g.b, k, g.pier) end
+  end
+  wayMemo[list] = W
+  return W
+end
+
+local function serviceOf(s) return (s.k == "obj" and tonumber(s.work)) or Next.SERVICE[s.k] or 15 end
+-- the cheaper of two (detour, how near) pairs
+local function better(d1, n1, d2, n2) if d1 and (not d2 or d1 <= d2) then return d1, n1 end return d2, n2 end
+-- the detour (seconds) of fitting a stop at p into the plan's way from stop x to stop y (stops of the way), and how
+-- near that way comes to p (yards); ask: the trip planner may be asked (a far trip not priced yet). k: the gap, whose
+-- trip's own walks are indexed once known. -> seconds, yards, or nil (no way to fit it there) and true when the trip
+-- wasn't priced yet
+local function legDetour(W, k, x, y, p, ask, pier)
+  if walkable(x, y) then return segDetour(x.w, y.w, p) end
+  local e = farTrip(x.st, y.st, false)
+  if e == nil and ask and mayAsk() then e = farTrip(x.st, y.st, true) end
+  if e == nil then return nil, nil, true end
+  if not e then return nil end
+  if e.ride then return segDetour(x.w, y.w, p) end
+  local D = pier or e.D
+  local g = k and W.gaps[k]
+  if g and not g.indexed then
+    -- (the trip's own walks, along their length: one may start or end off the two maps - a ride to a flight master)
+    g.indexed = true
+    if D and D[3] == x.w[3] then W.line(x.w, D, k) end
+    if e.P and e.P[3] == y.w[3] then W.line(e.P, y.w, k) end
+    W.ver = W.ver + 1
+  end
+  local d1, n1 = segDetour(x.w, D, p)
+  local d2, n2 = segDetour(e.P, y.w, p)
+  return better(d1, n1, d2, n2)
+end
+-- the same for a gap of the way (g: { a, b, hearth = the inn's stop, pier })
+local function gapDetour(W, k, g, p, ask)
+  if not g.hearth then return legDetour(W, k, g.a, g.b, p, ask, g.pier) end
+  -- (before the hearth: the walk to it, and you hearth from there - no way back; after it, the way on from the inn)
+  local d1, n1
+  if g.a.w[3] == p[3] then n1 = yd(g.a.w, p); d1 = n1 * 1.25 / speedNow() end
+  local d2, n2, unpriced = legDetour(W, k, g.hearth, g.b, p, ask)
+  local d, n = better(d1, n1, d2, n2)
+  return d, n, unpriced
+end
+
+-- would the solve offer stop s on a later pass of the plan, off its own place? Only a finished quest's hand-in at a
+-- hub or where its chain goes on - within this many yards of you (Next.Pick). nil: only its own place counts.
+local isHub, chainsOnHere
+local function passReach(list, s)
+  if s.k == "turnin" and s.q and (isHub(list, s) or chainsOnHere(list, s)) then return Next.NEAR_READY end
+  return nil
+end
+
+-- What leaving stop s for later costs, in seconds, when the plan goes on from its step `from`: the stop itself, carrying
+-- the quest (Next.CARRY), and the cheapest detour from the plan's own way from there on - at its own place in the plan,
+-- or at another pass the plan makes by it where the solve would offer it (passReach). math.huge: the plan never comes
+-- by again. behind: a stop the plan has passed for good (a quest behind you) - its own place doesn't count.
+local deferMemo = setmetatable({}, { __mode = "k" })
+function Next.DeferCost(list, s, from, behind)
+  local p = wpos(s)
+  if not p then return huge end
+  local W = way(list)
+  local key = from .. ":" .. priceSig() .. ":" .. tostring(behind)
+  local m = deferMemo[s]
+  if m and m.key == key and m.W == W and m.ver == W.ver then return m.v end
+  local best, whole = huge, true -- (whole: every trip it looked at was priced)
+  -- (the first stop of the way at or after `from`)
+  local lo, hi = 1, #W.stops + 1
+  while lo < hi do local mid = math.floor((lo + hi) / 2); if W.stops[mid].j < from then lo = mid + 1 else hi = mid end end
+  local first = lo
+  -- its own place in the plan: the gap between its neighbours, with the plan's trips on either side of it (a few
+  -- hand-ins at one NPC are each other's neighbours)
+  local own = not behind and W.at[s]
+  if own and W.stops[own].j >= from then
+    local a, b = W.stops[own - 1], W.stops[own + 1]
+    local d, unpriced, _n
+    if a and b then
+      local g1, g2 = W.gaps[own - 1], W.gaps[own]
+      d, _n, unpriced = gapDetour(W, nil, { a = a, b = b, hearth = g1.hearth or g2.hearth, pier = g1.pier or g2.pier }, p, true)
+    elseif a or b then
+      -- (the plan ends there, or starts: the way to it)
+      d, unpriced = planSecs(a and a.st or s, b and b.st or s, false)
+      if d == nil and unpriced and mayAsk() then d, unpriced = planSecs(a and a.st or s, b and b.st or s, true) end
+    end
+    if unpriced then whole = false end
+    if d and d < best then best = d end
+  end
+  -- another pass of the way from `from` on where it would be offered: the walks first (cheap), then the soonest far trips
+  local reach = passReach(list, s)
+  if reach then
+    local C = Next.DEFER_CELL
+    -- (the walks are indexed every half cell: one passing within reach of p has a point in these cells)
+    local r = math.floor((reach + C / 4) / C) + 1
+    local cx, cy = math.floor(p[1] / C), math.floor(p[2] / C)
+    local seen, far = {}, {}
+    for dx = -r, r do
+      for dy = -r, r do
+        for _, k in ipairs(W.grid[(cx + dx) .. ":" .. (cy + dy) .. ":" .. tostring(p[3])] or {}) do
+          if not seen[k] and k >= first then
+            seen[k] = true
+            local g = W.gaps[k]
+            if g.a.st ~= s and g.b.st ~= s then
+              local d, near, unpriced = gapDetour(W, k, g, p, false)
+              if d and near <= reach then if d < best then best = d end elseif unpriced then far[#far + 1] = k end
+            end
+          end
+        end
+      end
+    end
+    if best > Next.DEFER_ENOUGH and #far > 0 then
+      table.sort(far)
+      for q = 1, math.min(Next.DEFER_FAR, #far) do
+        local d, near, unpriced = gapDetour(W, far[q], W.gaps[far[q]], p, true)
+        if unpriced then whole = false elseif d and near <= reach and d < best then best = d end
+      end
+    end
+  end
+  -- (a price still missing a trip: taken as "the plan comes by" until the next solve prices it, and not remembered)
+  local v = best < huge and (serviceOf(s) + Next.CARRY + best) or huge
+  if not whole then v = serviceOf(s) + Next.CARRY
+  else deferMemo[s] = { key = key, W = W, ver = W.ver, v = v } end
+  return v
+end
+
+-- the work still between you and a quest's XP, in seconds: its objective steps still to do (the ones the quest log
+-- doesn't have finished: their expected work, the planner's s.work - kills and drops at their rates) and the walks the
+-- plan makes for them - to each and on to the hand-in (s.walk, yards; the walk on only when the work before it is
+-- known). Next.BEHIND_WORK an objective for a plan made before steps carried its work, and for a quest with no
+-- objective step on the plan. except: an objective that is the stop itself (the solve charges its work as the stop's
+-- own time). Kim'jael Indeed! is four objects looted at one camp, 12 s each: the flat 150 s an objective made it ten
+-- minutes of work.
+local objWork = setmetatable({}, { __mode = "k" })
+local function workOf(list, q, except)
+  local c = objWork[list]
+  if not c or c.n ~= #list then
+    c = { n = #list, by = {}, back = {} }
+    for _, t in ipairs(list) do
+      if t.k == "obj" and t.q then
+        local e = c.by[t.q]; if not e then e = {}; c.by[t.q] = e end
+        local known = tonumber(t.work) ~= nil
+        e[#e + 1] = { st = t, secs = tonumber(t.work) or Next.BEHIND_WORK, yd = known and tonumber(t.walk) or 0, known = known }
+      elseif t.k == "turnin" and t.q and tonumber(t.walk) and not c.back[t.q] then c.back[t.q] = tonumber(t.walk) end
+    end
+    objWork[list] = c
+  end
+  local objs = c.by[q]
+  if not objs then return Next.BEHIND_WORK end
+  local E, St = ns.Engine, ns.State
+  if St and St.QuestReady and St.QuestReady(q) then return 0 end -- (all done: the way to the hand-in is the solve's)
+  local secs, yards, known = 0, 0, false
+  for _, o in ipairs(objs) do
+    local ob = o.st ~= except and E.ObjectiveFor and E.ObjectiveFor(o.st)
+    if o.st ~= except and not (ob and ob.finished) then
+      secs = secs + o.secs; yards = yards + o.yd; known = known or o.known
+    end
+  end
+  if known then yards = yards + (c.back[q] or 0) end
+  return secs + yards * 1.25 / speedNow()
+end
 
 -- A hub: a place the plan stops at a lot (a town) - Next.HUB_STEPS steps within Next.HUB_YD of it. Hand-ins there are
 -- welcome any time; out in the field one is only taken early when its chain goes on right there. The rest wait for the
@@ -126,13 +432,12 @@ Next.HUB_YD, Next.HUB_STEPS, Next.CHAIN_YD = 70, 4, 150
 -- in Stormwind by hearth with three hand-ins ready while the plan flew to Ironforge first and hearthed back for them
 -- ("you've just arrived, hand in what's here") is one case; any town, any way of arriving, is the same rule.
 Next.VISIT_SCAN = 250   -- steps ahead looked through for a later visit here
-Next.TRIP_FIXED = 60    -- seconds a trip costs on top of its distance (to the flight master, take-off, landing)
-Next.TRIP_MIN = 120     -- a trip back is never valued at less than this
+Next.TRIP_MIN = 120     -- a trip back is never valued at less than this (a hearth back costs its hour of cooldown)
 -- -> { now = { step indices you can do this moment }, saves = seconds } or nil
 function Next.VisitHere(list, planned, from, pm, px, py, pinst)
   if not pm then return nil end
   local E, St = ns.Engine, ns.State
-  local TRIP = { fly = true, hearth = true, boat = true }
+  local TRIP = Next.TRIP
   local Lv = (UnitLevel and UnitLevel("player")) or 1
   local pre = ns.QUEST_PRE or {}
   local function preMet(q, handed)
@@ -187,13 +492,19 @@ function Next.VisitHere(list, planned, from, pm, px, py, pinst)
         end
       end
       if ok and any and #now > 0 then
-        -- the trip back it saves: from where the plan was before it to the visit's first stop
-        local saves = Next.TRIP_MIN
-        local a, b = prevPos and wpos(prevPos), wpos(list[now[1]])
-        if a and b and a[3] == b[3] then
-          local speed = (ns.Travel and ns.Travel.Speed and ns.Travel.Speed()) or 7
-          saves = math.max(Next.TRIP_MIN, Next.TRIP_FIXED + math.sqrt((a[1] - b[1]) ^ 2 + (a[2] - b[2]) ^ 2) * 1.25 / speed)
+        -- the trip it saves: the plan's way into the visit and out of it again, against its way past it - from where
+        -- the plan was before it to where it goes after, by the plan's real trips (flights, boats: planSecs). It was a
+        -- straight line from the stop before plus a minute, whatever the plan flew, and nothing for the way out.
+        local first, lastIn, after
+        for x = j, k do local t = list[x]; if wpos(t) and E.Status(x) ~= "done" then first = first or t; lastIn = t end end
+        for x = k + 1, math.min(#list, k + Next.VISIT_SCAN) do local t = list[x]; if not TRIP[t.k] and wpos(t) and E.Status(x) ~= "done" then after = t; break end end
+        local tin = prevPos and first and planSecs(prevPos, first)
+        local saves = tin
+        if tin and after and lastIn then
+          local tout, past = planSecs(lastIn, after), planSecs(prevPos, after)
+          if tout and past then saves = tin + tout - past end
         end
+        saves = math.max(Next.TRIP_MIN, saves or Next.TRIP_MIN)
         return { now = now, saves = saves, from = j, to = k }
       end
       if any then return nil end -- the next visit here isn't all doable now: it happens anyway, its stops wait for it
@@ -203,7 +514,7 @@ function Next.VisitHere(list, planned, from, pm, px, py, pinst)
   return nil
 end
 local hubMemo = setmetatable({}, { __mode = "k" })
-local function isHub(list, s)
+function isHub(list, s) -- (declared above: passReach)
   local m = hubMemo[s]
   if m ~= nil and m.list == list then return m.hub end
   local w, n = wpos(s), 0
@@ -219,7 +530,7 @@ end
 Next._isHub = isHub
 -- does handing this in open a quest whose pick-up is right there (the chain goes on: hand in, take the next)?
 local acceptIdx = setmetatable({}, { __mode = "k" })
-local function chainsOnHere(list, s)
+function chainsOnHere(list, s) -- (declared above: passReach)
   local deps = s.q and ForeverRouteUnlocks and ForeverRouteUnlocks[s.q]
   local w = wpos(s)
   if not (deps and w) then return false end
@@ -234,15 +545,40 @@ local function chainsOnHere(list, s)
 end
 Next._chainsOnHere = chainsOnHere
 
--- what a quest you'd take up again is worth, in seconds: its XP at your rate, less its likely work (Next.BEHIND_WORK a
--- plan objective step). Shared with tools/replay.js's "leaves work" check, so the check and the pick can't disagree.
-local objCount = setmetatable({}, { __mode = "k" })
+-- what a quest you'd take up again is worth, in seconds: its XP at your rate, less the work still to do for it (its
+-- objective steps: workOf). The plan never comes back for it (it is behind you), so this is its whole prize
+-- (Next.Prize). Shared with tools/replay.js's "leaves work" check, so the check and the pick can't disagree.
+-- (Engine.QuestXP: the game's own cut for a quest far below you - 80% at 6 levels down to 10% at 10 or more. A gray
+-- quest still pays that much; it is gray mobs that pay nothing.)
+-- is a pick-up the plan passed as behind you a candidate at your level L? Not more than 2 levels above you; how far
+-- below is the price's to say (Next.BehindPrize). Shared with tools/replay.js's "behind you" count.
+function Next.BehindLevelOk(level, L) return tonumber(level) ~= nil and level <= L + 2 end
 function Next.BehindPrize(list, s, L)
   local E = ns.Engine
   if not (E.QuestXP and s and s.q and tonumber(s.level)) then return 0 end
-  local c = objCount[list]
-  if not c then c = {}; for _, t in ipairs(list) do if t.k == "obj" and t.q then c[t.q] = (c[t.q] or 0) + 1 end end; objCount[list] = c end
-  return E.QuestXP(s.level, L) / rate() - Next.BEHIND_WORK * (c[s.q] or 1)
+  return E.QuestXP(s.level, L) / rate() - workOf(list, s.q)
+end
+
+-- What doing stop s now is worth, in seconds (see "Now or later" above): the least of what its quest pays and what
+-- leaving it costs. from: the plan's step the solve starts at; behind: the plan has passed it for good.
+-- What it pays: a hand-in, its XP at your level (a gray one a tenth or so); a pick-up, that less the work of its
+-- objectives (Next.BehindPrize); an objective, that less the quest's other objectives. A stop of no quest (a flight
+-- path the route took in) pays nothing in XP: it is worth the trip back for it, or, when the plan never comes back,
+-- the stop and the carrying alone - as before.
+function Next.Prize(list, s, from, behind)
+  local defer = behind and huge or Next.DeferCost(list, s, from)
+  local E = ns.Engine
+  local L = (UnitLevel and UnitLevel("player")) or 1
+  local pays
+  if s.q then
+    if s.k == "accept" then pays = Next.BehindPrize(list, s, L)
+    else
+      local xp = (E.QuestXP and tonumber(s.level)) and E.QuestXP(s.level, L) or tonumber(s.xp) or ((UnitXPMax and UnitXPMax("player") or 10000) * 0.04)
+      pays = xp / rate() - (s.k == "obj" and workOf(list, s.q, s) or 0)
+    end
+  elseif defer == huge then return serviceOf(s) + Next.CARRY
+  else return defer end
+  return math.min(pays, defer)
 end
 
 local last -- { sig, at, pick, res }
@@ -279,7 +615,7 @@ function Next.LocalBlock(list, planned, pm)
   return nil
 end
 
-function Next.Pick(planned)
+local function pick(planned)
   local E, St = ns.Engine, ns.State
   local list = ForeverRouteData and ForeverRouteData.steps
   if not (Next.Enabled() and planned and list and list[planned] and ns.Horizon) then Next.res = nil; return nil end
@@ -340,16 +676,12 @@ function Next.Pick(planned)
       -- Growling Gut is in - it waits where the plan has it)
       if Next.KIND[s.k] and wpos(s) and (s.k ~= "accept" or ((not E.Available or E.Available(j)) and roomInLog)) then
         -- an off-plan stop the route only took in (a finished quest's hand-in, a side quest's objective): a prize, not a
-        -- must - worth what its XP would take you to earn, or the trip back for it later
+        -- must (Next.Prize). A hand-in whose NPC the plan comes back to - a capital, a hub - waits for that visit like
+        -- any other: worth only the trip back it saves. One the plan never passes again is worth its XP at your level:
+        -- left, it would be lost. Ironforge from the Burning Steppes for one hand-in was the first kind valued as the
+        -- second.
         if s.inserted then
-          -- (a hand-in whose NPC the plan comes back to - a capital, a hub - waits for that visit like any other: worth only
-          -- the trip back it saves. One the plan never passes again is worth its XP: left, it would be lost. Ironforge
-          -- from the Burning Steppes for one hand-in was the first kind valued as the second)
-          -- (what it pays at YOUR level: a gray quest's hand-in is worth next to nothing, however much it paid once)
-          local Lnow = (UnitLevel and UnitLevel("player")) or 1
-          local xp = (E.QuestXP and tonumber(s.level)) and E.QuestXP(s.level, Lnow) or tonumber(s.xp) or ((UnitXPMax and UnitXPMax("player") or 10000) * 0.04)
-          local passesLater = s.k == "turnin" and isHub(list, s)
-          add(j, { prize = (s.k == "turnin" and not passesLater) and (xp / rate()) or laterCost(list, j), opt = true })
+          add(j, { prize = Next.Prize(list, s, planned), opt = true })
         else
           add(j, { plan = j })
           count = count + 1
@@ -366,22 +698,26 @@ function Next.Pick(planned)
     end
   end
   -- quests the built-in plan passed as behind you (you joined it further on) that are right here and still worth XP at
-  -- your level: a pick-up worth its XP at your rate, less its likely work - the solve takes it when that beats the plan's
-  -- way on. Taken, the quest is yours, and its objectives and hand-in come back to the route by themselves (a quest in
+  -- your level: the plan never comes back for them, so a pick-up is worth its XP at your rate, less the work still to
+  -- do for it (Next.Prize, Next.BehindPrize) - the solve takes it when that beats the plan's way on. Taken, the quest is yours, and its objectives and hand-in come back to the route by themselves (a quest in
   -- your log is never behind you). A level 40 standing at Indurium (level 39) was sent away: the plan does it at 38.
   if E.BehindYou and E.QuestXP then
     local L = (UnitLevel and UnitLevel("player")) or 1
     -- (the nearest Next.BEHIND_MAX of them within Next.BEHIND_YD: the solve weighs the way there against what they pay)
+    -- (how far below you is the price's to say - what the quest still pays you after its work; a window of its own, 4
+    -- levels, left a level 50 sent on past WANTED: Andre Firebeard, 45, 121 yd away and still worth it (fuzz). Above you
+    -- at most 2 levels, as before)
     local found = {}
     for j = 1, #list do
       local s = list[j]
-      if roomInLog and s.k == "accept" and s.q and tonumber(s.level) and s.level >= L - 4 and s.level <= L + 2 and not byStep[j] then
+      if roomInLog and s.k == "accept" and s.q and tonumber(s.level) and Next.BehindLevelOk(s.level, L) and not byStep[j] then
         local w = wpos(s)
         local d2 = w and w[3] == pinst and (w[1] - px) ^ 2 + (w[2] - py) ^ 2
-        if d2 and d2 <= Next.BEHIND_YD ^ 2 and not St.OnQuest(s.q) and not St.IsCompleted(s.q)
-          and E.BehindYou(s) and (not E.Available or E.Available(j)) and not (ns.char and ns.char.nope and ns.char.nope[s.q]) then
-          local prize = Next.BehindPrize(list, s, L)
-          if prize > 0 then found[#found + 1] = { j = j, d2 = d2, prize = prize } end
+        if d2 and d2 <= Next.BEHIND_YD ^ 2 and not St.OnQuest(s.q) and not St.IsCompleted(s.q) then
+          local prize = Next.Prize(list, s, planned, true)
+          if prize > 0 and E.BehindYou(s) and (not E.Available or E.Available(j)) and not (ns.char and ns.char.nope and ns.char.nope[s.q]) then
+            found[#found + 1] = { j = j, d2 = d2, prize = prize }
+          end
         end
       end
     end
@@ -389,16 +725,16 @@ function Next.Pick(planned)
     for k = 1, math.min(Next.BEHIND_MAX, #found) do add(found[k].j, { prize = found[k].prize, opt = true, behind = true }) end
   end
   -- finished quests whose hand-in is further on in the plan but near you now: a prize worth the trip back it saves
+  -- (Next.Prize: the plan's detour to it later; a gray quest's hand-in pays next to nothing - it goes with the plan, or
+  -- not at all. That used to be a rule of its own: 30% of the quest's XP.) Next.NEAR_READY only bounds the candidates:
+  -- the price decides.
   for j = scanEnd + 1, #list do
     local s = list[j]
     if s.k == "turnin" and s.q and St.QuestReady(s.q) and not byStep[j] then
       local w = wpos(s)
-      -- (and still worth XP: a gray quest's hand-in is no prize - it goes with the plan, or not at all)
-      local Lp = (UnitLevel and UnitLevel("player")) or 1
-      local worthXP = not (E.QuestXP and tonumber(s.level)) or E.QuestXP(s.level, Lp) >= 0.3 * E.QuestXP(s.level, s.level)
-      if w and w[3] == pinst and (w[1] - px) ^ 2 + (w[2] - py) ^ 2 <= Next.NEAR_READY ^ 2 and E.Status(j) == "todo" and worthXP
+      if w and w[3] == pinst and (w[1] - px) ^ 2 + (w[2] - py) ^ 2 <= Next.NEAR_READY ^ 2 and E.Status(j) == "todo"
         and (isHub(list, s) or chainsOnHere(list, s)) then
-        add(j, { prize = laterCost(list, j), opt = true, early = true, chain = not isHub(list, s) or nil })
+        add(j, { prize = Next.Prize(list, s, planned), opt = true, early = true, chain = not isHub(list, s) or nil })
       end
     end
   end
@@ -410,7 +746,11 @@ function Next.Pick(planned)
     for _, j in ipairs(visit.now) do
       -- (one of the plan's own next stops already: it may now come before the trip)
       if byStep[j] then byStep[j].visit, byStep[j].early = true, true
-      else add(j, { prize = laterCost(list, j) + share, opt = true, early = true, visit = true }) end
+      else
+        -- (left for the plan's visit it costs the stop, carrying it, and its share of the trip there - the visit's way in
+        -- and out is the trip, so it isn't priced again as a detour of its own; its XP isn't at stake: the visit does it)
+        add(j, { prize = serviceOf(list[j]) + Next.CARRY + share, opt = true, early = true, visit = true })
+      end
     end
   end
   -- your bags filling up (or gear wearing out): the vendors of this map as prizes, worth more the closer you are to
@@ -522,6 +862,17 @@ function Next.Pick(planned)
   -- a quest the plan passed as behind you, picked up again here: it's on your route now (Engine.BehindYou)
   Next.taken = (pick and byStep[pick] and byStep[pick].behind) and list[pick] or nil
   return pick
+end
+
+-- a solve: what its prices depend on is taken once, and the trip-planner searches they may start are bounded
+-- (Next.ASK_PER_PICK) - whatever way it ends
+function Next.Pick(planned)
+  sigNow, askLeft = nil, nil
+  sigNow, askLeft = priceSig(), Next.ASK_PER_PICK
+  local ok, r = pcall(pick, planned)
+  sigNow, askLeft = nil, nil
+  if not ok then error(r, 0) end
+  return r
 end
 
 -- why a step picked out of plan order, in words

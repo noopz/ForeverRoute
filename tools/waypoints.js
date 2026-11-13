@@ -7,6 +7,11 @@ const path = require('path');
 const os = require('os');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 
+const AVOID_COST = +(process.env.FR_AVOID_COST || 8); // a hostile town's ground: 8 yards of walking a yard
+// ...out to its guards' reach: the town's radius is its NPCs' spread, its guards patrol and come for you well beyond it
+// (a Booty Bay to Nesingwary walk passed 140 yd from Grom'gol's centre, its radius 83 - along the camp's road)
+const AVOID_MARGIN = +(process.env.FR_AVOID_MARGIN || 110);
+
 function simplify(pts, eps) {
   // Douglas-Peucker in yards; never drop a point where the height changes a lot (stairs, ramps, lifts)
   if (pts.length < 3) return pts;
@@ -25,9 +30,21 @@ function simplify(pts, eps) {
 
 if (!isMainThread) {
   const { VoxNav } = require('./voxnav');
-  const { terrainDir, area, pairs } = workerData;
+  const { terrainDir, area, pairs, avoid } = workerData;
   const nav = new VoxNav(terrainDir, area);
   const B = nav.meta.bounds, wY = B.left - B.right, wX = B.top - B.bottom;
+  // the other faction's towns in this zone (avoid: [{ x, y (0-1), r yards }]): their ground costs AVOID_COST times its
+  // length, so a path goes round when there is a way round (Grom'gol: a Booty Bay to Nesingwary walk went through it)
+  if (avoid && avoid.length) {
+    const cc = new Float32Array(nav.W * nav.H).fill(1);
+    for (const t of avoid) {
+      const X = t.x * wY, Y = t.y * wX, R = t.r + AVOID_MARGIN;
+      const c0 = Math.max(0, Math.floor((X - R) / nav.cell)), c1 = Math.min(nav.W - 1, Math.ceil((X + R) / nav.cell));
+      const r0 = Math.max(0, Math.floor((Y - R) / nav.cell)), r1 = Math.min(nav.H - 1, Math.ceil((Y + R) / nav.cell));
+      for (let r = r0; r <= r1; r++) for (let col = c0; col <= c1; col++) if (Math.hypot((col + 0.5) * nav.cell - X, (r + 0.5) * nav.cell - Y) <= R) cc[r * nav.W + col] = AVOID_COST;
+    }
+    nav.colCost = cc;
+  }
   const out = {};
   for (const [key, a, b] of pairs) {
     try {
@@ -39,7 +56,9 @@ if (!isMainThread) {
       floors.reverse();
       const pts = floors.map((f) => { const c = nav.colOf[f]; const row = Math.floor(c / nav.W), col = c % nav.W; const X = (col + 0.5) * nav.cell, Y = (row + 0.5) * nav.cell; return { X, Y, z: nav.z[f], x: X / wY, y: Y / wX }; });
       const s = simplify(pts, 4);
-      out[key] = { yards: Math.round(d[fb]), wp: s.slice(1, -1).map((p) => p.x.toFixed(4) + ',' + p.y.toFixed(4) + ',' + Math.round(p.z)).join(';'), z0: Math.round(s[0].z), z1: Math.round(s[s.length - 1].z) };
+      // (the walked length, not the search's cost: with towns to walk round the two differ)
+      let walked = 0; for (let i = 1; i < pts.length; i++) walked += Math.hypot(pts[i].X - pts[i - 1].X, pts[i].Y - pts[i - 1].Y);
+      out[key] = { yards: Math.round(walked || d[fb]), wp: s.slice(1, -1).map((p) => p.x.toFixed(4) + ',' + p.y.toFixed(4) + ',' + Math.round(p.z)).join(';'), z0: Math.round(s[0].z), z1: Math.round(s[s.length - 1].z) };
     } catch (e) { out[key] = null; }
   }
   parentPort.postMessage(out);
@@ -62,7 +81,14 @@ async function addWaypoints(routes, opts) {
   const FM = {};
   for (const n of Object.values(opts.db.npcs)) if (n && /^(Gryphon Master|Hippogryph Master|Flight Master|Wind Rider Master|Bat Handler)$/i.test(n.sub || '')) for (const s of n.spawns || []) if (s.x >= 0) (FM[s.zone] = FM[s.zone] || []).push(s);
   const hasTerrain = (a) => fs.existsSync(path.join(opts.terrainDir, `area${a}.vox.json`));
-  const k = (a, p, q) => `${a}:${p.x.toFixed(1)},${p.y.toFixed(1)}>${q.x.toFixed(1)},${q.y.toFixed(1)}`;
+  // the other faction's towns per zone, for the plan's faction (tools/hostile-towns.json lists what is hostile to whom):
+  // a zone with one gets its walks keyed by faction - the rest stay shared by both
+  const avoidOf = {};
+  if (opts.faction) {
+    let H = null; try { H = JSON.parse(fs.readFileSync(path.join(__dirname, 'hostile-towns.json'), 'utf8')); } catch (e) {}
+    for (const t of (H && H[opts.faction]) || []) { const a = areaOf[t.m]; if (a) (avoidOf[a] = avoidOf[a] || []).push({ x: t.x, y: t.y, r: t.r }); }
+  }
+  const k = (a, p, q) => `${a}:${p.x.toFixed(1)},${p.y.toFixed(1)}>${q.x.toFixed(1)},${q.y.toFixed(1)}` + (avoidOf[a] ? ':' + opts.faction : '');
   const todo = {}; // area -> [[key, a, b]]
   const legs = []; // [step, key]
   for (const r of routes) {
@@ -95,7 +121,7 @@ async function addWaypoints(routes, opts) {
         const area = left.shift();
         const pairs = [...todo[area].values()];
         const res = await new Promise((resolve) => {
-          const w = new Worker(__filename, { workerData: { terrainDir: opts.terrainDir, area: +area, pairs }, resourceLimits: { maxOldGenerationSizeMb: 3000 } });
+          const w = new Worker(__filename, { workerData: { terrainDir: opts.terrainDir, area: +area, pairs, avoid: avoidOf[area] || null }, resourceLimits: { maxOldGenerationSizeMb: 3000 } });
           w.on('message', (m) => { resolve(m); w.terminate(); }); // done with it: don't leave the thread alive w.on('error', (e) => { console.error('waypoints area ' + area + ': ' + e.message); resolve({}); });
         });
         Object.assign(cache, res); done += pairs.length;

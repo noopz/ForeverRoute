@@ -19,7 +19,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const ROOT = path.join(__dirname, '..');
-const SIM = path.join(ROOT, 'sim', 'pkg', require('fs').readFileSync(path.join(__dirname, 'sim-version.txt'), 'utf8').trim()) /* tools/sim-version.txt: the simulator in use */;
+const { SIM, BIN: SIM_BIN, simEnv } = require('./sim-path'); // the simulator for this platform (tools/sim-path.js, sim-version.txt)
 const src = path.join(ROOT, 'addon', 'ForeverRoute');
 const [plan = 'starter:gnome-warlock', personaArg = 'clean,skip,fast,slow,die,reload,secret', stepsArg] = process.argv.slice(2);
 const personas = personaArg.split(',').filter(Boolean);
@@ -138,9 +138,9 @@ if (simKey && fs.existsSync(path.join(SIMCACHE, simKey + '.md'))) {
       if (PAR > 1) { const t1 = Date.now(); while (os.freemem() < 7.5 * 2 ** 30 && Date.now() - t1 < 600000) await new Promise((r) => setTimeout(r, 5000)); }
       let raw1 = '';
       await new Promise((resolve) => {
-        const child = spawn(path.join(SIM, 'wow-sim.exe'), ['--allow-ui-version-mismatch', '--addons-path', cw, '--session-wtf-path', path.join(cw, 'wtf'),
+        const child = spawn(SIM_BIN, ['--allow-ui-version-mismatch', '--addons-path', cw, '--session-wtf-path', path.join(cw, 'wtf'),
           '--class', simClass, '--race', simRace, 'run-tests', 'ForeverRoute'],
-        { cwd: SIM, env: { ...process.env, WOW_INSTALL_PATH: require('./game-dir').WOW }, stdio: ['ignore', 'pipe', 'pipe'] });
+        { cwd: SIM, env: simEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
         child.stdout.on('data', (d) => (raw1 += d)); child.stderr.on('data', (d) => (raw1 += d));
         // the watchdog: the logs grow while the player plays; when none has for STALL_SEC, something loops
         let lastSize = -1, lastChange = Date.now();

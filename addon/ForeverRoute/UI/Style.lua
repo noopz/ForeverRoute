@@ -184,19 +184,28 @@ function Style.Panel(frame, fill)
 end
 
 -- square icon button (tinted glyph, hover glow, tooltip)
-function Style.IconButton(parent, glyph, size, onClick, tip)
+-- tip: one line, or { title, line, line... }: a white title with what the button does under it
+-- color: the glyph's colour at rest (default: the secondary text colour) - a red X reads as "no" before any tooltip
+function Style.IconButton(parent, glyph, size, onClick, tip, color)
   local b = CreateFrame("Button", nil, parent)
   b:SetSize(size, size)
   b.bg = b:CreateTexture(nil, "BACKGROUND"); b.bg:SetTexture(Style.MEDIA .. "disc"); b.bg:SetAllPoints(); b.bg:SetVertexColor(1, 1, 1, 0.06)
   b.icon = b:CreateTexture(nil, "ARTWORK"); b.icon:SetTexture(Style.MEDIA .. glyph); b.icon:SetPoint("CENTER"); b.icon:SetSize(size * 0.55, size * 0.55)
-  local c = Style.C.sub; b.icon:SetVertexColor(c[1], c[2], c[3])
+  local rest = color or Style.C.sub
+  b.icon:SetVertexColor(rest[1], rest[2], rest[3])
+  b.tip = tip
   b:SetScript("OnClick", onClick)
   b:SetScript("OnEnter", function(self)
     self.bg:SetVertexColor(1, 0.82, 0.36, 0.22); self.icon:SetVertexColor(1, 0.9, 0.6)
-    if tip then GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText(tip, 1, 1, 1, 1, true); GameTooltip:Show() end
+    local t = self.tip
+    if type(t) == "table" then
+      GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText(t[1], 1, 1, 1, 1, true)
+      for k = 2, #t do GameTooltip:AddLine(t[k], 0.75, 0.8, 0.88, true) end
+      GameTooltip:Show()
+    elseif t then GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:SetText(t, 1, 1, 1, 1, true); GameTooltip:Show() end
     if parent.OnChildEnter then parent:OnChildEnter() end
   end)
-  b:SetScript("OnLeave", function(self) self.bg:SetVertexColor(1, 1, 1, 0.06); local c2 = Style.C.sub; self.icon:SetVertexColor(c2[1], c2[2], c2[3]); GameTooltip:Hide() end)
+  b:SetScript("OnLeave", function(self) self.bg:SetVertexColor(1, 1, 1, 0.06); self.icon:SetVertexColor(rest[1], rest[2], rest[3]); GameTooltip:Hide() end)
   return b
 end
 

@@ -39,7 +39,7 @@ const base = JSON.parse(fs.readFileSync(path.join(src, 'campaign.json'), 'utf8')
 // 1. the side leg, from the trunk's state at the boundary
 const altJson = path.join(out, 'side.json');
 if (!fs.existsSync(altJson)) {
-  const cfg = { ...base, startStateFile: c.beforeFile, firstZone: z, forceLegs: [z], maxLegs: 1, parallel: 2, optimizeSeconds: base.optimizeSeconds || 10,
+  const cfg = { ...base, startStateFile: c.beforeFile, firstZone: z, forceLegs: [z], maxLegs: 1, parallel: 2,
     workDir: path.join(out, 'work-side'), routeOut: path.join(out, 'side.lua'), pathOut: altJson };
   delete cfg.routesOut;
   const f = path.join(out, 'side-cfg.json'); fs.writeFileSync(f, JSON.stringify(cfg));

@@ -1,4 +1,4 @@
-const { raceOk } = require('./world'); // race masks above bit 32 (Skyborne)
+const { raceOk, raceFits, classFits } = require('./world'); // race masks above bit 32 (Skyborne)
 // Route generator v1: hub-and-loop planner.
 //  - finds quest hubs (clusters of quest NPCs), loads up at each hub (all turn-ins, then all accepts)
 //  - plans a field loop over open objectives (nearest-neighbour + 2-opt), merging objectives that share a spot
@@ -8,7 +8,7 @@ const { raceOk } = require('./world'); // race masks above bit 32 (Skyborne)
 //  - quests whose turn-in is outside the planned zones are carried and listed for the next leg
 // usage: node route2.js <db.json> <config.json> [out.json]
 const fs = require('fs');
-const { XP_TO_LEVEL, RACE_BIT, CLASS_BIT, CAPITAL_AREAS, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, trainNow, setLearned } = require('./world'); // the game's rules, shared by every stage
+const { XP_TO_LEVEL, RACE_BIT, CLASS_BIT, CAPITAL_AREAS, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, trainNow, setLearned, grindSeconds, levelAbove, minLevelFor } = require('./world'); // the game's rules, shared by every stage
 const [dbPath, cfgPath, outPath] = process.argv.slice(2);
 // a long-lived host (tools/route2-host.js) keeps the big files parsed between runs (by path and modification time)
 const readJsonCached = (p) => { const C = global.__FR_JSON; if (!C) return JSON.parse(fs.readFileSync(p, 'utf8')); const k = p + ':' + fs.statSync(p).mtimeMs; return C[k] || (C[k] = JSON.parse(fs.readFileSync(p, 'utf8'))); };
@@ -16,8 +16,8 @@ const { quests: Q, npcs: N, objects: O } = readJsonCached(dbPath);
 const cfg = Object.assign({
   // the shared level gate (world.js): quests up to LEVEL_ABOVE above you. The plan holds at most QUEST_LOG_MAX - 10
   // quests (30 of Forever's 40): the rest of the log is yours - a dungeon's quests, stragglers, whatever you picked up
-  maxAbove: LEVEL_ABOVE + 1, maxLog: QUEST_LOG_MAX - 10,
-  maxMobAbove: LEVEL_ABOVE + 1, secPerKill: 22, secPerObject: 12, dropRate: 0.5, mergeYards: 60,
+  maxLog: QUEST_LOG_MAX - 10, // maxAbove / maxMobAbove: a fixed gate (+1) for trials; unset, the gate goes by level (world.levelAbove)
+  secPerKill: 22, secPerObject: 12, dropRate: 0.5, mergeYards: 60,
   hubYards: 160, detourYards: 250, maxKills: 45, faction: 'alliance', minHubNpcs: 2, maxTripMin: 30, hearthCooldownMin: 60, minXpPerMin: 0,
   trainLevels: [], trainerTripMin: 7, backgroundMinStops: 3, finishOpen: true,
 }, JSON.parse(fs.readFileSync(cfgPath, 'utf8')));
@@ -40,9 +40,9 @@ if (cfg.charDir) {
 
 const raceBit = RACE_BIT[cfg.race], classBit = CLASS_BIT[cfg.class];
 const petClass = ['warlock', 'hunter'].includes(cfg.class);
-const ZONE_NAME = { 1: 'Dun Morogh', 12: 'Elwynn Forest', 38: 'Loch Modan', 40: 'Westfall', 44: 'Redridge Mountains', 10: 'Duskwood', 11: 'Wetlands', 148: 'Darkshore', 1519: 'Stormwind', 1537: 'Ironforge' };
-// every other zone by its name from the map conversion (steps showed "zone 331" for Ashenvale)
-try { for (const t of JSON.parse(fs.readFileSync(cfg.conversion, 'utf8')).geometry.transforms) if (!ZONE_NAME[t.area_id] && t.target_name) ZONE_NAME[t.area_id] = t.target_name; } catch (e) {}
+// the zone names the steps use (world.js: shared with the tools that read the steps back), every zone by its name from
+// the map conversion (steps showed "zone 331" for Ashenvale)
+const ZONE_NAME = require('./world').plannerZoneNames((() => { try { return JSON.parse(fs.readFileSync(cfg.conversion, 'utf8')).geometry.transforms; } catch (e) { return []; } })());
 const zname = (z) => ZONE_NAME[z] || 'zone ' + z;
 
 // ---------- geometry ----------
@@ -263,8 +263,11 @@ function chainTail(q, L, done, depth = 1, seen = new Set()) {
     if (seen.has(f) || (done && done.has(f))) continue;
     seen.add(f);
     const fq = Q[f];
-    if (!fq || (fq.races && !raceOk(fq.races, cfg.race)) || (fq.classes && !(fq.classes & classBit)) || fq.reqLevel > L + 10 || fq.level < L - 6) continue;
-    v += Math.pow(CHAIN_DISCOUNT, depth) * require('./world').questXp(baseXp(fq), fq.level, L) + chainTail(fq, L, done, depth + 1, seen);
+    if (!fq || !raceFits(fq.races, cfg.race) || !classFits(fq.classes, cfg.class) || fq.reqLevel > L + 10) continue;
+    // a part below the window pays nothing but doesn't end the chain: the ones after it can pay (The Tower of
+    // Althalaxx: three parts at 18, then 21, 24, 28)
+    if (fq.level >= L - 6) v += Math.pow(CHAIN_DISCOUNT, depth) * require('./world').questXp(baseXp(fq), fq.level, L);
+    v += chainTail(fq, L, done, depth + 1, seen);
   }
   return v;
 }
@@ -291,8 +294,8 @@ function killCreditLabel(q, o) {
 const BREADCRUMB_OF = {};
 for (const t of Object.values(Q)) for (const b of t.breadcrumbs || []) (BREADCRUMB_OF[b] = BREADCRUMB_OF[b] || []).push(t.id);
 function eligible(q) {
-  if (q.races && !raceOk(q.races, cfg.race)) return 'race';
-  if (q.classes && !(q.classes & classBit)) return 'class';
+  if (!raceFits(q.races, cfg.race)) return 'race';
+  if (!classFits(q.classes, cfg.class)) return 'class';
   if (q.special & 1) return 'repeatable';
   if (HOLIDAY_SORTS.has(q.zone)) return 'holiday event';
   if (q.skill) return 'profession';
@@ -302,11 +305,28 @@ function eligible(q) {
   if (isBonus && q.reqLevel > cfg.level + 2) return 'level';
   // a must-do chain's low first step opens the good part. A quest already finished in your log is just a hand-in -
   // but one far below you (Messenger to Westfall at 26: 250 XP) isn't worth a trip either, unless it opens a follow-up
-  if (q.level < cfg.minQuestLevel && !(cfg.mustDo || []).includes(q.id) && !(finishedInLog(q.id) && opensFollowUp(q.id))) return 'low level';
+  // or its hand-in is in this leg's zones: no trip, and its work is done (the campaign keeps such a quest in the log for
+  // a leg that passes its hand-in, campaign.js pruneLog - dropped, its work in an earlier leg's minutes was for nothing)
+  // ... nor a low chain part whose chain still pays at your level (cfg.headChainShare of a level: the open-zones rule's
+  // share, carry.js) - the part is the way in
+  if (q.level < cfg.minQuestLevel && !(cfg.mustDo || []).includes(q.id) && !(finishedInLog(q.id) && (opensFollowUp(q.id) || q.finishers.some((f) => (f.spawns || []).some(inZones))))
+    && !(cfg.headChains !== false && opensFollowUp(q.id) && chainTail(q, cfg.level, new Set(cfg.completed || [])) >= (cfg.headChainShare ?? 0.05) * (XP_TO_LEVEL[cfg.level] || 1))) return 'low level';
   // a breadcrumb (The Corruption Abroad) is no longer offered once the quest it leads to is in your log or done: the
   // giver has nothing for you (Argos Nightwhisper, 2026-11-09)
   if (!(cfg.active || {})[q.id] && (BREADCRUMB_OF[q.id] || []).some((t) => (cfg.completed || []).includes(t) || (cfg.active || {})[t])) return 'breadcrumb: its quest is already yours';
   return null;
+}
+// Does a quest beat grinding? Its XP and its kills' XP for the time its work takes (times a frustration penalty), against
+// grinding the level as people grind (world.grindSeconds). The kill-count and frustration filters were tuned when a
+// grind looked cheap; with grinding priced honestly a slow or annoying quest still beats it - and the plans dropped
+// half the solo quests a human can do (885 of 1822), then ground 27 h. Only a quest that pays less than grinding is
+// dropped now. cfg.beatGrindShare: the share of the grind rate a quest must reach (1)
+const GRIND_RATE = (() => { const L = Math.max(1, Math.min(59, cfg.level || 1)); const per = Math.max(1, killXp(L, L)); const n = Math.ceil(XP_TO_LEVEL[L] / per); return XP_TO_LEVEL[L] / grindSeconds(n, cfg.secPerKill, cfg.grind); })();
+function beatsGrind(t, penalty = 1) {
+  const L = cfg.level || 1;
+  let xp = questXpAt(t.q, L), sec = 0;
+  for (const o of t.objs) { sec += (o.work || 0) * penalty; if (o.kills > 0 && o.mobLevel != null) xp += o.kills * killXp(o.mobLevel, L); }
+  return xp / Math.max(60, sec) >= GRIND_RATE * (cfg.beatGrindShare ?? 1);
 }
 const tasks = {}, TASK_DUMP = {};
 for (const q of Object.values(Q)) {
@@ -316,7 +336,10 @@ for (const q of Object.values(Q)) {
   const finisherAny = q.finishers.find((s) => s.spawns && s.spawns.length);
   // a quest already in your log that you picked up somewhere else (A Scroll from Mauren from Stonetalon): no giver
   // here is needed, only its hand-in - else it was carried past its turn-in NPC leg after leg and never handed in
-  const carriedIn = !starter && !!(cfg.active || {})[q.id] && !!finisherIn;
+  // ... or one whose work is here though its hand-in is not (picked up elsewhere for this zone's work: an away
+  // objective, below): done here, then carried to its hand-in
+  const workHere = () => q.objectives.some((o) => [...(o.kind === 'kill' ? [o.npc] : o.npcs || []), ...(o.npcDrops || [])].some((id) => N[id] && (N[id].spawns || []).some(inZones)) || [...(o.kind === 'object' ? [o.object] : []), ...(o.objectDrops || [])].some((id) => O[id] && (O[id].spawns || []).some(inZones)));
+  const carriedIn = !starter && !!(cfg.active || {})[q.id] && (!!finisherIn || (cfg.awayObjectives !== false && !!finisherAny && workHere()));
   if (!starter && !carriedIn) continue;  // item-started quests: v1 leaves them out
   if ([starter, ...q.finishers].some((s) => s && s.friendly === (cfg.faction === 'horde' ? 'A' : 'H'))) continue;
   if (!finisherIn && !finisherAny) continue;
@@ -338,6 +361,7 @@ for (const q of Object.values(Q)) {
     }
   }
   let elite = false, outside = false;
+  const noSource = []; // item objectives with no place anywhere in the quest data (see below)
   for (const o of q.objectives) {
     let spawns = [], label = '', work = 0, mobs = [], kills = 0, buying = false;
     if (o.kind === 'kill' || o.kind === 'killcredit') {
@@ -383,7 +407,7 @@ for (const q of Object.values(Q)) {
     const ref = t.accept.at || (t.turnin.spawns || [])[0];
     const vend = buying && ref ? spawns.filter((sp) => sp.x >= 0).sort((a, b) => (a.zone === ref.zone ? 0 : 1) - (b.zone === ref.zone ? 0 : 1) || straightDist(a, ref) - straightDist(b, ref))[0] : null;
     let at = vend ? { ...vend, density: 1, total: 1, spread: 1 } : cluster(spawns);
-    let dungeon = null;
+    let dungeon = null, away = null;
     // a quest the data files under one of Forever's new dungeons - ones it places no creature in - is done in there,
     // wherever its mobs are said to stand: their bosses come placed in the open zone (Highland Horror, for Horrors in
     // the Highland in Excavation Site: Wetlands, at 11,56 - Menethil Harbor), and a plan sent players to farm a dungeon
@@ -396,17 +420,31 @@ for (const q of Object.values(Q)) {
     if (!at) {
       const d = dungeonOf(spawns);
       if (dungeonOn(d)) { dungeon = d; at = { ...d.entrance, density: 1, total: 1, spread: 1 }; label = label + ' (in ' + d.name + ')'; work = 0; kills = 0; }
+      // an item whose sources the data names but has no record of: Forever's new objects are missing from QuestieDB -
+      // Riverglades' Fresh Apple, Pawprint Tracing and Rog'mar Supply Crate come from objects it lists by id and knows
+      // nothing else of, so Apple of My Eye, Foal Play and Rog'mar Supplies read as "objectives outside the planned
+      // zones" and the chains behind them were lost. Handled below like work the data lists none of. Not an item with no
+      // source listed at all (from a container, handed over by the giver, crafted) nor one from a mob or object the data
+      // has but places nowhere (summoned, an event's): no sign of Forever's missing objects, those stay 'outside'
+      else if (o.kind === 'item' && !buying && !spawns.some((sp) => sp.instance) && !(o.vendors || []).length && (o.npcDrops.length || o.objectDrops.length) && !o.npcDrops.some((d) => N[d]) && !o.objectDrops.some((d) => O[d])) { noSource.push({ label: label.replace(/ \(.*\)$/, ''), name: o.name }); continue; }
+      // work in another open-world zone (In Search of The Temple: given in Tanaris, done in the Swamp of Sorrows; Bring
+      // the Light): picked up here and carried, done on a leg in that zone - like a quest whose mobs are still above you
+      // (tooHigh). Its spot is the giver's, a placeholder: the work never counts as doable on this leg. A leg in the
+      // work's zone takes the quest from your log (carriedIn) and does it there. cfg.awayObjectives false: skipped as before
+      else if (cfg.awayObjectives !== false && ref && ZONE_NAME[(spawns.find((sp) => sp.x >= 0 && !sp.instance) || {}).zone]) { away = spawns.find((sp) => sp.x >= 0 && !sp.instance).zone; at = { ...ref, density: 1, total: 1, spread: 1, area: 0 }; }
       else { outside = true; continue; }
     }
     if (allElite && !dungeon) elite = true; // dungeon mobs are elite by design: the run is planned as a group
     const mobLevel = levelAt(mobs, at, dungeon, q);
+    // fights above you take longer (misses, resists, more damage taken, more rest): +15% a level above the leg's start
+    if (kills > 0 && mobLevel > (cfg.level || 0) && !dungeon) work *= 1 + 0.15 * (mobLevel - cfg.level);
     // the same objective listed twice (The Great Outdoors: "use the campfire" twice, same object): one step does both
     if (t.objs.some((x) => x.label === label && x.at && at && x.at.x === at.x && x.at.y === at.y && x.at.zone === at.zone)) { dropInfo = null; continue; }
     // the same mobs where the quest is given or handed in, when the plan farms them in another zone (Snapjaws: a few on the
     // river by Southshore, the plan at Lordamere Lake in Alterac with 36): the card says so - why not the nearer ones
     const alsoRef = t.accept.at || (t.turnin.spawns || [])[0];
     const alsoN = (at && alsoRef && !dungeon && alsoRef.zone !== at.zone) ? spawns.filter((p) => p.zone === alsoRef.zone && p.x >= 0).length : 0;
-    t.objs.push({ also: alsoN >= 3 ? zname(alsoRef.zone) + ':' + alsoN : undefined, dropPct: dropInfo ? Math.round(100 * Object.values(dropInfo.rates).reduce((x, y) => x + y, 0) / Math.max(1, Object.values(dropInfo.rates).length)) : undefined, label, at, work, kills, mobLevel, mobIds: mobs.map((m) => m.id), allSpawns: spawns.filter(inZones), drop: o.kind === 'item' && !dungeon ? dropInfo : null, dungeon: dungeon ? dungeon.id : null, killsFor: o.kind === 'kill' || o.kind === 'killcredit' ? mobs.map((m) => m.id) : null });
+    t.objs.push({ also: alsoN >= 3 ? zname(alsoRef.zone) + ':' + alsoN : undefined, dropPct: dropInfo ? Math.round(100 * Object.values(dropInfo.rates).reduce((x, y) => x + y, 0) / Math.max(1, Object.values(dropInfo.rates).length)) : undefined, label, at, work, kills, mobLevel, mobIds: mobs.map((m) => m.id), allSpawns: spawns.filter(inZones), drop: o.kind === 'item' && !dungeon && !away ? dropInfo : null, dungeon: dungeon ? dungeon.id : null, killsFor: o.kind === 'kill' || o.kind === 'killcredit' ? mobs.map((m) => m.id) : null, away: away || undefined });
     dropInfo = null;
   }
   // several fights in one hunting ground (Tramping Paws: Mosshide Gnolls and Mongrels mixed together): one spot for
@@ -422,8 +460,10 @@ for (const q of Object.values(Q)) {
   // what each objective was read as, before any filtering (cfg.tasksOut: for tools/test-route2-tasks.js)
   if (cfg.tasksOut) TASK_DUMP[q.id] = { name: q.name, objs: t.objs.map((o) => ({ label: o.label, kills: o.kills, mobLevel: o.mobLevel, dropPct: o.dropPct, need: o.drop ? o.drop.need : undefined })) };
   const totalKills = t.objs.reduce((s, o) => s + o.kills, 0);
-  if (totalKills > cfg.maxKills && !(cfg.keep || []).includes(q.id) && !finishedInLog(q.id)) { skipped.push([q, `about ${totalKills} kills needed: not worth it`]); continue; }
+  if (totalKills > cfg.maxKills && !beatsGrind(t) && !(cfg.keep || []).includes(q.id) && !finishedInLog(q.id)) { skipped.push([q, `about ${totalKills} kills needed: not worth it`]); continue; }
   if (outside && !finishedInLog(q.id)) { skipped.push([q, 'objectives outside the planned zones (dungeon or other zone)']); continue; }
+  // already in your log, all its work elsewhere and its hand-in elsewhere: nothing for this leg
+  if (t.accept.inLog && !finisherIn && t.objs.length && t.objs.every((o) => o.away)) continue;
   // given and handed in by the same NPC, its text says there is work, and the data lists none of it (Brewer's Trade:
   // "Deliver the bottles to Dun Garok" - the plan had you hand it in the moment you took it; Destroy 5 Twilight Ritual
   // Circles, Plant 5 saplings): where the work is isn't known, so it can't be routed. The instant ones stay ("Wait a
@@ -436,6 +476,15 @@ for (const q of Object.values(Q)) {
     const where = t.accept.at || (t.turnin.spawns || [])[0];
     if (!where || !(leadsOn(q, Q) || (cfg.keep || []).includes(q.id))) { skipped.push([q, 'the quest data lists none of its objectives: where its work is is unknown']); continue; }
     t.objs.push({ label: unknownWorkLabel(q), at: { ...where, density: 1, total: 1, spread: 1, area: 0 }, work: cfg.unknownWorkSec ?? 300, kills: 0, mobLevel: undefined, mobIds: [], allSpawns: [], drop: null, dungeon: null, killsFor: null, unknown: true });
+  }
+  // an item with no source in the data (above): the same rule as work the data lists none of - a quest that leads on
+  // stays, the item an unknown step placed with the quest's other work (else at its giver) at a flat cfg.unknownWorkSec
+  // (the card shows the quest log's own line for it, the addon draws no pin); one that leads nowhere is left out
+  if (noSource.length && !finishedInLog(q.id)) {
+    const other = t.objs.find((o) => o.at && !o.dungeon);
+    const where = (other && other.at) || t.accept.at || (t.turnin.spawns || [])[0];
+    if (!where || !(leadsOn(q, Q) || (cfg.keep || []).includes(q.id))) { skipped.push([q, 'the quest data has no source for ' + noSource.map((x) => x.name).join(', ') + ': where to get it is unknown']); continue; }
+    for (const { label } of noSource) t.objs.push({ label, at: { zone: where.zone, x: where.x, y: where.y, density: 1, total: 1, spread: 1, area: 0 }, work: cfg.unknownWorkSec ?? 300, kills: 0, mobLevel: undefined, mobIds: [], allSpawns: [], drop: null, dungeon: null, killsFor: null, unknown: true });
   }
   // a pet class (warlock, hunter) soloes elites well below it - not by the quest's level: Forever's elite Dark Iron and
   // Dragonmaw camps (27-31) came with quests of level 27-29, and a level-29 warlock was sent into them
@@ -454,14 +503,20 @@ for (const q of Object.values(Q)) {
     const keepForReward = t.qual.rewardValue >= (cfg.keepRewardValue || 1200);
     // ...or for its chain: a mildly annoying first part that opens a chain worth more than itself stays
     const keepForChain = chainTail(q, cfg.level, COMPLETED0) >= baseXp(q) * (cfg.keepChainShare ?? 1.5);
-    if (t.qual.frustration >= (cfg.maxFrustration ?? 0.55) && !keepForReward && !keepForChain && !(cfg.bonusQuests || []).includes(q.id) && !(cfg.keep || []).includes(q.id) && !finishedInLog(q.id)) {
+    const annoying = t.qual.frustration >= (cfg.maxFrustration ?? 0.55);
+    if (annoying && !keepForReward && !keepForChain && !beatsGrind(t, 1 + t.qual.frustration) && !(cfg.bonusQuests || []).includes(q.id) && !(cfg.keep || []).includes(q.id) && !finishedInLog(q.id)) {
       skipped.push([q, 'frustrating: ' + t.qual.reasons.join(', ')]); continue;
     }
+    // kept though annoying (it still beats a grind): its work takes longer - the respawn waits, the hunt for the spots
+    if (annoying) for (const o of t.objs) o.work = Math.round((o.work || 0) * (1 + t.qual.frustration));
   }
   tasks[q.id] = t;
 }
 if (cfg.tasksOut) { fs.writeFileSync(cfg.tasksOut, JSON.stringify(TASK_DUMP)); if (cfg.tasksOnly) process.exit(0); }
-for (const t of Object.values(tasks)) for (const ex of t.q.exclusive) if (tasks[ex] && tasks[t.q.id]) {
+// (through closers, exclusive-alternatives.js: a quest's own prerequisite in its exclusive list - Returning Home for
+// Stars of Elune - does not close it, nor make the two a pair where one goes)
+const { closers } = require('./exclusive-alternatives');
+for (const t of Object.values(tasks)) for (const ex of closers(Q, t.q)) if (tasks[ex] && tasks[t.q.id]) {
   const loser = baseXp(tasks[ex].q) > baseXp(t.q) ? t.q.id : ex;
   skipped.push([tasks[loser].q, 'alternative to ' + (loser === ex ? t.q.name : tasks[ex].q.name)]); delete tasks[loser];
 }
@@ -470,7 +525,7 @@ const done0 = new Set(cfg.completed || []);
 // character, offered in every start zone): the others are closed. Zones are planned one at a time, so the check
 // above, within this zone, can't see the one you did in the last zone.
 for (const [id, t] of Object.entries(tasks)) {
-  const other = (t.q.exclusive || []).find((e) => done0.has(e) || (cfg.active || {})[e]);
+  const other = closers(Q, t.q).find((e) => done0.has(e) || (cfg.active || {})[e]);
   if (other && !(cfg.active || {})[id] && !done0.has(+id)) { skipped.push([t.q, 'alternative to quest ' + other + ', already done or in your log']); delete tasks[id]; }
 }
 for (let ch = true; ch;) {
@@ -540,7 +595,7 @@ const npcPts = [];
   const foe = cfg.faction === 'horde' ? 'A' : 'H';
   const seen = new Set();
   const addNpc = (n) => { if (!n || seen.has(n.id) || n.friendly === foe || !n.friendly || n.spawns.length > 6) return; /* skip critters and wandering mobs that happen to give quests */ seen.add(n.id); for (const sp of n.spawns) if (inZones(sp)) npcPts.push({ ...sp, npc: n.id, who: n.name }); };
-  for (const q of Object.values(Q)) { if (q.races && !raceOk(q.races, cfg.race)) continue; for (const st of [...q.starters, ...q.finishers]) if (st.type === 'npc') addNpc(N[st.id]); }
+  for (const q of Object.values(Q)) { if (!raceFits(q.races, cfg.race)) continue; for (const st of [...q.starters, ...q.finishers]) if (st.type === 'npc') addNpc(N[st.id]); }
   for (const n of Object.values(N)) if (n && /Innkeeper|Gryphon Master|Flight Master|Wind Rider Master|Bat Handler/.test(n.sub || '')) addNpc(n);
 }
 const hubs = [];
@@ -593,14 +648,20 @@ let gainedTotal = 0; // XP this leg so far (the rate a trip away has to beat: cf
 function gain(n) { xp += n; gainedTotal += n; while (level < 60 && xp >= XP_TO_LEVEL[level]) { xp -= XP_TO_LEVEL[level]; level++; step({ type: 'level' }); } }
 const ready = (t) => t.objs.every((o, i) => odone(t.q.id, i));
 // kill objectives against mobs well above you wait until you are close enough (a level-19 warlock and level-24 skeletons)
-const tooHigh = (o) => o.kills > 0 && (o.mobLevel || 0) > level + cfg.maxMobAbove - 1;
+const aboveQ = (L) => (cfg.maxAbove != null ? cfg.maxAbove - 1 : levelAbove(L));
+const aboveM = (L) => (cfg.maxMobAbove != null ? cfg.maxMobAbove - 1 : levelAbove(L));
+// the lowest level a quest (doableQ) or its mobs (doableM) are within the gate
+const doableQ = (q) => (cfg.maxAbove != null ? q - cfg.maxAbove + 1 : minLevelFor(q));
+const doableM = (m) => (cfg.maxMobAbove != null ? m - cfg.maxMobAbove + 1 : minLevelFor(m));
+// (an away objective - work in another zone - is never doable on this leg: it waits in your log like one above you)
+const tooHigh = (o) => !!o.away || (o.kills > 0 && (o.mobLevel || 0) > level + aboveM(level));
 // a quest that is all fighting, with every fight still out of reach a level later, is picked up when you get there:
 // taking it now only fills a log slot and gets carried from zone to zone
 function acceptLevel(t) {
   if (!t.objs.length || !t.objs.every((o) => o.kills > 0) || finishedInLog(t.q.id)) return 0;
-  return Math.min(...t.objs.map((o) => (o.mobLevel || 0) - cfg.maxMobAbove));
+  return Math.min(...t.objs.map((o) => doableM(o.mobLevel || 0) - 1));
 }
-const canAccept = (t) => !accepted.has(t.q.id) && !turned.has(t.q.id) && t.q.reqLevel <= level && acceptLevel(t) <= level && (t.q.level <= level + cfg.maxAbove - 1 || (cfg.bonusQuests || []).includes(t.q.id))
+const canAccept = (t) => !accepted.has(t.q.id) && !turned.has(t.q.id) && t.q.reqLevel <= level && acceptLevel(t) <= level && (t.q.level <= level + aboveQ(level) || (cfg.bonusQuests || []).includes(t.q.id))
   && t.q.preGroup.every((p) => turned.has(p)) && (!t.q.preSingle.length || t.q.preSingle.some((p) => turned.has(p))) && (!t.q.parent || accepted.has(t.q.parent));
 function moveTo(p, why) {
   if (!p) return;
@@ -700,7 +761,10 @@ function doObjectivesAt(spot) {
   // shared mobs: objectives on the same mobs are worked at the same time, pay the longest one
   const work = Math.max(...here.map(([, o]) => o.work)) + 0.35 * (here.reduce((s, [, o]) => s + o.work, 0) - Math.max(...here.map(([, o]) => o.work)));
   clock += work;
-  let kx = 0; for (const [, o] of here) kx += o.kills * killXp(o.mobLevel, level);
+  // (only fights pay: work with no mob level - a talk, an unknown step - made killXp NaN, 0 x NaN is NaN, and the leg's
+  // XP with it: legs ended "level 40 + NaN xp", the campaign read it as 0% and ground the whole next level - Riverglades
+  // 40-41, 204 min: six legs of the human warrior plan lost their XP this way)
+  let kx = 0; for (const [, o] of here) if (o.kills > 0 && o.mobLevel != null) kx += o.kills * killXp(o.mobLevel, level);
   step({ type: 'do', at: spot, items: here.map(([t, o]) => ({ q: t.q, label: o.label, bg: o.bg })) });
   for (const [t, , i] of here) markObj(t.q.id, i);
   gain(kx);
@@ -946,7 +1010,7 @@ for (let guard = 0; guard < 400; guard++) {
     const need = XP_TO_LEVEL[level] - xp - pending;
     if (need > 0 && need < XP_TO_LEVEL[level] * 0.15) {
       const mobs = Math.ceil(need / Math.max(1, killXp(level, level)));
-      step({ type: 'grind', at: pos, mobs, need, target: nextTrain }); clock += mobs * cfg.secPerKill; gain(need);
+      step({ type: 'grind', at: pos, mobs, need, target: nextTrain }); clock += grindSeconds(mobs, cfg.secPerKill, cfg.grind); gain(need);
     }
   }
 }
@@ -960,7 +1024,30 @@ if (cfg.stateOut) {
   // (and what the chains handed in here lead to, past this leg: a leg that moves a chain on is worth that much more)
   const rewardValue = out.filter((s2) => s2.type === 'turnin').reduce((a, s2) => a + extraValue(s2.q) + chainTail(s2.q, level, turned), 0);
   const dungeonsRun = [...new Set([...(cfg.dungeonsRun || []), ...out.filter((s2) => s2.type === 'dungeon').map((s2) => s2.dungeon)])].sort((a, b) => a - b);
-  fs.writeFileSync(cfg.stateOut, JSON.stringify({ trainedAt, hearthCdLeft: Math.max(0, Math.round(hearthReadyAt - clock)), dungeonsRun, rewardValue, level, xp, completed: [...turned], active, pos, minutes: Math.round(clock / 60), questXp: gained, turnins: out.filter((s2) => s2.type === 'turnin').length }));
+  // what of that carries on what earlier legs began: quests you came in with, and the next parts of chains handed in
+  // before this leg - the campaign doesn't count a return to a zone down for these (campaign.js revisit): an open chain
+  // is a reason to come back, not a straggler (with QuestieDB 1.1.0's chain prerequisites, most of what the human
+  // warrior plan lost was the later parts of chains it had begun, in zones the revisit penalty kept it from).
+  // Only what crosses zones, though: a quest you picked up outside this leg's zones, the next part of a chain begun in
+  // another zone, or one going on to another zone from here. A chain begun and going on in this same zone is the
+  // stragglers the revisit penalty is for - exempt, every next part a level or two up was, and the plan zig-zagged back
+  const elsewhere = (id) => { const P = Q[id]; return !!P && P.starters.some((s) => (s.spawns || []).some((sp) => sp.x >= 0)) && !P.starters.some((s) => (s.spawns || []).some(inZones)); };
+  const takeable = (id) => { const P = Q[id]; return !!P && !done0.has(id) && !turned.has(id) && raceFits(P.races, cfg.race) && classFits(P.classes, cfg.class); };
+  // cfg.carrySameZone: a chain begun and going on in the same zone carries too (the first opencarry rule, before it
+  // was narrowed to cross-zone carry) - for measuring which works better
+  const carries = (q) => {
+    if ((cfg.active || {})[q.id]) return cfg.carrySameZone || elsewhere(q.id);
+    const pre = [...q.preSingle, ...q.preGroup].filter((p) => done0.has(p));
+    return pre.length > 0 && (cfg.carrySameZone || pre.some(elsewhere) || (FOLLOWERS[q.id] || []).some((f) => takeable(f) && elsewhere(f)));
+  };
+  const carryValue = out.filter((s2) => s2.type === 'turnin' && carries(s2.q)).reduce((a, s2) => a + s2.xp + (extraValue(s2.q) + chainTail(s2.q, level, turned)) * (cfg.rewardWeight ?? 1), 0);
+  // why the next part of a chain you have been doing is not on this leg (the card's "this chain ends here", campaign.js
+  // chainEnds): left out, with the reason, or not taken yet (its level, or no time for it here)
+  const chainSkip = {};
+  const opened = (q) => { const g = q.preGroup, one = q.preSingle; return (g.length || one.length) && g.every((p) => turned.has(p)) && (!one.length || one.some((p) => turned.has(p))); };
+  for (const [q, why] of skipped) if (!turned.has(q.id) && opened(q)) chainSkip[q.id] = why;
+  for (const t of Object.values(tasks)) if (!accepted.has(t.q.id) && !turned.has(t.q.id) && opened(t.q)) chainSkip[t.q.id] = t.q.reqLevel > level ? 'needs level ' + t.q.reqLevel : t.q.level > level + aboveQ(level) ? 'needs level ' + doableQ(t.q.level) : t.objs.length && t.objs.every((o) => o.away) ? 'its work is in another zone (' + zname(t.objs[0].away) + ')' : 'not worth the time here';
+  fs.writeFileSync(cfg.stateOut, JSON.stringify({ trainedAt, hearthCdLeft: Math.max(0, Math.round(hearthReadyAt - clock)), dungeonsRun, rewardValue, carryValue: Math.round(carryValue), chainSkip, level, xp, completed: [...turned], active, pos, minutes: Math.round(clock / 60), questXp: gained, turnins: out.filter((s2) => s2.type === 'turnin').length }));
 }
 // ---------- print ----------
 const f = (a) => (a ? `${(+a.x).toFixed(1)}, ${(+a.y).toFixed(1)}` : '');
@@ -996,7 +1083,7 @@ console.log(L.join('\n'));
 if (outPath) fs.writeFileSync(outPath, JSON.stringify(out.map((s) => ({ ...s, q: s.q && s.q.id, items: s.items && s.items.map((i) => ({ ...i, q: i.q.id })) })), null, 1));
 // ---------- optimize the visit order (parallel simulated annealing) ----------
 if (cfg.optimize) {
-  const { optimize } = require('./optimize');
+  const { optimize, positive } = require('./optimize');
   const locs = [], locKey = new Map();
   const locOf = (p) => { const k = p.zone + ':' + (+p.x).toFixed(1) + ',' + (+p.y).toFixed(1); if (!locKey.has(k)) { locKey.set(k, locs.length); locs.push(p); } return locKey.get(k); };
   const startLoc = locOf(cfg.start || (out.find((s2) => s2.at) || {}).at || { zone: cfg.zones[0], x: 50, y: 50 });
@@ -1004,7 +1091,13 @@ if (cfg.optimize) {
   // pick-ups in a side zone (the capital that rides along with every leg) whose hand-in isn't in this leg: a trip
   // for nothing now - the safety net drops them anyway since they're never handed in here
   const turnedHere = new Set(out.filter((s2) => s2.type === "turnin").map((s2) => s2.q.id));
-  const sideOnly = (s2) => s2.type === "accept" && s2.at && s2.at.zone !== cfg.zones[0] && !turnedHere.has(s2.q.id) && !(cfg.bonusQuests || []).includes(s2.q.id);
+  // ...except a chain's next part handed to you where this leg hands in its last one, to take to another zone (it is
+  // no trip at all, and the campaign carries it there: Highway Robbery's hand-in in Desolace gives On the Lam, for
+  // Stranglethorn - dropped here, the four-part chain behind it was lost on every path)
+  const handAt = out.filter((s2) => s2.type === 'turnin' && s2.at);
+  const carriedOn = (s2) => tasks[s2.q.id] && tasks[s2.q.id].flags.includes('carry') && [...s2.q.preSingle, ...s2.q.preGroup].some((p) => turnedHere.has(p))
+    && handAt.some((h) => h.at.zone === s2.at.zone && straightDist(h.at, s2.at) < 15);
+  const sideOnly = (s2) => s2.type === "accept" && s2.at && s2.at.zone !== cfg.zones[0] && !turnedHere.has(s2.q.id) && !(cfg.bonusQuests || []).includes(s2.q.id) && !carriedOn(s2);
   const dropped = out.filter(sideOnly);
   // their objectives go too (a region leg kept them, and the quest was planned again whole on a later leg: the
   // objective twice, the first time before it was ever picked up)
@@ -1016,16 +1109,16 @@ if (cfg.optimize) {
   const runEvent = {}; // dungeon id -> index of its run event
   for (const s2 of out) {
     if (sideOnly(s2)) continue;
-    if (s2.type === 'accept') events.push({ kind: 'accept', q: s2.q.id, loc: locOf(s2.at), work: 3, reqLevel: Math.max(tasks[s2.q.id] ? acceptLevel(tasks[s2.q.id]) : 0, (cfg.bonusQuests || []).includes(s2.q.id) ? s2.q.reqLevel : Math.max(s2.q.reqLevel || 0, s2.q.level - cfg.maxAbove + 1)), pre: [...s2.q.preGroup, ...(s2.q.preSingle.length === 1 ? s2.q.preSingle : [])], who: s2.who, name: s2.q.name, qLevel: s2.q.level });
+    if (s2.type === 'accept') events.push({ kind: 'accept', q: s2.q.id, loc: locOf(s2.at), work: 3, reqLevel: Math.max(tasks[s2.q.id] ? acceptLevel(tasks[s2.q.id]) : 0, (cfg.bonusQuests || []).includes(s2.q.id) ? s2.q.reqLevel : Math.max(s2.q.reqLevel || 0, doableQ(s2.q.level))), pre: [...s2.q.preGroup, ...(s2.q.preSingle.length === 1 ? s2.q.preSingle : [])], who: s2.who, name: s2.q.name, qLevel: s2.q.level });
     if (s2.type === 'turnin') events.push({ kind: 'turnin', q: s2.q.id, loc: locOf(s2.at), work: 3, xp: baseXp(s2.q), qLevel: s2.q.level, reqLevel: 0, pre: [], who: s2.who, name: s2.q.name });
     if (s2.type === 'dungeon') { runEvent[s2.dungeon] = events.length; events.push({ kind: 'obj', q: -1000 - events.length, loc: locOf(s2.at), work: (s2.minutes + (cfg.groupWaitMin ?? 10)) * 60, killXp: s2.runXp, reqLevel: 0, pre: [], after: [], label: 'Run ' + s2.name + ' with a group', name: s2.name, qLevel: 0, dungeonRun: true }); }
     // (none in a capital: there are no mobs to kill there)
-    if (s2.type === 'grind' && !CAPITALS.has(s2.at && s2.at.zone)) events.push({ kind: 'obj', q: -3000 - events.length, loc: locOf(s2.at), work: s2.mobs * cfg.secPerKill, killXp: s2.need, reqLevel: 0, pre: [], label: 'Grind about ' + s2.mobs + ' mobs', name: 'Grind', qLevel: 0, grind: { mobs: s2.mobs, need: s2.need } });
+    if (s2.type === 'grind' && !CAPITALS.has(s2.at && s2.at.zone)) events.push({ kind: 'obj', q: -3000 - events.length, loc: locOf(s2.at), work: grindSeconds(s2.mobs, cfg.secPerKill, cfg.grind), killXp: s2.need, reqLevel: 0, pre: [], label: 'Grind about ' + s2.mobs + ' mobs', name: 'Grind', qLevel: 0, grind: { mobs: s2.mobs, need: s2.need } });
     if (s2.type === 'bonus') events.push({ kind: 'obj', q: -5000 - events.length, loc: locOf(s2.at), work: 30, killXp: 0, reqLevel: 0, pre: [], label: s2.book.title, name: s2.book.title, qLevel: 0, book: s2.book });
     if (s2.type === 'do') for (const it of s2.items) {
       if (droppedQ.has(it.q.id)) continue;
       const t = tasks[it.q.id], o = t && t.objs.find((x) => x.label === it.label);
-      events.push({ kind: 'obj', q: it.q.id, loc: locOf(s2.at), shared: it.shared, work: it.shared ? 0 : o ? o.work : 60, killXp: 0, reqLevel: o && o.kills > 0 ? Math.max(0, o.mobLevel - cfg.maxMobAbove + 1) : 0, pre: [], label: it.label, area: o && o.at ? o.at.area : undefined, also: o ? o.also : undefined, name: it.q.name, qLevel: it.q.level, kills: it.shared || !o ? 0 : o.kills, mobLevel: o ? o.mobLevel : undefined,
+      events.push({ kind: 'obj', q: it.q.id, loc: locOf(s2.at), shared: it.shared, work: it.shared ? 0 : o ? o.work : 60, killXp: 0, reqLevel: o && o.kills > 0 ? Math.max(0, doableM(o.mobLevel)) : 0, pre: [], label: it.label, area: o && o.at ? o.at.area : undefined, also: o ? o.also : undefined, name: it.q.name, qLevel: it.q.level, kills: it.shared || !o ? 0 : o.kills, mobLevel: o ? o.mobLevel : undefined,
         after: o && o.dungeon && runEvent[o.dungeon] !== undefined ? [runEvent[o.dungeon]] : undefined });
     }
   }
@@ -1043,8 +1136,14 @@ if (cfg.optimize) {
   for (const e of events) if (e.kind === 'accept' || e.kind === 'turnin') handIns[e.loc]++;
   const locHub = locs.map((p) => { let n = 0; for (let j = 0; j < nL; j++) if (handIns[j] && locs[j].zone === p.zone && straightDist(p, locs[j]) < HUB_YD) n += handIns[j]; return n >= 3; });
   const locCell = locs.map((p) => { const [zw, zh] = yards(p.zone); return [p.zone, Math.floor((p.x / 100) * zw / WILD_YD), Math.floor((p.y / 100) * zh / WILD_YD)]; });
+  // the search's work: a number of moves (optimize.js workFor) times cfg.optimizeEffort, in cfg.optimizeRuns runs - not
+  // seconds, so the plan is the same however busy the PC is (it was: a loaded PC planned 3x slower and the time limit
+  // cut the big legs' search short). cfg.optimizeCapSec is a safety stop for the leg's whole search (all its runs), far
+  // above a normal one; a leg that hits it says so (OPTIMIZER CAP: campaign.js logs it and keeps the leg out of its
+  // cache), as that leg is no longer the same on every PC
+  const OPT_CAP_SEC = 600;
   // the log cap counts every quest you came in with, as the simulation does (40 on Forever)
-  const opts = { locHub, locCell, revisitSec: cfg.revisitSec ?? 240, thinSec: cfg.thinSec ?? 120, learned: cfg.learned, level: cfg.level, xp: cfg.xp || 0, startLoc, xpToLevel: XP_TO_LEVEL, xpWeight: cfg.xpWeight ?? 0.25, maxLog: cfg.maxLog, log0: Object.keys(cfg.active || {}).length, initial: events.map((_, k) => k), budgetMs: (cfg.optimizeSeconds || 15) * 1000, workers: cfg.workers };
+  const opts = { locHub, locCell, revisitSec: cfg.revisitSec ?? 240, thinSec: cfg.thinSec ?? 120, learned: cfg.learned, level: cfg.level, xp: cfg.xp || 0, startLoc, xpToLevel: XP_TO_LEVEL, xpWeight: cfg.xpWeight ?? 0.25, maxLog: cfg.maxLog, log0: Object.keys(cfg.active || {}).length, initial: events.map((_, k) => k), effort: cfg.optimizeEffort, runs: cfg.optimizeRuns, capMs: positive(cfg.optimizeCapSec, OPT_CAP_SEC, 'optimizeCapSec') * 1000, workers: cfg.workers };
   // (cfg.eventsOut: the optimizer's input, for tools/test-optimize.js)
   if (cfg.eventsOut) { fs.writeFileSync(cfg.eventsOut, JSON.stringify({ events, D: Array.from(D), nL, opts })); if (cfg.eventsOnly) process.exit(0); }
   const t0 = Date.now();
@@ -1059,7 +1158,9 @@ if (cfg.optimize) {
   const before = timeOf(opts.initial), after = timeOf(res.order);
   const O = [];
   O.push('', '==================== OPTIMIZED ORDER ====================');
-  O.push(`Search: ${opts.workers || require('os').cpus().length - 1} threads x ${opts.budgetMs / 1000}s, ${res.iterations} moves on the best thread. Route time ${Math.round(before / 60)} -> ${Math.round(after / 60)} min (travel + objectives, excludes training/hearth).` + (fallback ? ` OPTIMIZER FALLBACK: no order found that keeps every rule (${res.violations} broken), the simulation's order is used.` : ''));
+  if (res.capped) console.error(`OPTIMIZER CAP: ${res.capped} of ${res.runs} runs stopped at the ${opts.capMs / 1000}s safety cap before their moves were done; this leg depends on the PC's speed`);
+  // fewer threads than runs: the runs went in rounds, one after another - the same plan, that many times the wait
+  O.push(`Search: ${res.runs} runs on ${res.threads} threads${res.rounds > 1 ? ` (in ${res.rounds} rounds: ${res.rounds}x the time with a thread per run)` : ''}, ${res.iterations} moves on the best run${res.capped ? ` (${res.capped} runs cut short by the ${opts.capMs / 1000}s cap)` : ''}. Route time ${Math.round(before / 60)} -> ${Math.round(after / 60)} min (travel + objectives, excludes training/hearth).` + (fallback ? ` OPTIMIZER FALLBACK: no order found that keeps every rule (${res.violations} broken), the simulation's order is used.` : ''));
   let lastLoc = -1, lastHub = null;
   for (const k of res.order) {
     const e = events[k], p = locs[e.loc], h = hubOf(p);
@@ -1076,7 +1177,7 @@ if (cfg.optimize) {
   if (cfg.start) res.order = hereFirst(res.order, events, locs);
   if (cfg.routeOut) writeRoute(res.order.map((k) => events[k]), locs);
 
-  console.error(`optimizer: ${((Date.now() - t0) / 1000).toFixed(1)}s, thread results ${res.all.join(' ')}`);
+  console.error(`optimizer: ${((Date.now() - t0) / 1000).toFixed(1)}s, run results ${res.all.join(' ')}`);
 }
 function hereFirst(order, events, locs) {
   const HERE_YARDS = cfg.hereYards ?? 450;
@@ -1109,12 +1210,12 @@ function writeRoute(seq, locs) {
       const q = Q[e.q];
       if (e.kind === 'accept' && q && !(cfg.bonusQuests || []).includes(e.q)) {
         const inDungeon = tasks[e.q] && tasks[e.q].objs.some((o) => o.dungeon);
-        if (q.level > L + (inDungeon ? DUNGEON_ABOVE : LEVEL_ABOVE)) { gateDrop.add(e.q); changed = true; continue; }
+        if (q.level > L + (inDungeon ? DUNGEON_ABOVE : levelAbove(L))) { gateDrop.add(e.q); changed = true; continue; }
       }
       // kills against mobs too far above you (a quest already in your log has no pick-up to stop it): the quest waits
       // for a later leg, still in your log
       if (e.kind === 'obj' && e.kills > 0 && e.mobLevel != null && e.q > 0
-        && e.mobLevel > L + (tasks[e.q] && tasks[e.q].objs.some((o) => o.dungeon) ? DUNGEON_ABOVE : LEVEL_ABOVE)) { gateDrop.add(e.q); changed = true; continue; }
+        && e.mobLevel > L + (tasks[e.q] && tasks[e.q].objs.some((o) => o.dungeon) ? DUNGEON_ABOVE : levelAbove(L))) { gateDrop.add(e.q); changed = true; continue; }
       if (e.kind === 'turnin' && q) gain(questXpAt(q, L));
       else if (e.kind === 'obj') gain(e.kills > 0 && e.mobLevel != null ? e.kills * killXp(e.mobLevel, L) : e.killXp || 0);
     }
@@ -1142,7 +1243,7 @@ function writeRoute(seq, locs) {
     let m = /^Kill\s+\d+\s+(.+)$/.exec(label || ''); if (m) return m[1];
     m = /\(([^)]+)\)/.exec(label || ''); if (!m) return undefined;
     const names = m[1].split(',').map((s) => s.trim()).filter(Boolean);
-    const ok = names.map((nm) => ({ nm, n: npcByName.get(nm) })).filter((x) => x.n && (x.n.maxLevel || 0) <= (lv || 60) + LEVEL_ABOVE && !(x.n.rank > 0));
+    const ok = names.map((nm) => ({ nm, n: npcByName.get(nm) })).filter((x) => x.n && (x.n.maxLevel || 0) <= (lv || 60) + levelAbove(lv || 60) && !(x.n.rank > 0));
     ok.sort((a, b) => b.n.spawns.length - a.n.spawns.length);
     return (ok[0] && ok[0].nm) || names[0];
   };

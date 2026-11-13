@@ -93,5 +93,12 @@ const objects = {}; for (const id of Object.keys(O)) objects[id] = objInfo(id);
 // (the npcs and objects too: overrides name givers and enders as "npc:ID", filled in from them, and rename NPCs -
 // given the quests alone, those givers came out empty and every Mount Hyjal fix was lost on a rebuild)
 if (!process.env.FR_NO_OVERRIDES) for (const line of require('./apply-overrides').apply({ quests, npcs, objects })) console.log('forever override: ' + line);
+// same-name alternatives the data leaves unmarked (one quest from givers in several towns, all to one place): doing one
+// closes the others (tools/exclusive-alternatives.js). After the overrides, which can fix a giver or hand-in, or
+// rule a quest out with notAlternative. (Not with FR_NO_OVERRIDES: that is QuestieDB's data as it is.)
+if (!process.env.FR_NO_OVERRIDES) {
+  const ALT = require('./exclusive-alternatives');
+  for (const g of ALT.mark({ quests })) console.log('exclusive alternatives: ' + ALT.describe({ quests }, g));
+}
 fs.writeFileSync(outPath, JSON.stringify({ quests, npcs, objects }));
 console.log('quests', Object.keys(quests).length, 'with xp', Object.values(quests).filter((q) => q.xp).length);

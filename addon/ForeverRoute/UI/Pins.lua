@@ -358,17 +358,22 @@ function Pins.Update(force)
     end
   end
   Pins.Sweep()
-  local b = blinkFor
-  if b then C_Timer.After(0.1, function() if blinkFor == b then Pins.Blink(b) end end) end
 end
 Pins._used = used
--- blink the world map pin of step i (the card's Map button): now if it is drawn, else once the pins are next placed
-function Pins.Blink(i)
+-- blink the world map pin of step i (the card's Map button) once it is on the screen. A pin is in the list before the
+-- map shows it (HereBeDragons places it when the map opens on its zone): its blink played unseen and was used up, so
+-- the map opened with nothing marked. Until it shows it is looked for again every tenth of a second, for 3 seconds
+-- (not on the screen by then: no late blink). -> true when it blinked now
+Pins.BLINK_TRIES = 30
+function Pins.Blink(i, tries)
+  tries = tries or Pins.BLINK_TRIES
   blinkFor = i
-  C_Timer.After(3, function() if blinkFor == i then blinkFor = nil end end) -- (not drawn by then: no late blink)
   for _, p in ipairs(used) do
-    if p.where == "world" and p.index == i and p.blink then p.blink:Stop(); p.blink:Play(); blinkFor = nil end
+    if p.where == "world" and p.index == i and p.blink and p:IsVisible() then p.blink:Stop(); p.blink:Play(); blinkFor = nil; return true end
   end
+  if tries <= 1 then blinkFor = nil; return false end
+  C_Timer.After(0.1, function() if blinkFor == i then Pins.Blink(i, tries - 1) end end)
+  return false
 end
 function Pins.PendingBlink() local i = blinkFor; blinkFor = nil; return i end
 -- every frame this file ever put on a map (pins and path dots)

@@ -12,7 +12,7 @@ const cfgFile = args.find((a) => a.endsWith('.json')) || fs.readdirSync(path.joi
 const full = args.includes('--full');
 const base = JSON.parse(fs.readFileSync(cfgFile, 'utf8'));
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-dryrun-'));
-const cfg = { ...base, routesOut: path.join(work, 'Route.lua'), ...(full ? { beam: 4 } : { reuseDungeons: path.join(ROOT, 'paths-auto-full', 'dungeons.json'), optimizeSeconds: 5 }) };
+const cfg = { ...base, routesOut: path.join(work, 'Route.lua'), ...(full ? { beam: 4 } : { reuseDungeons: path.join(ROOT, 'paths-auto-full', 'dungeons.json'), optimizeEffort: 0.5 }) };
 fs.writeFileSync(path.join(work, 'campaign.json'), JSON.stringify(cfg));
 const t0 = Date.now();
 // (the planner can stay alive after writing its plan - a worker thread; tools/starter.js stops it 15 s after 'wrote')
@@ -27,9 +27,9 @@ const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
 const ids = [...text.matchAll(/^ {4}id = "(path:[^"]+)",/gm)].map((m) => m[1]);
 if (!ids.length) { console.log('FAIL: no leveling path in the plan'); bad++; }
 // the audit, as the companion runs it (prerequisites against the quests done in your save)
-let doneArg = [];
+let doneArg = [], st = null;
 try {
-  const st = require('./snapshot').loadCharState(base.charDir, path.resolve(ROOT, base.conversion));
+  st = require('./snapshot').loadCharState(base.charDir, path.resolve(ROOT, base.conversion));
   if (st && Array.isArray(st.completed)) { const f = path.join(work, 'done.json'); fs.writeFileSync(f, JSON.stringify({ done: st.completed, log: Object.keys(st.log || {}).map(Number) })); doneArg = [f]; }
 } catch (e) { console.log('(no snapshot: prerequisites unchecked)'); }
 for (const id of ids.slice(0, 3)) {
@@ -38,6 +38,16 @@ for (const id of ids.slice(0, 3)) {
   const clean = lines[1] === 'no issues found';
   console.log(`audit ${id.slice(0, 70)}: ${lines[0]}, ${clean ? 'no issues' : (lines.length - 1) + ' issue(s)'}`);
   if (!clean) { bad++; for (const l of lines.slice(1, 8)) console.log('   ' + l); }
+}
+// the chain-loss summary (tools/chain-report.js) for the first path: not a gate, a number to compare before and after
+// a planner change - one that starts cutting chains shows here before a tester finds it. (From the plan file, which
+// keeps no pick-up it never hands in: those count under the other classes.) With the save's quests done, its log and
+// the quests you said no to: else a character at 30 shows every chain it finished at 10-20 as lost
+if (ids.length) {
+  try {
+    const CR = require('./chain-report');
+    console.log(CR.summaryLine(CR.reportFor(file, { pathId: ids[0], race: base.race, cls: base.class, completed: [...(base.completed || []), ...((st && st.completed) || [])], active: (st && st.log) || base.active, nope: (st && st.nope) || [] })) + ` (full: node tools/chain-report.js ${file})`);
+  } catch (e) { console.log('(no chain report: ' + e.message + ')'); }
 }
 // the live check: the repo's addon on this plan at the spot you saved
 if (base.charDir && ids.length) {

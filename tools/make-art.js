@@ -110,3 +110,12 @@ tga('btn-gear', 32, (u, v) => { const r = Math.hypot(u, v), a = Math.atan2(v, u)
 tga('btn-min', 32, (u, v) => (Math.abs(v) < 0.1 && Math.abs(u) < 0.55 ? [1, 1] : null));
 tga('dot', 16, (u, v) => (Math.hypot(u, v) < 0.75 ? [1, 1] : null));
 console.log('v2 art written');
+// the card's quest buttons: "not doing this quest" is an X (tinted red in game); "the giver doesn't offer it" is the
+// quest giver's "!" struck through
+tga('btn-x', 32, (u, v) => (segDist(u, v, -0.5, -0.5, 0.5, 0.5) < 0.13 || segDist(u, v, 0.5, -0.5, -0.5, 0.5) < 0.13 ? [1, 1] : null));
+tga('btn-no-offer', 32, (u, v) => {
+  const bang = (Math.abs(u) < 0.2 && v > -0.9 && v < 0.3) || Math.hypot(u, v - 0.68) < 0.22;
+  const d = segDist(u, v, -0.6, 0.6, 0.6, -0.6);
+  // a gap either side of the slash keeps the "!" readable under it at icon size
+  return d < 0.1 || (bang && d > 0.22) ? [1, 1] : null;
+});

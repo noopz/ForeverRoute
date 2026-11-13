@@ -14,6 +14,8 @@ ns.Card = Card
 
 local PAD, DIST_W = 14, 64
 local f
+-- the step's tool row (right-aligned under the distance): Map, and the quest icon buttons left of it
+Card.TOOL, Card.TOOL_GAP, Card.MAP_W = 16, 4, 38
 
 local function steps() return ForeverRouteData and ForeverRouteData.steps or {} end
 local function section(i) local s = steps()[i]; local secs = ForeverRouteData and ForeverRouteData.sections; return s and secs and secs[s.sec] end
@@ -103,21 +105,23 @@ local function build()
   cur.dist = Style.Text(cur, 11, C.gold); cur.dist:SetPoint("TOPRIGHT", 0, -1); cur.dist:SetWidth(DIST_W); cur.dist:SetJustifyH("RIGHT"); cur.dist:SetWordWrap(false)
   cur.titleText = Style.Text(cur, 15, C.text); cur.titleText:SetPoint("TOPLEFT", cur.disc, "TOPRIGHT", 12, 1)
   cur.detail = Style.Text(cur, 11, C.sub); cur.detail:SetPoint("TOPLEFT", cur.titleText, "BOTTOMLEFT", 0, -4)
-  cur.map = Style.Button(cur, "Map", 38, 16, function() ns.ShowOnMap(ns.Engine.Shown()) end, "Show this step on the world map")
+  cur.map = Style.Button(cur, "Map", Card.MAP_W, Card.TOOL, function() ns.ShowOnMap(ns.Engine.Shown()) end, "Open the world map where this step is (for a trip: where it takes you), its pin flashing")
   cur.map.label:SetTextColor(C.gold[1], C.gold[2], C.gold[3])
   cur.map:SetScript("OnLeave", function(self) self.label:SetTextColor(C.gold[1], C.gold[2], C.gold[3]); GameTooltip:Hide() end)
   cur.map:SetPoint("TOPRIGHT", cur, "TOPRIGHT", 0, -18)
-  -- "not doing this quest": drops it from the route and future plans (warns first if later quests need it)
-  cur.nope = Style.Button(cur, "not doing this quest", 112, 14, function() ns.Engine.Nope() end, "Drop this quest from your route and from future plans. If later quests need it, you'll be asked first. Undo brings it back.")
-  cur.nope.label:SetFontObject(Style.Font(10)); cur.nope.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3])
-  cur.nope:SetScript("OnLeave", function(self) self.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3]); GameTooltip:Hide() end)
-  -- (placed by Card.Layout, on a row of its own under the objective bars: hung under the Map button it lay over a
-  -- two-line title, the detail line and the first bar's count - it is three times as wide as the room kept there)
-  -- "not offered": the giver has nothing for you (no window opens, so the addon can't tell by itself - James Halloran,
-  -- Argos Nightwhisper). Off your route until you level up, like a giver who lists other quests but not this one
-  cur.notOffered = Style.Button(cur, "giver doesn't offer it", 112, 14, function() ns.Engine.NotOffered() end, "The quest giver has nothing for you: this quest leaves your route until your next level (a level or a quest you haven't done can be the reason), then it's tried again. Turned down a second time, it stays off until the game offers it. Its chain stays.")
-  cur.notOffered.label:SetFontObject(Style.Font(10)); cur.notOffered.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3])
-  cur.notOffered:SetScript("OnLeave", function(self) self.label:SetTextColor(C.dim[1], C.dim[2], C.dim[3]); GameTooltip:Hide() end)
+  -- the step's quest buttons: small icons in a row left of Map (Card.Layout), with what they do in their tooltips.
+  -- They were two lines of text under the bars, as wide as their words: "these buttons should be placed elsewhere
+  -- and not just giant text" (tester).
+  -- a red X, "not doing this quest": drops it from the route and future plans (warns first if later quests need it)
+  cur.nope = Style.IconButton(cur, "btn-x", Card.TOOL, function() ns.Engine.Nope() end,
+    { "Not doing this quest", "Drops it from your route and from future plans. If later quests need it, you're asked first. Undo brings it back." }, C.bad)
+  -- a struck-through "!", "the giver doesn't offer it": the giver has nothing for you (no window opens, so the addon
+  -- can't tell by itself - James Halloran, Argos Nightwhisper). Off your route until you level up, like a giver who
+  -- lists other quests but not this one
+  cur.notOffered = Style.IconButton(cur, "btn-no-offer", Card.TOOL, function() ns.Engine.NotOffered() end,
+    { "The giver doesn't offer it", "Click if the quest giver has nothing for you. The quest leaves your route until your next level (a level or a quest you haven't done can be the reason), then it's tried again. Turned down a second time, it stays off until the game offers it. Its chain stays." })
+  -- (a bigger glyph than the footer's buttons have: at their size the "!" under its stroke was a smudge)
+  for _, b in ipairs({ cur.nope, cur.notOffered }) do b.icon:SetSize(Card.TOOL * 0.75, Card.TOOL * 0.75) end
   -- "not now": a stop the route took in from where you are (a hand-in while you're here) leaves the card until you move
   -- on; the plan's own next step comes back
   cur.notNow = Style.Button(cur, "not now", 60, 14, function() if ns.Next and ns.Next.Dismiss then ns.Next.Dismiss(ns.Engine.Shown and ns.Engine.Shown()) end end, "Skip this stop for now: the route goes back to its planned next step. It's offered again once you've moved on, or in 15 minutes.")
@@ -213,7 +217,7 @@ local function build()
     f.rows[i] = r
   end
 
-  -- footer: plan level on the left, controls on the right (shown on hover)
+  -- footer: the next zone on the left (Card.FooterText), controls on the right (shown on hover)
   f.eta = Style.Text(f, 10, C.dim); f.eta:SetWordWrap(false)
   f.ctl = CreateFrame("Frame", nil, f); f.ctl:SetSize(215, 20); f.ctl:SetAlpha(0)
   f.ctl.OnChildEnter = function() Card.Hover(true) end
@@ -310,13 +314,23 @@ local function build()
   C_Timer.After(0, function() Card.ApplyPos() end)
 end
 
+-- the "N won't do" link: at the right of the footer, or - while you hover the card and its controls take that spot -
+-- at the left, where the footer line fades out. It used to hide on hover, so the mouse on its way to click it
+-- made it vanish (tester)
+function Card.PlaceDrop(hover)
+  if not f or not f.drop then return end
+  f.drop:ClearAllPoints()
+  if hover then f.drop:SetPoint("LEFT", f.eta, "LEFT", -6, 0)
+  else f.drop:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD + 6, f.dropY or 0) end
+  f.drop:SetShown(f.dropWanted and true or false)
+end
 function Card.Hover(on)
   if not f then return end
   if not on then
-    C_Timer.After(0.2, function() if f and not f:IsMouseOver() and f.ctl:GetAlpha() > 0 then UIFrameFadeOut(f.ctl, 0.2, f.ctl:GetAlpha(), 0); UIFrameFadeIn(f.eta, 0.2, f.eta:GetAlpha(), 1); f.drop:SetShown(f.dropWanted and true or false) end end)
+    C_Timer.After(0.2, function() if f and not f:IsMouseOver() and f.ctl:GetAlpha() > 0 then UIFrameFadeOut(f.ctl, 0.2, f.ctl:GetAlpha(), 0); UIFrameFadeIn(f.eta, 0.2, f.eta:GetAlpha(), 1); Card.PlaceDrop(false) end end)
     return
   end
-  if f.ctl:GetAlpha() < 1 then UIFrameFadeIn(f.ctl, 0.12, f.ctl:GetAlpha(), 1); UIFrameFadeOut(f.eta, 0.12, f.eta:GetAlpha(), 0); f.drop:Hide() end
+  if f.ctl:GetAlpha() < 1 then UIFrameFadeIn(f.ctl, 0.12, f.ctl:GetAlpha(), 1); UIFrameFadeOut(f.eta, 0.12, f.eta:GetAlpha(), 0); Card.PlaceDrop(true) end
 end
 
 -- "where next?" option rows: zone, XP/h and the zones that follow; the open option is marked, the fastest gets a star
@@ -868,14 +882,24 @@ ns.On("PLAYER_REGEN_ENABLED", function()
   if f and Card.needPlace then Card.PlaceSecure() end
 end)
 
-Card.LINK_H = 14 -- the height of the small quest links ("not doing this quest")
+Card.LINK_H = 14 -- the height of the small "not now" link
 function Card.Layout()
   if not f then return end
   local cur = f.cur
   local x0 = 50
   -- give text explicit widths so wrapped heights are measured correctly
   local inner = (f:GetWidth() or ns.db.cardWidth) - 2 * PAD
-  cur.titleText:SetWidth(inner - x0 - DIST_W - 4); cur.detail:SetWidth(inner - x0 - 44); cur.note:SetWidth(inner - x0)
+  -- the tool row under the distance, from the right: Map, then the quest icons. The title and the detail line keep
+  -- clear of it (the title runs beside it when it takes two lines).
+  local toolW, tx = 0, 0
+  if cur.map:IsShown() then toolW = Card.MAP_W; tx = Card.MAP_W + Card.TOOL_GAP end
+  for _, b in ipairs({ cur.notOffered, cur.nope }) do
+    if b:IsShown() then
+      b:ClearAllPoints(); b:SetPoint("TOPRIGHT", cur, "TOPRIGHT", -tx, -18)
+      toolW = tx + Card.TOOL; tx = toolW + Card.TOOL_GAP
+    end
+  end
+  cur.titleText:SetWidth(inner - x0 - math.max(DIST_W, toolW) - 4); cur.detail:SetWidth(inner - x0 - math.max(44, toolW + 6)); cur.note:SetWidth(inner - x0)
   local y = cur.titleText:GetStringHeight() + 4 + ((cur.detail:GetText() or "") ~= "" and cur.detail:GetStringHeight() or 0)
   y = math.max(y, 38)
   for k = 1, cur.nbars or 0 do
@@ -885,23 +909,17 @@ function Card.Layout()
     b:ClearAllPoints(); b:SetPoint("TOPLEFT", cur, "TOPLEFT", x0, -(y + 8)); b:SetPoint("RIGHT")
     y = y + 8 + 18
   end
-  -- "not doing this quest" / "giver doesn't offer it": a row of their own under the title, detail and bars, from the
-  -- text's left edge, each as wide as its words; the second goes under the first where the card is too narrow for
-  -- both. (Nothing of the Target / use-item buttons here: they float above the card - Card.PlaceSecure.)
+  -- "not now": a row of its own under the title, detail and bars, from the text's left edge, as wide as its words.
+  -- (Nothing of the Target / use-item buttons here: they float above the card - Card.PlaceSecure.)
   cur.linkRows = 0
-  local lx = x0
-  for _, b in ipairs({ cur.notNow, cur.nope, cur.notOffered }) do
-    if b:IsShown() then
-      local sw = b.label:GetStringWidth() or 0
-      local w = math.min(inner - x0, sw > 0 and math.ceil(sw) + 14 or 112)
-      b:SetWidth(w)
-      if cur.linkRows == 0 then cur.linkRows = 1; y = y + 7
-      elseif lx + w > inner then cur.linkRows = cur.linkRows + 1; lx = x0; y = y + Card.LINK_H + 3 end
-      b:ClearAllPoints(); b:SetPoint("TOPLEFT", cur, "TOPLEFT", lx, -y)
-      lx = lx + w + 6
-    end
+  local nn = cur.notNow
+  if nn:IsShown() then
+    local sw = nn.label:GetStringWidth() or 0
+    nn:SetWidth(math.min(inner - x0, sw > 0 and math.ceil(sw) + 14 or 60))
+    cur.linkRows = 1; y = y + 7
+    nn:ClearAllPoints(); nn:SetPoint("TOPLEFT", cur, "TOPLEFT", x0, -y)
+    y = y + Card.LINK_H
   end
-  if cur.linkRows > 0 then y = y + Card.LINK_H end
   if (cur.note:GetText() or "") ~= "" then
     cur.note:ClearAllPoints(); cur.note:SetPoint("TOPLEFT", cur, "TOPLEFT", x0, -(y + 7))
     y = y + 7 + cur.note:GetStringHeight()
@@ -1009,7 +1027,7 @@ function Card.Layout()
   local nd = ns.LogCheck and ns.LogCheck.dropCount or 0
   -- (a small link at the right of the footer, not a row of its own: it took a lot of room - tester)
   f.dropWanted = nd > 0 and not ns.Engine.view
-  f.drop:SetShown(f.dropWanted and f.ctl:GetAlpha() == 0)
+  f.drop:SetShown(f.dropWanted)
   if f.dropWanted then
     f.drop.label:SetText(string.format("%d won't do", nd))
     f.drop:SetWidth(f.drop.label:GetStringWidth() + 12)
@@ -1017,7 +1035,8 @@ function Card.Layout()
   local viewing = ns.Engine.view ~= nil
   f.ret:SetShown(viewing)
   if viewing then f.ret:ClearAllPoints(); f.ret:SetPoint("TOPLEFT", PAD, -top); top = top + 24 end
-  f.drop:ClearAllPoints(); f.drop:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD + 6, -top - 2)
+  f.dropY = -top - 2
+  Card.PlaceDrop(f.ctl:GetAlpha() > 0) -- (hovering: at the left, the controls have the right)
   f.eta:Show(); f.eta:ClearAllPoints(); f.eta:SetPoint("TOPLEFT", PAD, -top - 4); f.eta:SetPoint("RIGHT", f, "RIGHT", -PAD - (f.dropWanted and f.drop:GetWidth() + 4 or 0), 0)
   local onDungeon = ForeverRouteData and ForeverRouteData.dungeon
   f.home:SetShown(onDungeon and true or false)
@@ -1208,17 +1227,28 @@ function Card.Header()
   local dname = ForeverRouteData and ForeverRouteData.dungeon and (ForeverRouteData.dungeonName or ForeverRouteData.title)
   f.title:SetText((dname and ("|cffff7a6b" .. dname:upper() .. "|r  ") or "") .. (sec and (sec.title:upper() .. (not dname and sec.zone and sec.zone ~= sec.title and ("  |cff8a93a6" .. sec.zone .. "|r") or "")) or (ForeverRouteData and ForeverRouteData.title or "Forever Route")))
 end
+-- The footer line: when you leave this zone and for where - "Next zone: Duskwood, after 4 quests here". It said the
+-- level the plan had you at for this step and the plan's last level ("planned for level 33 · plan goes to level 43"),
+-- which a player can't act on: "meaningless and confusing" (tester). Empty on a travel step (the card's own lines
+-- say where it goes and why) and on a dungeon route; "Last zone on this plan" when nothing comes after.
+function Card.FooterText(i)
+  local data = ForeverRouteData
+  local s = i and steps()[i]
+  if not (s and s.zone and data and not data.dungeon and ns.Engine.ZonesAhead) then return "" end
+  local z = ns.Engine.ZonesAhead(i, 2)
+  local here, nxt = z[1], z[2]
+  if not (here and here.zone == s.zone) then return "" end
+  if not nxt then return "Last zone on this plan" end
+  local n = here.quests or 0
+  return "Next zone: " .. Style.ShortZone(nxt.zone) .. (n > 0 and string.format(", after %d quest%s here", n, n == 1 and "" or "s") or "")
+end
 function Card.Update(animate)
   if not f then return end
   local i = ns.Engine.Shown()
   -- (inside a dungeon the header is the dungeon's: Card.FillDungeon)
   if not (f.cur.dungeon and ns.Dungeon and ns.Dungeon.Inside()) then Card.Header() end
   Card.UpdateProgress()
-  local s = i and steps()[i]
-  local meta = ForeverRouteData and ForeverRouteData.meta
-  if ForeverRouteData and ForeverRouteData.dungeon then f.eta:SetText("")
-  -- ("plan: level 29 here · ends 60 (100%)" read as a puzzle - tester)
-  else f.eta:SetText(s and s.lvl and string.format("planned for level %s%s", s.lvl, meta and meta.endLevel and ("  ·  plan goes to level %s"):format((tostring(meta.endLevel):gsub("%s*%(%d+%%%)", ""))) or "") or "") end
+  f.eta:SetText(Card.FooterText(i))
   local cur = f.cur
   if animate then
     cur.animOut:Stop(); cur.animIn:Stop(); cur.pop:Stop()

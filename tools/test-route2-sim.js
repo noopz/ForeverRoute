@@ -24,11 +24,12 @@ const check = (name, ok, info) => { console.log((ok ? 'ok   ' : 'FAIL ') + name 
 const doneFor = (steps, q) => steps.filter((s) => s.type === 'do' && s.items.some((i) => i.q === q));
 
 // Bellygrub (one level-24 boar) next to 46 Great Goretusks: farming Goretusks for Redridge Goulash at 20 does not
-// bring his tusk along, and nothing counts his tusk before you can fight him (22 with mobs up to 3 above you)
+// bring his tusk along, and nothing counts his tusk before you can fight him (the level gate, world.minLevelFor:
+// 21 with mobs up to 3 above you from 20)
 {
   const { steps } = sim({ zones: [44, 1519], level: 20, active: { 34: { complete: false, objectives: [{ done: false, text: "Bellygrub's Tusk: 0/1" }] } } });
   const tusk = doneFor(steps, 34);
-  check('An Unwelcome Guest is not done by farming boars at level 20-21', tusk.every((s) => s.lvl >= 22), tusk.map((s) => ({ lvl: s.lvl, items: s.items.filter((i) => i.q === 34) })));
+  check('An Unwelcome Guest is not done by farming boars before Bellygrub is in reach', tusk.every((s) => s.lvl >= require('./world').minLevelFor(24)), tusk.map((s) => ({ lvl: s.lvl, items: s.items.filter((i) => i.q === 34) })));
   check('no shared drop credit for Bellygrub\'s Tusk', !tusk.some((s) => s.items.some((i) => i.q === 34 && i.shared)), tusk);
 }
 // a finished quest from another zone (A Scroll from Mauren, picked up in Stonetalon) is handed in when the leg passes
@@ -46,6 +47,21 @@ const doneFor = (steps, q) => steps.filter((s) => s.type === 'do' && s.items.som
   const s2 = sim({ zones: [12], level: 6 });
   const fire = s2.steps.filter((x) => x.type === 'do').flatMap((x) => x.items).filter((i) => i.q === 95998);
   check('...without it, Elwynn plans it, with its campfire once', s2.steps.some((x) => x.type === 'accept' && x.q === 95998) && fire.length === 1, fire);
+}
+// same-name alternatives the data leaves unmarked (tools/exclusive-alternatives.js, run when the data is built - and
+// here on a copy, with the overrides, so the case holds before qdb/ is rebuilt): Remote Contact from Jes'rimon in
+// Orgrimmar, Magatha Grimtotem in Thunder Bluff or Andron Gant in Undercity, all to Jediga in Azshara. Taken from
+// Magatha, Orgrimmar does not plan Jes'rimon's
+{
+  const db = JSON.parse(fs.readFileSync(rel(camp.db), 'utf8'));
+  require('./apply-overrides').apply(db);
+  require('./exclusive-alternatives').mark(db);
+  const dbFile = path.join(dir, 'db-alternatives.json'); fs.writeFileSync(dbFile, JSON.stringify(db));
+  const horde = { zones: [1637, 16], level: 50, race: 'orc', class: 'warrior', faction: 'horde', trainer: undefined, trainLevels: [], dbFile };
+  const remote = (steps) => steps.filter((s) => s.type === 'accept' && [91734, 91735, 91737].includes(s.q)).map((s) => s.q);
+  const a = sim(horde).steps, b = sim({ ...horde, completed: [91737] }).steps;
+  check('Remote Contact: Orgrimmar and Azshara plan Jes\'rimon\'s', remote(a).includes(91735), remote(a));
+  check('...but not once Magatha Grimtotem\'s is done', !remote(b).length, remote(b));
 }
 // a hand-in and pick-up spot inside a town that is not one of its NPCs: the Waterlogged Chest off Menethil's shore
 // (within the hub's reach, so no field loop went there, and the hub visit only walked its NPCs). Lightforge Iron was
@@ -66,7 +82,7 @@ const doneFor = (steps, q) => steps.filter((s) => s.type === 'do' && s.items.som
   db.quests[99990] = { ...JSON.parse(JSON.stringify(db.quests[98071])), id: 99990, name: 'Brewer\'s Trade, part two', text: ['Speak with Brewmeister Bilger again.'], preSingle: [98071], preGroup: [], xp: 1000 };
   const dbFile = path.join(dir, 'db-chain.json'); fs.writeFileSync(dbFile, JSON.stringify(db));
   const legOut = path.join(dir, 'leg-brew.json');
-  const { steps } = sim({ zones: [267, 1519], level: 27, dbFile, optimize: true, optimizeSeconds: 2, workers: 2, legOut, routeOut: path.join(dir, 'leg-brew.lua') });
+  const { steps } = sim({ zones: [267, 1519], level: 27, dbFile, optimize: true, optimizeEffort: 0.25, optimizeRuns: 2, workers: 2, legOut, routeOut: path.join(dir, 'leg-brew.lua') });
   const its = steps.filter((s) => s.q === 98071 || (s.items || []).some((i) => i.q === 98071)).map((s) => s.type);
   check('...as the first of a chain it is planned: accept, its work, hand-in', JSON.stringify(its) === '["accept","do","turnin"]', its);
   const leg = JSON.parse(fs.readFileSync(legOut, 'utf8')).steps.filter((s) => s.q === 98071);
@@ -80,7 +96,7 @@ const fixture = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, 'test-fix
 {
   // the run step comes after every pick-up of a quest done in it, and the quests' objectives after the run
   const legOut = path.join(dir, 'leg.json');
-  const { steps, state } = sim({ ...fixture('leg-redridge-stockade.json'), optimize: true, optimizeSeconds: 2, workers: 2, legOut, routeOut: path.join(dir, 'leg.lua'), addonsDir: camp.addonsDir });
+  const { steps, state } = sim({ ...fixture('leg-redridge-stockade.json'), optimize: true, optimizeEffort: 0.25, optimizeRuns: 2, workers: 2, legOut, routeOut: path.join(dir, 'leg.lua'), addonsDir: camp.addonsDir });
   const leg = JSON.parse(fs.readFileSync(legOut, 'utf8')).steps;
   const run = leg.findIndex((s) => s.k === 'goto' && /^Run The Stockade/.test(s.text || ''));
   const inside = leg.map((s, i) => [s, i]).filter(([s]) => s.k === 'obj' && /\(in The Stockade\)/.test(s.text || ''));
@@ -95,6 +111,58 @@ const fixture = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, 'test-fix
   const runs2 = next.steps.filter((s) => s.type === 'dungeon' && s.dungeon === 717);
   const quests2 = new Set(next.steps.filter((s) => s.type === 'do').flatMap((s) => s.items).filter((i) => /\(in The Stockade\)/.test(i.label)).map((i) => i.q));
   check('a dungeon already run on this path is run again only with 3 or more of its quests waiting', runs2.length === 0 || quests2.size >= 3, { runs: runs2.length, quests: [...quests2] });
+}
+// Riverglades' chains: Apple of My Eye, Foal Play and Rog'mar Supplies want items from objects QuestieDB has no record
+// of (Fresh Apple, Pawprint Tracing, Rog'mar Supply Crate) - read as "objectives outside the planned zones", they and
+// the chains behind them were lost. They lead on, so they stay, their item an unknown step; the leg says what of its
+// value carries on chains begun earlier (carryValue: none here, the chains begin and go on in Riverglades - stragglers
+// the revisit penalty is for), and why a chain's next part is not on it (chainSkip)
+{
+  const { steps, state } = sim({ zones: [16591], level: 39, completed: [94877, 94924, 94613] });
+  const handed = new Set(steps.filter((s) => s.type === 'turnin').map((s) => s.q));
+  check('Apple of My Eye, Foal Play and Rog\'mar Supplies are handed in', [95561, 94615, 95426].every((q) => handed.has(q)), [95561, 94615, 95426].filter((q) => !handed.has(q)));
+  check('...and the next parts they open (Fit for a Princess, The Rog\'mar Situation)', handed.has(95913) && handed.has(95066), { 95913: handed.has(95913), 95066: handed.has(95066) });
+  check('chains begun and going on in the same zone are not carried on (carryValue 0)', state.carryValue === 0, state.carryValue);
+  // (its work is in other zones: carried for a leg there - an away objective - or, when not picked up here, said so)
+  check('a next part left out says why (Wound Dressings: its cloth comes from other zones)', (state.active || {})[96081] || /outside|another zone/.test((state.chainSkip || {})[96081] || ''), state.chainSkip);
+  // unknown steps have no mob level: their kill XP was NaN, and with it the leg's XP (the campaign then ground a level)
+  check('the leg ends with a real XP figure (unknown steps pay no kill XP, not NaN)', Number.isFinite(state.xp), state.xp);
+}
+// a quest finished in your log is carried on wherever it is handed in (A Scroll from Mauren, from Stonetalon)
+{
+  const { state } = sim({ zones: [44, 1519], level: 21, completed: [1071], active: { 1075: { complete: true, objectives: [] } } });
+  check('a hand-in of a quest you came in with counts as carried on', state.carryValue > 0, state.carryValue);
+}
+// a chain begun in another zone is: Return to Verner (Elwynn) opens Underbelly Scales and A Baying of Gnolls in Redridge
+{
+  const { steps, state } = sim({ zones: [44, 1519], level: 20, completed: [119] });
+  const handed = new Set(steps.filter((s) => s.type === 'turnin').map((s) => s.q));
+  check('next parts of a chain begun in Elwynn are handed in in Redridge', handed.has(122) && handed.has(124), [...handed]);
+  check('...and count as carried on (carryValue)', state.carryValue > 0, state.carryValue);
+}
+// a gray quest finished in your log whose hand-in is in the leg's zones is handed in (its work is done; the campaign
+// keeps it in the log for such a leg) - Underbelly Scales at 26, handed in in Redridge, opens nothing
+{
+  const { steps } = sim({ zones: [44, 1519], level: 26, completed: [119], active: { 122: { complete: true, objectives: [] } } });
+  check('a finished gray quest is handed in where the leg passes its hand-in', steps.some((s) => s.type === 'turnin' && s.q === 122), steps.filter((s) => s.type === 'turnin').map((s) => s.q));
+}
+// an item with no source in the data at all (Something's in the Water's Filled Freshwater Phial, filled from another
+// item) is not one of Forever's objects QuestieDB has no record of: its quest stays 'objectives outside', not an
+// unknown step at the giver
+{
+  const { steps, state } = sim({ zones: [16591], level: 40, completed: [96083] });
+  check('an item with no source listed is not planned as an unknown step', !steps.some((s) => s.q === 96084), steps.filter((s) => s.q === 96084));
+  check('...and its chain says why', /outside/.test((state.chainSkip || {})[96084] || ''), (state.chainSkip || {})[96084]);
+}
+// a chain's next part handed to you in a side zone where the leg hands in its last part stays on the leg, to carry to
+// another zone: Highway Robbery (Desolace) gives On the Lam, for Tokal in Stranglethorn (a leg planned with the
+// optimizer: the side-zone pick-ups it would make for nothing are dropped there)
+{
+  const legOut = path.join(dir, 'leg.json');
+  sim({ zones: [406, 405], level: 38, optimize: true, optimizeEffort: 0.1, workers: 1, legOut, routeOut: path.join(dir, 'route.lua') });
+  const leg = JSON.parse(fs.readFileSync(legOut, 'utf8'));
+  const at = (k, q) => leg.steps.findIndex((s) => s.k === k && s.q === q);
+  check('On the Lam is picked up in Desolace after the hand-in of Highway Robbery, to carry on', at('turnin', 79229) >= 0 && at('accept', 79235) > at('turnin', 79229), [at('turnin', 79229), at('accept', 79235)]);
 }
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(fails ? fails + ' failed' : 'all passed');

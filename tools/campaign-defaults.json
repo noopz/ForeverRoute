@@ -5,7 +5,6 @@
   "targetLevel": 30,
   "maxLegs": 12,
   "parallel": 4,
-  "optimizeSeconds": 10,
   "minTurnins": 5,
   "hubNames": {
     "Gryan Stoutmantle": "Sentinel Hill",
