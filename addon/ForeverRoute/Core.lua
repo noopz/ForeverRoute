@@ -187,7 +187,12 @@ function ns.LoadStarter(sk)
     if not (type(ForeverRoutePlanSources) == "table" and ForeverRoutePlanSources[sk]) then pcall(load, "ForeverRoute_Plans_" .. side) end
   end
   local src = type(ForeverRoutePlanSources) == "table" and ForeverRoutePlanSources[sk]
-  ForeverRoutePlanSources = nil -- every other plan's text goes
+  -- the zone routes every plan of the faction shares are kept once (tools/bundle-plans.js): back into yours only
+  if src and type(ForeverRoutePlanShared) == "table" then
+    local shared = ForeverRoutePlanShared
+    src = src:gsub("\n%-%-@zr ([^@\n]+)@", function(id) return shared[id] end)
+  end
+  ForeverRoutePlanSources, ForeverRoutePlanShared = nil, nil -- every other plan's text goes
   if src then
     local chunk, err = loadstring(src, "plan " .. sk)
     if chunk then
@@ -357,6 +362,28 @@ function ns.EnterDungeonRoute(id)
   ns.char.chosenTrip = id -- (you picked it: kept across logins - ns.SavedRoute)
   ns.SelectRoute(id)
   ns.Print((r.special and "Side trip: " or "Dungeon route: ") .. (r.dungeonName or r.title) .. ". Your leveling path is kept - \"Back to my path\" on the card returns you to it.")
+end
+-- a zone you picked (a zone route, ns.ZoneRouteFor): the route you were on is remembered, so "Planned route" in the
+-- zone picker goes back to it - picked up where it still has something for you at your level (UI/Paths.lua)
+function ns.EnterZoneRoute(id)
+  local d = ForeverRouteData
+  if d and not d.dungeon and not d.special and not d.zoneRoute and not d.branch then ns.char.returnTo = d.id end
+  ns.SelectRoute(id)
+end
+-- the planned route's next zone at your level: the first quest step on it you haven't done that isn't gray to you
+-- (Stranglethorn at 39, after a detour to Arathi, is passed over: the route picks up in the zone after it)
+function ns.PlannedNextZone()
+  local r = ns.ResolvePath(ns.char.returnTo) or ns.MainRoutes()[1]
+  if not r then return nil end
+  local S, E = ns.State, ns.Engine
+  for _, s in ipairs(ns.Steps(r)) do
+    if s.q and s.zone and (s.k == "accept" or s.k == "turnin" or s.k == "obj") and not S.IsCompleted(s.q)
+      and not (s.k == "accept" and S.OnQuest(s.q)) and not (s.k == "turnin" and not S.OnQuest(s.q))
+      and not (E and E.Outlevelled and E.Outlevelled(s)) then
+      return s.zone, r
+    end
+  end
+  return nil, r
 end
 function ns.LeaveDungeonRoute()
   -- a replan while you were on the trip may have renamed your path: find it by its zone order, not the top path

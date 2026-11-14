@@ -235,7 +235,11 @@ local function build()
   for _, b in pairs(f.btn) do b:HookScript("OnLeave", function() Card.Hover(false) end) end
   f.ret = Style.Button(f, "Back to current step", 140, 18, function() ns.Engine.view = nil; ns.Fire("FR_STEP", ns.Engine.Shown()) end)
   -- on a dungeon route: always-visible way back to the leveling path
-  f.home = Style.Button(f, "Back to my path", 116, 18, function() ns.LeaveDungeonRoute() end, "Return to your leveling path (its progress is kept)")
+  -- a dungeon or side trip: back to your leveling path; a zone you picked: the zone picker (another zone, or your
+  -- planned route where it picks up)
+  f.home = Style.Button(f, "Back to my path", 116, 18, function()
+    if ForeverRouteData and ForeverRouteData.zoneRoute then if ns.Paths and ns.Paths.Show then ns.Paths.Show() end else ns.LeaveDungeonRoute() end
+  end, "Your leveling path, or another zone (its progress is kept)")
   f.home.label:SetTextColor(C.gold[1], C.gold[2], C.gold[3])
   f.home:SetScript("OnLeave", function(self) self.label:SetTextColor(C.gold[1], C.gold[2], C.gold[3]); GameTooltip:Hide() end)
   f.home:Hide()
@@ -559,6 +563,11 @@ function Card.Fill()
   if not i then
     look(C.good, "icon-check")
     if data.dungeon then cur.titleText:SetText((data.dungeonName or "Dungeon") .. " route done"); cur.detail:SetText("Everything for it is handed in. \"Back to my path\" carries on leveling.")
+    elseif data.zoneRoute then
+      -- a zone you picked, done: where next is yours to pick (the zone picker opens once)
+      cur.titleText:SetText((data.zoneName or "Zone") .. " done"); cur.detail:SetText("Pick where next: the zones at your level, or your planned route where it picks up.")
+      Card.zoneDone = Card.zoneDone or {}
+      if not Card.zoneDone[data.id] and ns.Paths and ns.Paths.Show then Card.zoneDone[data.id] = true; ns.Paths.Show() end
     else cur.titleText:SetText("Route complete"); cur.detail:SetText("Run the planner again for your next leg.") end
     setNote("")
     Card.SetButtons(nil); return
@@ -1069,9 +1078,12 @@ function Card.Layout()
   f.dropY = -top - 2
   Card.PlaceDrop(f.ctl:GetAlpha() > 0) -- (hovering: at the left, the controls have the right)
   f.eta:Show(); f.eta:ClearAllPoints(); f.eta:SetPoint("TOPLEFT", PAD, -top - 4); f.eta:SetPoint("RIGHT", f, "RIGHT", -PAD - (f.dropWanted and f.drop:GetWidth() + 4 or 0), 0)
-  local onDungeon = ForeverRouteData and ForeverRouteData.dungeon
+  local onDungeon = ForeverRouteData and (ForeverRouteData.dungeon or ForeverRouteData.zoneRoute)
   f.home:SetShown(onDungeon and true or false)
-  if onDungeon then f.home:ClearAllPoints(); f.home:SetPoint("TOPLEFT", PAD - 2, -top + 1) end
+  if onDungeon then
+    f.home.label:SetText(ForeverRouteData.zoneRoute and "Change zone" or "Back to my path")
+    f.home:ClearAllPoints(); f.home:SetPoint("TOPLEFT", PAD - 2, -top + 1)
+  end
   f.ctl:ClearAllPoints(); f.ctl:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD + 4, -top + 1)
   local x = 0
   for _, name in ipairs({ "opt", "min", "dungeon", "list", "undo", "skip", "done", "fwd", "back" }) do

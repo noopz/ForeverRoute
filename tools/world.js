@@ -13,7 +13,7 @@ const XP_TO_LEVEL = [0, 400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600
 // the Classic formula, corrected by what your kills really gave (tools/learn.js -> setLearned): a factor per level
 // difference (mob - you), only where enough kills were seen
 let XP_FACTOR = null;
-function setLearned(learned) { XP_FACTOR = (learned && learned.killXpByDiff) || null; }
+function setLearned(learned) { XP_FACTOR = (learned && learned.killXpByDiff) || null; if (learned && learned.ambientShare != null) setAmbient(learned.ambientShare); }
 function classicKillXp(mob, L) {
   const gray = L <= 5 ? 0 : L <= 39 ? L - Math.floor(L / 10) - 5 : L - Math.floor(L / 5) - 1;
   if (mob <= gray) return 0;
@@ -37,11 +37,21 @@ function grindSeconds(kills, secPerKill, opts) {
   return t <= focus ? t : focus + (t - focus) * (o.distracted ?? 1.5);
 }
 
+// The XP that comes with questing beyond a quest's own reward and its counted kills: mobs in the way, the extra pull,
+// rested XP (kills pay double after a night in an inn), exploration. A player's save showed quests at 51% of the XP he
+// really earned to 33 - the planner counted kills at about half the quest XP, the rest of his was this. Without it the
+// planned character levels slower than real ones and "runs out" of quests that players never run out of.
+// ambientShare: a share of each hand-in's quest XP (0.25 for anyone; learned from your play: tools/learn.js)
+let AMBIENT = 0.25;
+function setAmbient(x) { if (typeof x === 'number' && x >= 0 && x <= 1.5) AMBIENT = x; }
+function ambientShare() { return AMBIENT; }
 // a quest's XP at your level L: full up to 5 levels above the quest, then 20% less per level, never under 10%
 function questXp(base, qLevel, L) {
   const d = L - qLevel;
   return d <= 5 ? base : Math.round(base * Math.max(0.1, 1 - 0.2 * (d - 5)));
 }
+// what a hand-in moves you on by: the quest's XP and the ambient XP that comes with doing it (setAmbient)
+function questGain(base, qLevel, L) { return questXp(base, qLevel, L) * (1 + AMBIENT); }
 function addXp(level, xp, n) {
   xp += n;
   while (level < 60 && xp >= XP_TO_LEVEL[level]) { xp -= XP_TO_LEVEL[level]; level++; }
@@ -70,6 +80,13 @@ function classFits(mask, klass) {
   if (k === 'none') return (mask & ALL_CLASSES) === ALL_CLASSES;
   const cb = CLASS_BIT[k];
   return !cb || !!(mask & cb);
+}
+// a quest whose giver or hand-in is the other faction's (most quests in an Alliance zone have no race mask: only the
+// giver says so - the Horde v9 tauren start was sent to Redridge for green quests and stopped there at 16)
+function sideFits(q, faction) {
+  const foe = faction === 'horde' ? 'A' : faction === 'alliance' ? 'H' : null;
+  if (!q || !foe) return true;
+  return ![...(q.starters || []), ...(q.finishers || [])].some((s) => s && s.friendly === foe);
 }
 function canTake(q, race, klass) {
   if (!q) return false;
@@ -160,4 +177,4 @@ function hasProfessionFor(q, skills) {
 }
 // the professions in a save, sorted (what a replan watches: people rarely change them)
 const professionsOf = (skills) => Object.keys(skills || {}).filter((n) => PROFESSIONS.has(n)).sort();
-module.exports = { SKILL_NAME, PROFESSIONS, hasProfessionFor, professionsOf, levelAbove, minLevelFor, FACTION_RACES, raceFits, classFits, grindSeconds, unknownWork, unknownWorkLabel, leadsOn, RACE_HOME, START_ZONES, droppers, raceOk, XP_TO_LEVEL, killXp, classicKillXp, setLearned, questXp, addXp, RACE_BIT, CLASS_BIT, canTake, CAPITAL_AREAS, CAPITAL_MAPS, PLANNER_ZONE_NAMES, plannerZoneNames, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, TRAIN_BATCH, trainNow };
+module.exports = { sideFits, SKILL_NAME, PROFESSIONS, hasProfessionFor, professionsOf, questGain, setAmbient, ambientShare, levelAbove, minLevelFor, FACTION_RACES, raceFits, classFits, grindSeconds, unknownWork, unknownWorkLabel, leadsOn, RACE_HOME, START_ZONES, droppers, raceOk, XP_TO_LEVEL, killXp, classicKillXp, setLearned, questXp, addXp, RACE_BIT, CLASS_BIT, canTake, CAPITAL_AREAS, CAPITAL_MAPS, PLANNER_ZONE_NAMES, plannerZoneNames, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, TRAIN_BATCH, trainNow };

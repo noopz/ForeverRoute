@@ -12,7 +12,7 @@ const cfgFile = args.find((a) => a.endsWith('.json')) || fs.readdirSync(path.joi
 const full = args.includes('--full');
 const base = JSON.parse(fs.readFileSync(cfgFile, 'utf8'));
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-dryrun-'));
-const cfg = { ...base, routesOut: path.join(work, 'Route.lua'), ...(full ? { beam: 4 } : { reuseDungeons: path.join(ROOT, 'paths-auto-full', 'dungeons.json'), optimizeEffort: 0.5 }) };
+const cfg = { ...base, routesOut: path.join(work, 'Route.lua'), ...(full ? { beam: 4 } : { reuseDungeons: path.join(ROOT, 'paths-auto-full', 'dungeons.json'), optimizeEffort: 0.5, evalRetrySec: 0 }) };
 fs.writeFileSync(path.join(work, 'campaign.json'), JSON.stringify(cfg));
 const t0 = Date.now();
 // (the planner can stay alive after writing its plan - a worker thread; tools/starter.js stops it 15 s after 'wrote')

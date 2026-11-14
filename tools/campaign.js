@@ -42,7 +42,7 @@ console.log(`${st.name || 'character'}: ${race} ${klass}, level ${state.level}, 
 const band = {};
 for (const q of Object.values(db.quests)) {
   if (!raceFits(q.races, race)) continue;
-  if (q.special & 3 || q.level <= 0 || q.level > 60) continue;
+  if (q.special & 1 || q.level <= 0 || q.level > 60) continue;
   for (const s of q.starters) for (const sp of s.spawns || []) if (zoneName[sp.zone]) (band[sp.zone] = band[sp.zone] || []).push(q.level);
 }
 const median = (a) => { const b = [...a].sort((x, y) => x - y); return b[b.length >> 1]; };
@@ -97,18 +97,18 @@ function questSupply(S) {
   const allElite = (q) => { const ids = (q.objectives || []).flatMap((o) => (o.kind === 'kill' ? [o.npc] : o.npcs || [])); const ns = ids.map((i) => N[i]).filter(Boolean); return ns.length > 0 && ns.every((n) => n.rank >= 1 && n.rank <= 3); };
   let have = 0;
   for (const q of Object.values(db.quests)) {
-    if (done.has(q.id) || !(q.xp > 0) || (q.special & 3) || q.skill || q.notInForever || !zoneName[q.zone]) continue;
+    if (done.has(q.id) || !(q.xp > 0) || (q.special & 1) || q.skill || q.notInForever || !zoneName[q.zone]) continue;
     if (q.level > (cfg.targetLevel || 60) || q.level < S.level - 5 || !W.canTake(q, race, klass) || allElite(q)) continue;
     have += W.questXp(q.xp, q.level, Math.max(S.level, q.level - 2));
   }
   let need = (XP_TO_LEVEL[S.level] || 0) - (S.xp || 0);
   for (let l = S.level + 1; l < (cfg.targetLevel || 60); l++) need += XP_TO_LEVEL[l] || 0;
-  return { have: Math.round(have * (1 + (cfg.supplyKillShare ?? 0.5)) * (cfg.supplyShare ?? 0.75)), need };
+  return { have: Math.round(have * (1 + (cfg.supplyKillShare ?? 0.5) + W.ambientShare()) * (cfg.supplyShare ?? 0.75)), need };
 }
 // the grind step's other way through (grouping, the player's own choice - dungeons are never forced): the dungeons
 // that fit this level, reachable from your side, each a dungeon route in the addon (/fr dungeons)
 function gapDungeons(L) {
-  const names = (typeof dungeonLegsAt === 'function' ? dungeonLegsAt(L) : []).filter((d) => uiMap[d.entrance]).map((d) => d.name);
+  const names = (typeof anyDungeonAt === 'function' ? anyDungeonAt(L) : []).filter((d) => uiMap[d.entrance]).map((d) => d.name);
   return names.length ? ` Or group for ${names.slice(0, 3).join(', ')}: about as quick with a group, and each has a dungeon route (/fr dungeons).` : ' A dungeon run does it too.';
 }
 function grindLeg(S, evals, cands) {
@@ -202,10 +202,10 @@ function questZones(q, done, level) {
 // the wait for a group, the run's XP), so it wins only when it's worth it; the player can always skip a run in game.
 // Level band: the middle of the levels of the mobs inside (wings included). Its quests: the same rule as the dungeon
 // routes (dungeon-prep.js isDungeonQuest). Raids and other-expansion instances are left out.
-const DUNGEON_LEGS = (() => {
-  // a dungeon is never part of your path unless you asked (cfg.dungeonsInPath): it needs a group, and that can be hard to
-  // find - its quests are a side trip you choose (paths.js dungeon routes, the Side trips window)
-  if (cfg.dungeons === 'none' || cfg.dungeonsInPath !== true || !cfg.dungeonFile || !fs.existsSync(cfg.dungeonFile)) return [];
+// every dungeon with its level band: the step offered where no solo quest is left (gap dungeons), and - only when you asked
+// for dungeons in your path (cfg.dungeonsInPath) - a zone the plan may choose (DUNGEON_LEGS, below)
+const DUNGEON_LEGS_ALL = (() => {
+  if (cfg.dungeons === 'none' || !cfg.dungeonFile || !fs.existsSync(cfg.dungeonFile)) return [];
   let D; try { D = require('./dungeons').loadDungeons(cfg.dungeonFile); } catch (e) { return []; }
   const RAID = /Molten Core|Onyxia|Blackwing|Zul'Gurub|Ahn'Qiraj|Naxxramas|Utgarde|Black Morass|Old Hillsbrad|Deeprun|Hall of Legends|Champions' Hall/;
   const areaOf = (d) => new Set([d.id, ...(d.alt || [])]);
@@ -227,14 +227,18 @@ const DUNGEON_LEGS = (() => {
     const ls = [...A].flatMap((z) => mobLevels[z] || []).sort((a, b) => a - b);
     if (ls.length < 10) continue;
     const lo = ls[Math.floor(ls.length * 0.2)], hi = ls[Math.floor(ls.length * 0.8)];
-    const quests = Object.values(db.quests).filter((q) => !(q.special & 3) && raceFits(q.races, race) && classFits(q.classes, klass)
+    const quests = Object.values(db.quests).filter((q) => !(q.special & 1) && raceFits(q.races, race) && classFits(q.classes, klass)
       && (A.has(q.zone) || (q.objectives || []).some((o) => { const sp = spawnsOf(o); return sp.length > 0 && sp.every((p) => A.has(p.zone)); })));
     if (quests.length < 3) continue;
     out.push({ id: d.id, name: d.name, entrance: d.entrance.zone, lo, hi, quests });
   }
   return out;
 })();
+// a dungeon is never part of your path unless you asked (cfg.dungeonsInPath): it needs a group, and that can be hard to
+// find - its quests are a side trip you choose (paths.js dungeon routes, the Side trips window)
+const DUNGEON_LEGS = cfg.dungeonsInPath === true ? DUNGEON_LEGS_ALL : [];
 const dungeonLegsAt = (level) => DUNGEON_LEGS.filter((d) => level >= d.lo - 1 && level <= d.hi);
+const anyDungeonAt = (level) => DUNGEON_LEGS_ALL.filter((d) => level >= d.lo - 1 && level <= d.hi);
 // is zone z on the other continent from where you are?
 function otherContinent(S, z) {
   const here = (S.pos && S.pos.zone) || S.zone;
@@ -250,8 +254,11 @@ function xpRunLeg(S, legs = []) {
   let best = null;
   // at most XP_RUNS_IN_A_ROW runs of the same dungeon in a row (the player runs one 2-3 times, not six)
   const recent = legs.slice(-(cfg.xpRunsInARow ?? 3)).map((l) => l.xpRun);
-  for (const dg of dungeonLegsAt(L)) {
-    if (!uiMap[dg.entrance]) continue;
+  // not one whose way in is the other faction's home (Gnomeregan in Dun Morogh for a Horde player: its start zones and capitals)
+  const W2 = require('./world');
+  const OTHER = new Set((cfg.faction === 'horde' ? ['human', 'dwarf', 'gnome', 'nightelf'] : ['orc', 'troll', 'tauren', 'undead']).map((r) => W2.RACE_HOME[r]).concat(cfg.faction === 'horde' ? [1519, 1537, 1657] : [1497, 1637, 1638]));
+  for (const dg of anyDungeonAt(L)) {
+    if (!uiMap[dg.entrance] || OTHER.has(dg.entrance)) continue;
     if (recent.length >= (cfg.xpRunsInARow ?? 3) && recent.every((r) => r === dg.id)) continue;
     const runMin = (cfg.dungeonMinutes && cfg.dungeonMinutes[dg.id]) || DUNGEON_MINUTES[dg.id] || cfg.dungeonRunMin || 50;
     // no safe way there (hop costs NO_WAY): not an option - a gnome mage at 33 was sent on a "655 min" Scarlet Monastery run
@@ -279,7 +286,7 @@ function regionOf(z, level, completed) {
   const done = new Set(completed || []);
   const links = {};
   for (const q of Object.values(db.quests)) {
-    if (done.has(q.id) || q.level < level - 2 || q.level > level + 4 || (q.special & 3)) continue;
+    if (done.has(q.id) || q.level < level - 2 || q.level > level + 4 || (q.special & 1)) continue;
     if (!raceFits(q.races, race) || !classFits(q.classes, klass)) continue;
     if (starterZone(q) !== z) continue;
     for (const w of questZones(q, done, level)) if (w !== z && continent[w] === continent[z] && zoneName[w] && nearby(z, w)) links[w] = (links[w] || 0) + 1;
@@ -441,7 +448,7 @@ async function pool(items, n, fn) { const r = []; let i = 0; await Promise.all(A
 // (tools/carry-deliveries.js)
 function carryDeliveries(steps, legs) {
   if (cfg.carry === false || !legs.length) return;
-  const added = require('./carry-deliveries').carry(steps, legs, { db, conv, completed: st.completed, log: st.log, level: state.level, race, klass, faction: cfg.faction });
+  const added = require('./carry-deliveries').carry(steps, legs, { db, conv, completed: st.completed, log: st.log, level: state.level, race, klass, faction: cfg.faction, skills: st.skills });
   if (added.length) console.log('carried deliveries: ' + added.join(', '));
 }
 
@@ -459,6 +466,9 @@ function chainEnds(steps, legs) { const n = CARRY.chainEnds(steps, legs); if (n)
 const OBSERVED_DROPS = (() => { try { const f = path.join(cfg.charDir, '..', '..', '..', 'SavedVariables', 'ForeverRoute.lua'); const sv = require('./luatable').parseSavedVariables(fs.readFileSync(f, 'utf8')); return (sv.ForeverRouteDB && sv.ForeverRouteDB.drops) || {}; } catch (e) { return {}; } })();
 // what your play taught us (tools/learn.js, run by the companion): kill XP corrections and minutes per kill
 const LEARNED = (() => { if (cfg.learnedFile === false) return null; try { return JSON.parse(fs.readFileSync(cfg.learnedFile || path.join(ROOT, 'paths-auto', 'learned.json'), 'utf8')); } catch (e) { return null; } })();
+// the XP that comes with questing, as your play showed it (tools/learn.js ambientShare), or a plan's own setting
+if (LEARNED && LEARNED.ambientShare != null) require('./world').setAmbient(LEARNED.ambientShare);
+if (cfg.ambientXp != null) require('./world').setAmbient(cfg.ambientXp);
 // quests with a fun reward (a toy, a transform...: tools/learn.js asked the game) are worth a detour: must-do, with a note
 const FUN_NOTES = (LEARNED && LEARNED.funQuests) || {};
 const MUST_DO = [...new Set([...(cfg.mustDo || []), ...Object.keys(FUN_NOTES).map(Number)])];
@@ -492,7 +502,7 @@ function legConfig(zone, level, extra, S = state) {
     arriveFrom: S.pos && !zones.includes(S.pos.zone) ? { zone: S.pos.zone, x: Math.round(S.pos.x / 4) * 4, y: Math.round(S.pos.y / 4) * 4 } : undefined, arriveKnowsFP: hasFP(zone),
     minQuestLevel: level - 6, maxQuestLevel: level + 5, maxAbove: cfg.maxAbove, targetLevel: cfg.targetLevel, finishOpen: true,
     flightSec: 120, completed: S.completed, active: S.active, arrivalTour: true, terrainDir: cfg.terrainDir, conversion: cfg.conversion,
-    flightPaths: Object.keys(zoneName).map(Number).filter((z) => hasFP(z)), observedDrops: OBSERVED_DROPS, mustDo: MUST_DO, keep: [...(cfg.keep || []), ...MUST_DO], funNotes: FUN_NOTES, trainLevels: cfg.trainLevels, trainer: cfg.trainer, trainers: cfg.trainers, learned: LEARNED && Object.keys(LEARNED.killXpByDiff || {}).length ? { killXpByDiff: LEARNED.killXpByDiff } : undefined, ...(LEARNED && LEARNED.secPerKill ? { secPerKill: LEARNED.secPerKill } : {}), hearth: S.hearth || undefined, bindName: S.hearth ? undefined : st.bind, trainerNote: cfg.trainerNote, hubNames: cfg.hubNames, skip: [...(cfg.skip || []), ...(st.nope || []), ...(st.notOffered || []), ...LET_GO],
+    flightPaths: Object.keys(zoneName).map(Number).filter((z) => hasFP(z)), observedDrops: OBSERVED_DROPS, mustDo: MUST_DO, keep: [...(cfg.keep || []), ...MUST_DO], funNotes: FUN_NOTES, trainLevels: cfg.trainLevels, trainer: cfg.trainer, trainers: cfg.trainers, learned: LEARNED && (Object.keys(LEARNED.killXpByDiff || {}).length || LEARNED.ambientShare != null) ? { killXpByDiff: LEARNED.killXpByDiff || {}, ambientShare: LEARNED.ambientShare } : undefined, ambientXp: cfg.ambientXp, ...(LEARNED && LEARNED.secPerKill ? { secPerKill: LEARNED.secPerKill } : {}), hearth: S.hearth || undefined, bindName: S.hearth ? undefined : st.bind, trainerNote: cfg.trainerNote, hubNames: cfg.hubNames, skip: [...(cfg.skip || []), ...(st.nope || []), ...(st.notOffered || []), ...LET_GO],
     title: `${zoneName[zone]} ${level}+`, character: st.name, charDir: undefined, addonsDir: cfg.addonsDir, bonusQuests: cfg.bonusQuests, bonusNotes: cfg.bonusNotes, booksCharDir: cfg.charDir, itemsJson: cfg.itemsJson, maxFrustration: cfg.maxFrustration, awayHubShare: cfg.awayHubShare, lonelyYards: cfg.lonelyYards, lonelyXpShare: cfg.lonelyXpShare, keepRewardValue: cfg.keepRewardValue, frustrating: cfg.frustrating, // dungeons run earlier on this path: not run again for a quest or two (route2.js)
     dungeonsRun: S.dungeonsRun && S.dungeonsRun.length ? S.dungeonsRun : undefined,
     gearVerdicts: st.gearVerdicts && Object.keys(st.gearVerdicts).length ? st.gearVerdicts : undefined,
@@ -501,9 +511,21 @@ function legConfig(zone, level, extra, S = state) {
   };
 }
 
+// a zone's look: one planner run under the eval cap (cfg.evalTimeoutSec, 150 s). A big zone can take longer - The Barrens
+// with Stonetalon open timed out at every leg from 15 to 16 for a tauren, read as 'failed', and the plan drifted into
+// Westfall and Redridge - so a run that times out gets one more try with a longer cap (cfg.evalRetrySec, 600 s)
+async function runEval(c, tag) {
+  const cap = cfg.evalTimeoutSec || 150;
+  let r = await run(c, tag, cap);
+  if (r.code && /timed out/.test(r.err || '') && (cfg.evalRetrySec ?? 600) > cap) {
+    console.log(`  ${tag}: timed out after ${cap}s - trying again with ${cfg.evalRetrySec ?? 600}s`);
+    r = await run(c, tag + '-long', cfg.evalRetrySec ?? 600);
+  }
+  return r;
+}
 async function evalZone(z, S, n, tag) {
   const c = legConfig(z, S.level, { loose: true, optimize: false, workers: cfg.evalWorkers || 2, start: null, stateOut: path.join(work, tag + '.state.json') }, S);
-  const r = await run(c, tag, cfg.evalTimeoutSec || 150);
+  const r = await runEval(c, tag);
   if (r.code) return null;
   const s2 = JSON.parse(fs.readFileSync(c.stateOut, 'utf8'));
   const gained = (() => { let x = 0, L = S.level, xp = S.xp; while (L < s2.level) { x += XP_TO_LEVEL[L] - xp; xp = 0; L++; } return x + s2.xp - xp; })();
@@ -600,9 +622,9 @@ async function beamSearch() {
     state = { ...state, active: pruneLog(state) };
     const cands = [...new Set([...candidates(state.level), ...(cfg.openZones === false ? [] : openZones(state))])].filter((z) => !emptyAt.has(z));
     const t0 = Date.now();
-    const evalOne = async (z) => {
-      const c = legConfig(z, state.level, { loose: n >= 2, optimize: false, workers: cfg.evalWorkers || 2, start: null, stateOut: path.join(work, `eval-${n}-${z}.state.json`) });
-      const r = await run(c, `eval-${n}-${z}`, cfg.evalTimeoutSec || 150);
+    const evalOne = async (z, relax) => {
+      const c = legConfig(z, state.level, { loose: n >= 2, optimize: false, workers: cfg.evalWorkers || 2, start: null, stateOut: path.join(work, `eval-${n}-${z}${relax ? '-wide' : ''}.state.json`), ...(relax || {}) });
+      const r = await runEval(c, `eval-${n}-${z}`);
       if (r.code) return { z, score: -1, err: r.err.split('\n').slice(-3).join(' ') };
       const s = JSON.parse(fs.readFileSync(c.stateOut, 'utf8'));
       const gained = (() => { let x = 0, L = state.level, xp = state.xp; while (L < s.level) { x += XP_TO_LEVEL[L] - xp; xp = 0; L++; } return x + s.xp - xp; })();
@@ -616,14 +638,15 @@ async function beamSearch() {
       // cfg.otherContinentFactor < 1 makes the other continent beat staying by a margin (off: at 0.8 a 1-60 plan took 5
       // fewer boats but 16% longer, and one path stalled at 34 - the quests are where they are)
       const stay = otherContinent(state, z) ? (cfg.otherContinentFactor ?? 1) : 1;
-      return { z, gained, minutes, turnins: s.turnins, score: minutes > 0 ? (revisited(value, s.carryValue, revisit) / minutes) * stay : 0, s };
+      return { z, gained, minutes, turnins: s.turnins, score: minutes > 0 ? (revisited(value, s.carryValue, revisit) / minutes) * stay : 0, s, relax };
     };
     const evals = await pool(cands, PAR, evalOne);
     evals.sort((a, b) => b.score - a.score);
     // a zone you have no safe way to reach (Zephras Isle for a level-1 human: the portal is Skyborne-only) is no option
     if (cfg.rankOnly) { fs.writeFileSync(cfg.rankOut, JSON.stringify(evals.filter((e) => e.score > 0 && e.turnins >= (cfg.minTurnins || 5) && hop(state, e.z) < NO_WAY).map((e) => ({ z: e.z, name: zoneName[e.z], xph: Math.round(e.score * 60), turnins: e.turnins })))); return; }
     console.log(`\nleg ${n + 1} at level ${state.level}: evaluated ${cands.length} zones in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
-    for (const e of evals.slice(0, 5)) console.log(`  ${zoneName[e.z].padEnd(22)} ${e.score < 0 ? 'failed ' + e.err : `${Math.round(e.score * 60)} xp/h  (${e.turnins} turn-ins, ${e.minutes} min)`}`);
+    // the top 5, and every zone that failed (a failure below the top 5 went unseen: The Barrens for a tauren at 15-16)
+    for (const e of evals.filter((e, i) => i < 5 || e.score < 0)) console.log(`  ${zoneName[e.z].padEnd(22)} ${e.score < 0 ? 'failed ' + e.err : `${Math.round(e.score * 60)} xp/h  (${e.turnins} turn-ins, ${e.minutes} min)`}`);
     const options = evals.filter((e) => e.score > 0 && e.turnins >= (cfg.minTurnins || 5)).slice(0, 4).map((e) => ({ z: e.z, name: zoneName[e.z], xph: Math.round(e.score * 60), turnins: e.turnins, minutes: e.minutes }));
     const beforeFile = path.join(work, 'before-' + (n + 1) + '.json');
     fs.writeFileSync(beforeFile, JSON.stringify({ state, visits }));
@@ -671,15 +694,66 @@ async function beamSearch() {
         continue;
       }
     }
-    // before a grind (a failure: the player's rule), look wider - every zone with even one hand-in in reach: a chain's
-    // next part, a quest in your log (openZones with no hand-in floor). At 44 a human had ~100-120k XP of such parts
-    // a band - Bloodsail Buccaneers, Bring Me His Head, Ledger from Tanaris - one or two a zone, so no zone opened and
-    // the plan ground (tools/band-budget.js). A short leg for them beats the grind
-    if (!best && cfg.grind && cfg.openZones !== false && cfg.wideBeforeGrind !== false) {
-      const wide = openZones(state, 1).filter((z) => !cands.includes(z) && !emptyAt.has(z));
-      if (wide.length) {
-        const more = (await pool(wide, PAR, evalOne)).filter((e) => e.score > 0 && e.turnins >= 1).sort((a, b) => b.score - a.score);
-        if (more.length) { best = more[0]; console.log(`  nothing in the usual zones: a short leg for what's open in ${zoneName[best.z]} (${best.turnins} turn-ins, ${Math.round(best.score * 60)} xp/h) - not a grind`); }
+    // Before a grind, look wider (the player: "grinding should be up to the player... give them quests all the way
+    // through"). A plan never needs to grind while any quest anywhere pays: whoever grinds anyway is picked up at their
+    // new level by the card. In stages, each only when the last found nothing:
+    //   1. zones with a hand-in in reach: a chain's next part, a quest in your log (openZones with no floor)
+    //   2. every zone with quests you haven't done from 8 levels below you (green: still real XP) up to the gate - the
+    //      lower zones the plan left behind included
+    //   3. the same, with mobs and quests one level further above you than the gate (the first orange level more)
+    //   4. older quests, down to 12 levels below you (less XP each, still something)
+    // A leg found this way is planned with the same window (best.relax).
+    if (!best && cfg.wideBeforeGrind !== false) {
+      const W = require('./world');
+      const L = state.level;
+      const tryZones = async (zs, relax, why) => {
+        zs = [...new Set(zs)].filter((z) => !emptyAt.has(z));
+        if (!zs.length) return null;
+        const more = (await pool(zs, PAR, (z) => evalOne(z, relax))).filter((e) => e && e.score > 0 && e.turnins >= 1).sort((x, y) => y.score - x.score);
+        if (more.length) console.log(`  nothing in the usual zones: ${why} - ${zoneName[more[0].z]} (${more[0].turnins} turn-ins, ${Math.round(more[0].score * 60)} xp/h), not a grind`);
+        return more[0] || null;
+      };
+      if (cfg.openZones !== false) best = await tryZones(openZones(state, 1).filter((z) => !cands.includes(z)), null, 'a short leg for what is open');
+      if (!best) {
+        const done = new Set(state.completed || []), act = state.active || {};
+        const zs = [];
+        for (const q of Object.values(db.quests)) {
+          if (!q || done.has(q.id) || act[q.id] || !(q.xp > 0) || (q.special & 1) || q.skill || q.notInForever) continue;
+          if (q.level < L - 8 || q.level > L + W.levelAbove(L) + 1 || (q.reqLevel || 1) > L + 1 || !W.canTake(q, race, klass) || !W.sideFits(q, cfg.faction)) continue;
+          const z = starterZone(q);
+          if (z && zoneName[z] && !CITIES.has(z) && !BATTLEGROUNDS.has(z) && !(START_ZONES.has(z) && z !== HOME)) zs.push(z);
+        }
+        best = await tryZones(zs, { minQuestLevel: L - 8 }, 'green quests in a zone left behind');
+        if (!best) best = await tryZones(zs.concat(cands), { minQuestLevel: L - 8, maxAbove: W.levelAbove(L) + 2, maxMobAbove: W.levelAbove(L) + 2 }, 'quests a level further above you than usual');
+        // 4. older quests still: down to 12 below you (Forever pays a quest 5+ levels below 10-20% less a level - little
+        //    each, but a handful covers the last part of a level at the thin spots, 48 and 59 for an Alliance trunk)
+        if (!best) {
+          const old = [];
+          for (const q of Object.values(db.quests)) {
+            if (!q || done.has(q.id) || act[q.id] || !(q.xp > 0) || (q.special & 1) || q.skill || q.notInForever) continue;
+            if (q.level < L - 12 || q.level >= L - 8 || !W.canTake(q, race, klass) || !W.sideFits(q, cfg.faction)) continue;
+            const z = starterZone(q);
+            if (z && zoneName[z] && !CITIES.has(z) && !BATTLEGROUNDS.has(z) && !(START_ZONES.has(z) && z !== HOME)) old.push(z);
+          }
+          best = await tryZones(old, { minQuestLevel: L - 12 }, 'older quests left behind');
+        }
+      }
+    }
+    // Where even that finds nothing (every solo quest in reach is used up: an Alliance trunk at 48 and 59, a Horde one at
+    // 29 and 59), the step is a dungeon that fits your level, not a grind (the player's call): group for it - its quests
+    // are on its dungeon route - or grind there if you'd rather. Never forced: the card says so, and the route goes on
+    if (!best && cfg.gapDungeons !== false) {
+      const run = xpRunLeg(state, legs);
+      if (run) {
+        const st = run.leg.leg.steps[0];
+        st.text = 'Group for ' + run.name;
+        st.note = `Every quest you can do on your own at ${state.level} is done. ${run.name} fits your level: its quests are on its dungeon route (/fr dungeons), and a run pays about a third of a level. Rather not group? Grind nearby instead - the route goes on either way.`;
+        st.gap = true;
+        legs.push(run.leg);
+        console.log(`  -> no solo quests left at ${state.level}: group for ${run.name} (or grind), level ${state.level} -> ${run.leg.state.level}`);
+        visits[run.z] = (visits[run.z] || 0) + 1;
+        state = { ...state, level: run.leg.state.level, xp: run.leg.state.xp, pos: run.leg.state.pos, zone: run.z, dungeonsRun: [...(state.dungeonsRun || []), run.id] };
+        continue;
       }
     }
     if (!best) {
@@ -699,7 +773,7 @@ async function beamSearch() {
     let errand = errandFor(state, best.z, legConfig(best.z, state.level, {}).zones, best.score);
     const planLeg = async (E) => {
       const S = E ? { ...state, pos: { zone: E.zone, x: E.spot.x, y: E.spot.y }, active: { ...state.active, ...Object.fromEntries(E.quests.map((e) => [e.id, { complete: true, objectives: [] }])) } } : state;
-      const c = legConfig(best.z, state.level, { loose: false, optimize: true, ...optWork(1), routeOut: path.join(work, tag + '.lua'), legOut: path.join(work, tag + '.leg.json'), stateOut: path.join(work, tag + '.state.json') }, S);
+      const c = legConfig(best.z, state.level, { loose: false, optimize: true, ...optWork(1), routeOut: path.join(work, tag + '.lua'), legOut: path.join(work, tag + '.leg.json'), stateOut: path.join(work, tag + '.state.json'), ...(best.relax || {}) }, S);
       let r = await run(c, tag);
       // a one-off failure (a shared file busy, a host that died) shouldn't end the whole plan: once more, then give up
       if (r.code) { console.log('leg failed, trying it once more: ' + r.err.slice(-200)); r = await run(c, tag); }

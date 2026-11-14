@@ -82,6 +82,24 @@ for (const [id, it] of Object.entries(L.items || {})) {
 lines.push('', '## Fun quest rewards (asked the game)', '', `${Object.keys(L.items || {}).length} reward items checked so far.`);
 lines.push(...(funLines.length ? funLines : ['None found yet (the addon checks a few a second while you play).']));
 
+// ambient XP (world.js setAmbient): what your leveling really earned beyond quest rewards and the kills the planner counts
+// for them - XP to your level, minus the quest XP of what you've handed in at full value, minus the kills the planner
+// already counts (half the quest XP, cfg.supplyKillShare), as a share of the quest XP. Needs 100+ quests done to mean
+// anything; kept between 0 and 1
+try {
+  const W = require('./world');
+  const st = require('./snapshot').loadCharState(charDir, path.join(ROOT, 'qdb', 'conversion.json'));
+  const db = JSON.parse(fs.readFileSync(path.join(ROOT, 'qdb', 'db.json'), 'utf8'));
+  if (st && st.level > 10 && (st.completed || []).length >= 100) {
+    let earned = st.xp || 0; for (let l = 1; l < st.level; l++) earned += W.XP_TO_LEVEL[l];
+    let qx = 0; for (const id of st.completed) { const q = db.quests[id]; if (q && q.xp > 0) qx += q.xp; }
+    if (qx > 0) {
+      const share = Math.min(1, Math.max(0, (earned - qx * 1.5) / qx));
+      out.ambientShare = +share.toFixed(2);
+      lines.push('', '## XP beyond quests', '', `Quests you've done paid about ${Math.round(qx / 1000)}k XP of the ${Math.round(earned / 1000)}k you earned to level ${st.level}; with the kills the planner counts for them, the rest - kills on the way, rested XP, exploration - is ${Math.round(share * 100)}% of the quest XP again. The planner adds that to each hand-in (it was 25%).`);
+    }
+  }
+} catch (e) {}
 fs.writeFileSync(path.join(outDir, 'learned.json'), JSON.stringify(out, null, 1));
 
 // incidents: new since the last run
@@ -177,4 +195,4 @@ if (charDir && !process.env.FR_REPORTS) {
 }
 
 fs.writeFileSync(path.join(reports, 'learned.md'), lines.join('\n') + '\n');
-console.log(`learned: ${Object.keys(out.killXpByDiff).length} XP corrections, ${out.secPerKill ? out.secPerKill + ' s/kill' : 'pace not yet'}, ${fresh.length} new incidents`);
+console.log(`learned: ${Object.keys(out.killXpByDiff).length} XP corrections${out.ambientShare != null ? ', ambient ' + out.ambientShare : ''}, ${out.secPerKill ? out.secPerKill + ' s/kill' : 'pace not yet'}, ${fresh.length} new incidents`);

@@ -29,7 +29,7 @@ const allElite = (q) => { const ids = (q.objectives || []).flatMap((o) => (o.kin
 const giverZone = (q) => { for (const s of q.starters || []) for (const sp of s.spawns || []) if (sp.x >= 0 && zoneName[sp.zone]) return sp.zone; return null; };
 const byZone = {};
 for (const q of Object.values(db.quests)) {
-  if (!(q.xp > 0) || (q.special & 3) || q.skill || q.notInForever || q.level < J - 2 || q.level > 60) continue;
+  if (!(q.xp > 0) || (q.special & 1) || q.skill || q.notInForever || q.level < J - 2 || q.level > 60) continue;
   if (!W.canTake(q, faction, 'none') || allElite(q)) continue;
   const z = giverZone(q);
   if (!z || W.CAPITAL_AREAS.has(z) || dungeonAreas.has(z) || W.START_ZONES.has(z)) continue;

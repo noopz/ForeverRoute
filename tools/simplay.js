@@ -26,8 +26,8 @@ const personas = personaArg.split(',').filter(Boolean);
 const [kind, key] = plan.split(':');
 const lua = (v) => JSON.stringify(v);
 // the sim plays the plan's race and class (a built-in plan's key: human-paladin), else a gnome warlock. The simulator
-// has no Skyborne: a night elf stands in (the plan is loaded by its key, so only the model differs)
-const SIM_RACE = { human: 'Human', dwarf: 'Dwarf', gnome: 'Gnome', nightelf: 'NightElf', skyborne: 'NightElf', orc: 'Orc', troll: 'Troll', tauren: 'Tauren', undead: 'Scourge' }, SIM_CLASS = { warrior: 'Warrior', paladin: 'Paladin', hunter: 'Hunter', rogue: 'Rogue', priest: 'Priest', mage: 'Mage', warlock: 'Warlock', druid: 'Druid', shaman: 'Shaman' };
+// has no Skyborne: a night elf stands in, a tauren for the Horde's (the plan is loaded by its key, so only the model differs)
+const SIM_RACE = { human: 'Human', dwarf: 'Dwarf', gnome: 'Gnome', nightelf: 'NightElf', skyborne: 'NightElf', skybornehorde: 'Tauren', orc: 'Orc', troll: 'Troll', tauren: 'Tauren', undead: 'Scourge' }, SIM_CLASS = { warrior: 'Warrior', paladin: 'Paladin', hunter: 'Hunter', rogue: 'Rogue', priest: 'Priest', mage: 'Mage', warlock: 'Warlock', druid: 'Druid', shaman: 'Shaman' };
 const [kRace, kClass] = kind === 'starter' ? key.split('-') : [];
 const simRace = SIM_RACE[kRace] || 'Gnome', simClass = SIM_CLASS[kClass] || 'Warlock';
 const STALL_SEC = +(process.env.FR_STALL || 60);

@@ -13,7 +13,7 @@ local cards = {}
 local function legsOf(r)
   local out = {}
   for z in ((r.meta and r.meta.legs) or r.title or ""):gmatch("[^>·]+") do
-    z = z:gsub("^%s+", ""):gsub("%s+$", "")
+    z = Style.ShortZone((z:gsub("^%s+", ""):gsub("%s+$", "")))
     if z ~= "" and out[#out] ~= z then out[#out + 1] = z end
   end
   return out
@@ -62,13 +62,19 @@ local function zoneButton(k)
   f.reqZones[k] = b
   return b
 end
+Paths.PLANNED = "planned" -- (the zone row's "Planned route" button)
 function Paths.Request(zone)
   ns.char.requestZone = zone; ns.char.requestHandled = nil
   -- a ready-made route into that zone: go now (the next replan builds your whole path from there, and the addon moves
   -- you onto it); without one, the planner makes it after your next save
   local zr = zone and ns.ZoneRouteFor and ns.ZoneRouteFor(zone)
+  if zone == Paths.PLANNED then
+    ns.char.requestZone = nil
+    ns.LeaveDungeonRoute(); ns.Fire("FR_ROUTE_CHANGED"); ns.Engine.Refresh()
+    Paths.Draw(); return
+  end
   if zr then
-    ns.SelectRoute(zr.id); ns.Fire("FR_ROUTE_CHANGED"); ns.Engine.Refresh()
+    ns.EnterZoneRoute(zr.id); ns.Fire("FR_ROUTE_CHANGED"); ns.Engine.Refresh()
     if ns.Why then ns.Why("path", "you picked " .. zone .. ": on its ready-made route now; your next plan starts there") end
     ns.Print("Now heading to " .. zone .. " (the route takes you there, with pick-ups on the way). Your next plan builds your path from there - no need to wait for it.")
   else
@@ -125,6 +131,11 @@ function Paths.Draw()
   local plan = ForeverRoutePlan or {}
   local zones = {}
   local listed = {}
+  -- on a zone you picked: your planned route first, named for where it picks up at your level
+  if ForeverRouteData and ForeverRouteData.zoneRoute then
+    local nz = ns.PlannedNextZone and ns.PlannedNextZone()
+    zones[#zones + 1] = { name = Paths.PLANNED, label = "Planned route" .. (nz and (": " .. Style.ShortZone(nz)) or "") }
+  end
   for _, z in ipairs(plan.zones or {}) do zones[#zones + 1] = { name = z.name, xph = z.xph }; listed[z.name] = true end
   -- a built-in plan's zone routes for your level (its tree has one per zone and level band): every one of them is a
   -- zone you can switch to now, no planner needed
@@ -138,7 +149,7 @@ function Paths.Draw()
   for k, z in ipairs(zones) do
     local b = zoneButton(k); b.zone = z.name
     local asked = ns.char.requestZone == z.name
-    b.label:SetText((asked and "|cffffd25a" or "") .. Style.ShortZone(z.name) .. (z.xph and z.xph > 0 and string.format("  |cff8a93a6%.0fk|r", z.xph / 1000) or "") .. (asked and "|r" or ""))
+    b.label:SetText((asked and "|cffffd25a" or "") .. (z.label or Style.ShortZone(z.name)) .. (z.xph and z.xph > 0 and string.format("  |cff8a93a6%.0fk|r", z.xph / 1000) or "") .. (asked and "|r" or ""))
     local w = b.label:GetStringWidth() + 18; b:SetWidth(w)
     if x + w > W - PAD then x = PAD; rowY = rowY + 24 end
     b:ClearAllPoints(); b:SetPoint("TOPLEFT", x, -rowY); b:Show()
@@ -173,6 +184,7 @@ function Paths.Draw()
   f:SetHeight(y + 6)
 end
 
+function Paths.Show() if not f then return end; f:Show(); Paths.Draw() end
 function Paths.Toggle()
   if f:IsShown() then f:Hide(); return end
   f:Show(); Paths.Draw()

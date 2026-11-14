@@ -8,7 +8,7 @@ const os = require('os');
 
 // XP for one kill of a mob of level `mob` at your level L (Classic formula; grey mobs give nothing). The simulation
 // (route2.js) uses this same function, so the optimizer counts the levels you gain the way the simulation did.
-const { killXp, questXp } = require('./world'); // the shared rules (tools/world.js)
+const {killXp, questXp, questGain } = require('./world'); // the shared rules (tools/world.js)
 // a broken rule costs far more than any route can save, but it is a number, not Infinity: annealing that starts from an
 // order with a broken rule (the simulation's own order, when the model here disagrees with it) can still climb out one
 // move at a time, instead of only escaping when a single move happens to fix every broken rule at once
@@ -95,7 +95,7 @@ function makeEval(events, D, nLoc, opts) {
       // xp: kills during objectives at the level you are at by then (as the simulation and the step writer count
       // it), dungeon runs and grinds as their fixed figure, and quest turn-ins; quest xp shrinks once you outlevel it
       let gain = e.kills > 0 && e.mobLevel != null ? e.kills * killXp(e.mobLevel, level) : e.killXp || 0;
-      if (kind === 2) gain += questXp(e.xp, e.qLevel, level); // the shared rule (world.js)
+      if (kind === 2) gain += questGain(e.xp, e.qLevel, level); // the shared rule (world.js): the quest and what comes with it
       xp += gain; while (level < 60 && xp >= XP[level]) { xp -= XP[level]; level++; }
     }
     cost.violations = bad;

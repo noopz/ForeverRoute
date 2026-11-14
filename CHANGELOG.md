@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.9 - 2026-11-14
+- New built-in plans for every race and class. Each race starts on its own, then all of a faction's races share one main route from about level 21: no grinding anywhere from 1 to 60 (the old plans had 50 to 150 hours of it). Every plan was played from 1 to 60 by the simulated player first.
+- Horde Skyborne (Windshaper) have built-in plans now: druid, hunter, rogue, shaman and warrior.
+- Pick your zone: the route window lists the zones that fit your level with their XP per hour. Click one and the card takes you there, with the pick-ups on the way. No companion app needed.
+- On a zone you picked, "Change zone" on the card opens the zone list, and its first button is your planned route, where it picks up at your level. When a zone is done, the card says so and opens the list.
+- Plans keep the quests you carry instead of telling you to drop them, and long chains run to the end (The Missing Diplomat now reaches Jaina).
+- A quest the giver didn't offer no longer flips on and off your route while the world map shows it somewhere else.
+- Stormwind shows as one zone in the route list, not as both Stormwind and Stormwind City.
+
 ## 1.4.8 - 2026-11-13
 - Quests started by an item (a page, a head, a strange object) are offered on the card when the item is in your bags: "use it" with the use-item button above the card, or the X if you won't do it.
 - On a flight the card holds the step you took off with until you land; it no longer re-picks as you pass over other zones.

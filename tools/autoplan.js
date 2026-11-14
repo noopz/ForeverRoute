@@ -65,7 +65,9 @@ function runPlan(kind) {
     }
   } catch (e) { log('  learning failed: ' + String(e.message).split('\n')[0]); }
   // the fast pass reuses the last dungeon routes and polishes less; the full pass does everything carefully
-  const cfg = { ...now, routesOut: path.join(work, 'Route.lua'), requestZone, followZone, followLegs, followId, ...(kind === 'fast' ? { reuseDungeons: path.join(ROOT, 'paths-auto-full', 'dungeons.json'), optimizeEffort: 0.5 } : { beam: 4 }) };
+  // (and gives a zone that timed out no second, longer try - campaign.js runEval: that is for the full pass and the
+  // tree builds; the fast pass has to land in a few minutes)
+  const cfg = { ...now, routesOut: path.join(work, 'Route.lua'), requestZone, followZone, followLegs, followId, ...(kind === 'fast' ? { reuseDungeons: path.join(ROOT, 'paths-auto-full', 'dungeons.json'), optimizeEffort: 0.5, evalRetrySec: 0 } : { beam: 4 }) };
   if (requestZone) log('  you asked to start in ' + requestZone);
   const cfgFile = path.join(work, 'campaign.json'); fs.writeFileSync(cfgFile, JSON.stringify(cfg));
   const args = ['--max-old-space-size=8000', path.join(__dirname, 'paths.js'), cfgFile, '3', kind === 'full' ? '2' : '0', '--work', work];
@@ -178,7 +180,9 @@ function routeSig() {
     // zone-local quests are handled live in game: only quests reaching beyond this zone count
     const log = Object.entries(st.log || {}).filter(([id]) => beyondZone(+id, zone)).map(([id, q]) => id + ':' + (q.complete ? 1 : 0)).sort();
     const completed = (st.completed || []).filter((id) => beyondZone(+id, zone));
-    return JSON.stringify([st.level, st.pos && st.pos.zone, [...completed].sort((a, b) => a - b), log, [...(st.nope || []), ...(st.notOffered || [])].sort(), [...(st.taxi || [])].sort(), st.bind, req && req[1]]);
+    // your professions (not their ranks: those climb all the time, and the addon checks a rank at the giver)
+    const profs = require('./world').professionsOf(st.skills);
+    return JSON.stringify([profs, st.level, st.pos && st.pos.zone, [...completed].sort((a, b) => a - b), log, [...(st.nope || []), ...(st.notOffered || [])].sort(), [...(st.taxi || [])].sort(), st.bind, req && req[1]]);
   } catch (e) { return null; }
 }
 const installedSave = () => { try { const m = /fromSave = (\d+)/.exec(ownOf(fs.readFileSync(path.join(addonDir, 'Route.lua'), 'utf8')).slice(0, 400)); return m ? +m[1] : 0; } catch (e) { return 0; } };

@@ -1,9 +1,9 @@
 // Carried deliveries (campaign.js): a quest with no objectives, picked up in a capital the path passes through and
 // handed in on a later leg of the path in its hand-in zone - free XP for a stop the path makes anyway.
 // carry(steps, legs, ctx) inserts the pick-ups and hand-ins into steps (and moves legs[].from), and returns what it
-// added, one line each. ctx: { db, conv, completed, log, level, race, klass, faction }
+// added, one line each. ctx: { db, conv, completed, log, level, race, klass, faction, skills }
 // (its own file so it can be tested without a whole campaign: tools/test-exclusive.js)
-const { raceFits, classFits, CAPITAL_MAPS } = require('./world');
+const { raceFits, classFits, hasProfessionFor, CAPITAL_MAPS } = require('./world');
 const { closers } = require('./exclusive-alternatives');
 
 function carry(steps, legs, ctx) {
@@ -37,6 +37,9 @@ function carry(steps, legs, ctx) {
     // class quests only for your class (a warlock was sent to deliver the warrior quest Yorus Barleybrew)
     if (!classFits(q.classes, klass)) return null;
     if ((q.reqLevel || 1) > level || !(q.xp > 0)) return null;
+    // a profession quest only when the save doesn't say you lack the profession (Goblin Engineering was carried for a
+    // level 34 warlock with no Engineering); its rank, a spell or a reputation the addon checks at the giver
+    if (q.notInForever || !hasProfessionFor(q, ctx.skills)) return null;
     const before = turnedBefore(stop);
     const pre = [...(q.preGroup || []), ...((q.preSingle || []).length === 1 ? q.preSingle : [])];
     if (!pre.every((x) => done0.has(x) || before.has(x))) return null;

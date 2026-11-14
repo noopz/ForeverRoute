@@ -21,6 +21,13 @@ for (const d of fs.readdirSync(path.join(ROOT, 'addon')).sort()) {
   const key = `${m[1]}-${m[2]}`;
   sides[HORDE.has(m[1]) ? 'Horde' : 'Alliance'].push({ key, src: fs.readFileSync(file, 'utf8') });
 }
+// Zone routes (a tree's ready-made route per zone and level band) are the same in every plan of a faction: 45 of them,
+// copied into 28 plans, took the faction's file from about 30 MB to 53. Each is kept once (ForeverRoutePlanShared) and
+// each plan has a one-line marker where it was; the addon puts the text back into your plan only (Core.lua LoadStarter).
+// A marker whose route is missing is a Lua comment: that plan still loads, without that one zone route.
+const ZR_BLOCK = /\n  \{\n    id = "(zone:[^"\n]+)",[\s\S]*?\n  \},?(?=\n)/g;
+const marker = (id) => `\n--@zr ${id}@`;
+const unpack = (src, shared) => src.replace(/\n--@zr ([^@\n]+)@/g, (m, id) => (id in shared ? shared[id] : m));
 // a long bracket that the text never closes by accident
 const longString = (s) => { let n = 1; while (s.includes(']' + '='.repeat(n) + ']')) n++; const eq = '='.repeat(n); return `[${eq}[\n${s}]${eq}]`; };
 for (const [side, plans] of Object.entries(sides)) {
@@ -38,10 +45,19 @@ for (const [side, plans] of Object.entries(sides)) {
     '## LoadOnDemand: 1',
     '## Version: ' + (stamps[0] ? stamps[0].split(' · ')[0] : 'plans'),
     '', 'Plans.lua', ''].join('\n'));
+  // the zone routes every plan here has word for word: kept once
+  const seen = {}, shared = {};
+  for (const p of plans) for (const m of p.src.matchAll(ZR_BLOCK)) (seen[m[1]] = seen[m[1]] || new Map()).set(m[0], ((seen[m[1]].get(m[0])) || 0) + 1);
+  for (const [id, texts] of Object.entries(seen)) { const [text, n] = [...texts.entries()].sort((a, b) => b[1] - a[1])[0]; if (n > 1) shared[id] = text; }
+  for (const p of plans) {
+    p.packed = p.src.replace(ZR_BLOCK, (m, id) => (shared[id] === m ? marker(id) : m));
+    if (unpack(p.packed, shared) !== p.src) throw new Error('bundle: ' + p.key + ' does not come back whole from its zone route markers');
+  }
   const L = [`-- The built-in ${side} plans (tools/bundle-plans.js from addon/ForeverRoute_Starter_*): each as text, made into code`,
     '-- only for your race and class (Core.lua LoadMyPlan). Regenerate rather than edit.',
-    'ForeverRoutePlanSources = ForeverRoutePlanSources or {}'];
-  for (const p of plans) L.push(`ForeverRoutePlanSources[${JSON.stringify(p.key)}] = ${longString(p.src)}`);
+    'ForeverRoutePlanSources = ForeverRoutePlanSources or {}', 'ForeverRoutePlanShared = ForeverRoutePlanShared or {}'];
+  for (const [id, text] of Object.entries(shared)) L.push(`ForeverRoutePlanShared[${JSON.stringify(id)}] = ${longString(text)}`);
+  for (const p of plans) L.push(`ForeverRoutePlanSources[${JSON.stringify(p.key)}] = ${longString(p.packed)}`);
   fs.writeFileSync(path.join(dir, 'Plans.lua'), L.join('\n') + '\n');
   // read back: every plan comes out exactly as it went in (the long brackets hold)
   const back = fs.readFileSync(path.join(dir, "Plans.lua"), "utf8");
@@ -50,7 +66,7 @@ for (const [side, plans] of Object.entries(sides)) {
     const at = back.indexOf(head); if (at < 0) throw new Error("bundle: " + p.key + " missing");
     let k = at + head.length, eq = 0; while (back[k] === "=") { eq++; k++; }
     const open = k + 2, close = back.indexOf("]" + "=".repeat(eq) + "]", open);
-    if (back.slice(open, close) !== p.src) throw new Error("bundle: " + p.key + " does not read back as written");
+    if (back.slice(open, close) !== p.packed) throw new Error("bundle: " + p.key + " does not read back as written");
   }
-  console.log(`${name}: ${plans.length} plans, ${(fs.statSync(path.join(dir, 'Plans.lua')).size / 1e6).toFixed(1)} MB`);
+  console.log(`${name}: ${plans.length} plans, ${Object.keys(shared).length} shared zone routes, ${(fs.statSync(path.join(dir, 'Plans.lua')).size / 1e6).toFixed(1)} MB`);
 }

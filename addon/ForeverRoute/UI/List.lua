@@ -156,7 +156,10 @@ function List.Draw()
     -- hand-ins in each; the plan's own list for a route with nothing left to tell from
     local legs = {}
     -- (names only: a bare count after each read as noise - "Wetlands 7 > Ironforge 4" - tester; the zones panel says how many)
-    for _, z in ipairs(ns.Engine.ZonesAhead and ns.Engine.ZonesAhead(nil, 5) or {}) do legs[#legs + 1] = Style.ShortZone(z.zone) end
+    for _, z in ipairs(ns.Engine.ZonesAhead and ns.Engine.ZonesAhead(nil, 5) or {}) do
+      local name = Style.ShortZone(z.zone)
+      if legs[#legs] ~= name then legs[#legs + 1] = name end -- (two spellings of one zone side by side read as one)
+    end
     if #legs == 0 then
       for z in (m.legs or data.title or ""):gmatch("[^>·]+") do z = z:gsub("^%s+", ""):gsub("%s+$", ""); if z ~= "" and legs[#legs] ~= z then legs[#legs + 1] = z end end
     end

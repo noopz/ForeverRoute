@@ -23,11 +23,25 @@ end
 Avail._store = store
 local function level() return (UnitLevel and UnitLevel("player")) or 0 end
 
-function Avail.Seen(q)
+-- fromMap: the world map's "!" list, which says the quest is offered somewhere on the map, not by whom. After the
+-- giver the plan sends you to turned it down at this level, that is no reason to send you back to the same giver:
+-- the two took turns, and the step went off and on your route without end (The Shamed Lieutenant in Stormwind). A
+-- giver offering it, or a level up, still brings it back.
+function Avail.Seen(q, fromMap)
   if not q then return end
   local A = store()
   A.seen[q] = { t = time(), lvl = level() }
-  if A.no[q] then A.no[q] = nil; if ns.Why then ns.Why("avail", "quest " .. q .. " is offered after all: back on your route") end end
+  local no = A.no[q]
+  if not no then return end
+  if fromMap and no.lvl == level() then
+    if not no.mapSaid then
+      no.mapSaid = true
+      if ns.Why then ns.Why("avail", "quest " .. q .. ": " .. tostring(no.npc) .. " didn't offer it, though the map shows it on offer here - someone else may give it") end
+    end
+    return
+  end
+  A.no[q] = nil
+  if ns.Why then ns.Why("avail", "quest " .. q .. " is offered after all: back on your route") end
 end
 -- the game did not offer this quest at its giver (q: quest id, npc: who you talked to, step: the route's pick-up, if
 -- known). The first time, a level up brings it back. Turned down again at a higher level, with every quest before it
@@ -149,7 +163,7 @@ function Avail.ScanMap(m)
   local list = call(C_QuestLine.GetAvailableQuestLines, m)
   local n = 0
   for _, x in ipairs(type(list) == "table" and list or {}) do
-    if type(x) == "table" and plain(x.questID) and x.questID then Avail.Seen(x.questID); n = n + 1 end
+    if type(x) == "table" and plain(x.questID) and x.questID then Avail.Seen(x.questID, true); n = n + 1 end
   end
   return n
 end

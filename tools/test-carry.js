@@ -64,7 +64,7 @@ const orphan = [
 }
 {
   // the log's room: an errand is one more quest in it
-  const filler = Array.from({ length: 15 }, (_, i) => Q(300 + i, { from: 1, to: 1 }));
+  const filler = Array.from({ length: 32 }, (_, i) => Q(300 + i, { from: 1, to: 1 }));
   const C = build([...orphan, ...filler]);
   const full = Object.fromEntries(filler.map((q) => [q.id, { complete: false, objectives: [] }]));
   check('errand: none when the log holds cfg.carryLog quests already', C.errandFor(S0({ active: full }), 4, [4], 1) === null);
@@ -75,17 +75,24 @@ const orphan = [
 }
 
 // ---------- pruneLog ----------
+// (the budget is 32 - Forever's log holds 40)
 {
-  // a save with 20 quests in its log (LOG0), all at your level, nothing finished: the cap (15) counts them, and the
+  const qs = Array.from({ length: 23 }, (_, i) => Q(1400 + i, { from: 1, to: 1, objectives: [{ kind: 'kill' }] }));
+  const log = Object.fromEntries(qs.map((q) => [q.id, { complete: false, objectives: [{ done: false }] }]));
+  const act = build(qs, { st: { log } }).pruneLog(S0({ active: log }));
+  check('budget: 23 quests in your log are all kept by default (32)', Object.keys(act).length === 23, Object.keys(act).length);
+}
+{
+  // a save with 37 quests in its log (LOG0), all at your level, nothing finished: the budget (32) counts them, and the
   // least worth per minute go - the ones with the most work left
-  const qs = Array.from({ length: 20 }, (_, i) => Q(400 + i, { from: 1, to: 1, xp: 1000, objectives: [{ kind: 'kill' }, { kind: 'kill' }, { kind: 'kill' }] }));
-  const log = Object.fromEntries(qs.map((q, i) => [q.id, { complete: false, objectives: [{ done: i < 10 }, { done: i < 10 }, { done: false }] }]));
+  const qs = Array.from({ length: 37 }, (_, i) => Q(400 + i, { from: 1, to: 1, xp: 1000, objectives: [{ kind: 'kill' }, { kind: 'kill' }, { kind: 'kill' }] }));
+  const log = Object.fromEntries(qs.map((q, i) => [q.id, { complete: false, objectives: [{ done: i < 32 }, { done: i < 32 }, { done: false }] }]));
   const C = build(qs, { st: { log } });
   const act = C.pruneLog(S0({ active: log }));
   const kept = Object.keys(act).map(Number);
-  check('a full log from the save is cut to cfg.carryLog (15)', kept.length === 15, kept.length);
-  check('...the ones with the most work left go first', kept.filter((id) => id < 410).length === 10, kept);
-  check('...and are not picked up again (LET_GO)', C.LET_GO.size === 5 && [...C.LET_GO].every((id) => id >= 410), [...C.LET_GO]);
+  check('a full log from the save is cut to cfg.carryLog (32)', kept.length === 32, kept.length);
+  check('...the ones with the most work left go first', kept.filter((id) => id < 432).length === 32, kept);
+  check('...and are not picked up again (LET_GO)', C.LET_GO.size === 5 && [...C.LET_GO].every((id) => id >= 432), [...C.LET_GO]);
 }
 {
   // gray quests (more than 6 levels below you)
@@ -106,14 +113,14 @@ const orphan = [
 {
   // past the cap: a finished quest whose hand-in the plan reaches is never let go, before fresh ones with work to do;
   // among the rest, a far hand-in counts against a quest
-  const done = Array.from({ length: 10 }, (_, i) => Q(600 + i, { from: 1, to: 1, xp: 200 }));
-  const fresh = Array.from({ length: 6 }, (_, i) => Q(620 + i, { from: 1, to: 1, xp: 3000, objectives: [{ kind: 'kill' }] }));
-  const far = Q(630, { from: 3, to: 3, xp: 3000, objectives: [{ kind: 'kill' }] });
+  const done = Array.from({ length: 27 }, (_, i) => Q(600 + i, { from: 1, to: 1, xp: 200 }));
+  const fresh = Array.from({ length: 6 }, (_, i) => Q(640 + i, { from: 1, to: 1, xp: 3000, objectives: [{ kind: 'kill' }] }));
+  const far = Q(660, { from: 3, to: 3, xp: 3000, objectives: [{ kind: 'kill' }] });
   const C = build([...done, ...fresh, far], { plan: [1], hopMin: { 3: 60 } });
   const active = { ...Object.fromEntries(done.map((q) => [q.id, { complete: true }])), ...Object.fromEntries([...fresh, far].map((q) => [q.id, { complete: false, objectives: [{ done: false }] }])) };
   const act = C.pruneLog(S0({ active }));
   check('cap: finished quests with a hand-in on the plan are all kept', done.every((q) => act[q.id]), Object.keys(act));
-  check('cap: the far one goes first', !act[630] && Object.keys(act).length === 15, Object.keys(act));
+  check('cap: the far one goes first', !act[660] && Object.keys(act).length === 32, Object.keys(act));
 }
 
 // ---------- openZones ----------
@@ -137,6 +144,18 @@ const orphan = [
   check('open zones: a gray quest in your log is no reason to go back', !z.includes(2), z);
   check('open zones: a chain\'s next part with enough around it is', z.includes(7), z);
   check('open zones: never a city', !z.includes(6), z);
+}
+
+// ---------- a scripted event (special & 2) is a quest like any other ----------
+// The Missing Diplomat: part 14 is 'explore Sentry Point' with the scripted-event flag, part 15 its follow-up. The flag
+// is on escorts, fights and explorations alike; only repeatables (special & 1) are left out
+{
+  const qs = [
+    { ...Q(900, { from: 5, to: 5, level: 50 }), special: 2 }, Q(901, { from: 5, to: 5, level: 50, pre: [900] }),
+    ...Array.from({ length: 4 }, (_, i) => Q(902 + i, { from: 5, to: 5, level: 50 })),
+  ];
+  const z = build(qs).openZones(S0({ level: 50, active: { 900: { complete: false } } }));
+  check('scripted event: a chain part with the flag in your log opens its zone', z.includes(5), z);
 }
 
 // ---------- chainEnds ----------

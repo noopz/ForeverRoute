@@ -2973,6 +2973,37 @@ test("zone picker: picking a zone with a ready route switches to it at once and 
   if not ok then error(err, 0) end
 end)
 
+test("zone picker: on a zone you picked, 'Change zone' is on the card and 'Planned route' goes back to the route you were on, picked up past what's gray to you", function()
+  local sv = { routes = ForeverRouteRoutes, data = ForeverRouteData, req = ns.char.requestZone, handled = ns.char.requestHandled, title = ns.char.routeTitle, back = ns.char.returnTo, lvl = UnitLevel, done = ns.State.IsCompleted, on = ns.State.OnQuest }
+  local level = 37
+  local main = { id = "path:STV", title = "STV", meta = { legs = "Stranglethorn Vale > Riverglades" }, sections = { { title = "x" } }, steps = {
+    { id = 1, k = "accept", q = 99701, name = "Tiger Mastery", level = 33, npc = "Hemet", m = 1434, x = 0.35, y = 0.10, zone = "Stranglethorn Vale", sec = 1 },
+    { id = 2, k = "accept", q = 99702, name = "Down the River", level = 40, npc = "Someone", m = 1434, x = 0.5, y = 0.5, zone = "Riverglades", sec = 1 },
+  } }
+  local zr = { id = "zone:Arathi Highlands:36", title = "Zone: Arathi Highlands", zoneRoute = true, zoneName = "Arathi Highlands", level = 36, xph = 24000, meta = { legs = "Arathi Highlands" }, sections = { { title = "x" } }, steps = { { id = 1, k = "goto", text = "y", sec = 1 } } }
+  ForeverRouteRoutes = { main, zr }
+  local ok, err = pcall(function()
+    UnitLevel = function() return level end
+    ns.State.IsCompleted = function() return false end
+    ns.State.OnQuest = function() return false end
+    ns.SelectRoute("path:STV", true)
+    ns.Paths.Request("Arathi Highlands")
+    assertEquals(zr, ForeverRouteData)
+    assertEquals("path:STV", ns.char.returnTo, "the route you were on is remembered")
+    ns.Engine.Refresh()
+    -- at 37 Stranglethorn's step still counts; at 45 it is gray and the planned route picks up in Riverglades
+    assertEquals("Stranglethorn Vale", (ns.PlannedNextZone()))
+    level = 45
+    assertEquals("Riverglades", (ns.PlannedNextZone()))
+    ns.Paths.Request(ns.Paths.PLANNED)
+    assertEquals(main, ForeverRouteData, "'Planned route' goes back to it")
+    assertNil(ns.char.requestZone)
+  end)
+  ForeverRouteRoutes, ns.char.requestZone, ns.char.requestHandled, ns.char.returnTo, UnitLevel, ns.State.IsCompleted, ns.State.OnQuest = sv.routes, sv.req, sv.handled, sv.back, sv.lvl, sv.done, sv.on
+  ns.SelectRoute(sv.title, true)
+  if not ok then error(err, 0) end
+end)
+
 test("zone picker on a built-in plan: one zone route per zone and level band, the one for your level is offered and taken", function()
   local sv = { routes = ForeverRouteRoutes, data = ForeverRouteData, req = ns.char.requestZone, handled = ns.char.requestHandled, title = ns.char.routeTitle }
   local function zr(zone, level, xph) return { id = "zone:" .. zone .. ":" .. level, title = "Zone: " .. zone, zoneRoute = true, zoneName = zone, level = level, xph = xph, meta = { legs = zone }, sections = { { title = "x" } }, steps = { { id = 1, k = "goto", text = "y", sec = 1 } } } end
@@ -3124,6 +3155,34 @@ test("a quest that needs a profession you don't have is left off your route befo
     assertTrue(ns.Avail.Needs(98252) == nil, "no faction API: kept")
   end)
   ns.QUEST_NEEDS, ns.State.Skills, GetTime, GetFactionInfoByID = sv.needs, sv.skills, sv.gt, sv.fi
+  if not ok then error(err, 0) end
+end)
+
+test("the map's '!' doesn't undo a giver's refusal at the same level: the step stays off instead of flipping (The Shamed Lieutenant)", function()
+  local sv = { avail = ForeverRouteChar.avail, gossip = C_GossipInfo.GetAvailableQuests, un = UnitName, lvl = UnitLevel, ql = C_QuestLine }
+  ForeverRouteChar.avail = nil
+  local level = 30
+  local ok, err = pcall(withState, {}, function()
+    UnitLevel = function() return level end
+    UnitName = function(u, ...) if u == "npc" then return "Garion Wendell" end return sv.un(u, ...) end
+    C_QuestLine = { GetAvailableQuestLines = function() return { { questID = 98219 } } end }
+    ForeverRouteData = { id = "flip1", title = "flip1", sections = { { title = "Stormwind" } }, steps = {
+      { id = 1, k = "accept", q = 98219, name = "The Shamed Lieutenant", npc = "Garion Wendell", minLevel = 20, m = 1453, x = 0.49, y = 0.86, sec = 1 },
+    } }
+    ns.Engine.Refresh()
+    C_GossipInfo.GetAvailableQuests = function() return {} end
+    ns.Avail.OnGiver("GOSSIP_SHOW")
+    assertTrue(ns.Avail.Unavailable(98219), "turned down by the plan's giver")
+    for _ = 1, 3 do
+      ns.Avail.ScanMap(1453)
+      assertTrue(ns.Avail.Unavailable(98219), "the map's '!' at the same level leaves it off")
+      ns.Avail.OnGiver("GOSSIP_SHOW")
+    end
+    level = 31
+    ns.Avail.ScanMap(1453)
+    assertTrue(not ns.Avail.Unavailable(98219), "a level on, the map's '!' brings it back")
+  end)
+  ForeverRouteChar.avail, C_GossipInfo.GetAvailableQuests, UnitName, UnitLevel, C_QuestLine = sv.avail, sv.gossip, sv.un, sv.lvl, sv.ql
   if not ok then error(err, 0) end
 end)
 
@@ -5954,6 +6013,21 @@ test("built-in plans from the faction addon: only your plan's text becomes code,
     assertEquals("function", type(ForeverRouteStarter["gnome-warlock"]))
     assertNil(ForeverRouteOtherPlanRan, "another race's plan was run")
     assertNil(ForeverRoutePlanSources, "the other plans' text was kept")
+    -- a zone route kept once for the faction goes back into your plan where its marker is
+    loaded = {}
+    C_AddOns.LoadAddOn = function(name)
+      loaded[#loaded + 1] = name
+      if name == "ForeverRoute_Plans_Alliance" then
+        ForeverRoutePlanShared = { ["zone:Wetlands"] = "\n  ForeverRouteSharedRan = (ForeverRouteSharedRan or 0) + 1" }
+        ForeverRoutePlanSources = { ["gnome-mage"] = "ForeverRouteStarter = ForeverRouteStarter or {}; ForeverRouteStarter['gnome-mage'] = function() end\n--@zr zone:Wetlands@\n--@zr zone:Nowhere@" }
+      end
+      return true
+    end
+    ForeverRouteSharedRan = nil
+    assertTrue(ns.LoadStarter("gnome-mage"), "a plan with zone route markers did not load")
+    assertEquals(1, ForeverRouteSharedRan, "the shared zone route was not put back")
+    assertNil(ForeverRoutePlanShared, "the shared text was kept")
+    ForeverRouteSharedRan = nil
     -- an older install: no faction addon, the per-plan one still works
     loaded = {}
     C_AddOns.LoadAddOn = function(name) loaded[#loaded + 1] = name; if name == "ForeverRoute_Starter_dwarf_hunter" then ForeverRouteStarter["dwarf-hunter"] = function() end end; return true end

@@ -16,9 +16,11 @@ function makeCarry(ctx) {
   const { db, cfg, st = {}, race, klass, followersOf, mainZone, starterZone, zoneName, uiMap = {}, continent = {}, hop, planZones } = ctx;
   const CITIES = ctx.CITIES || new Set(), BATTLEGROUNDS = ctx.BATTLEGROUNDS || new Set(), START_ZONES = ctx.START_ZONES || new Set();
   const NO_WAY = ctx.NO_WAY || 600;
-  const tkQ = (q) => q && W.raceFits(q.races, race) && W.classFits(q.classes, klass) && !(q.special & 3) && !q.notInForever && !q.skill && !q.reqSpell && !q.minRep;
+  const tkQ = (q) => q && W.raceFits(q.races, race) && W.classFits(q.classes, klass) && !(q.special & 1) && !q.notInForever && !q.skill && !q.reqSpell && !q.minRep;
   const foeMark = cfg.faction === 'horde' ? 'A' : 'H';
-  const cap = () => cfg.carryLog ?? 15;
+  // the plan's quest log budget: Forever's log holds QUEST_LOG_MAX (40); 32 leaves room for what the legs pick up (15
+  // made a level 34 player abandon 8 quests they were carrying, the STV hunting quests among them)
+  const cap = () => cfg.carryLog ?? 32;
   const preMet = (q, done) => (q.preGroup || []).every((p) => done.has(p)) && (!(q.preSingle || []).length || q.preSingle.some((p) => done.has(p)));
   const handInZone = (q) => { for (const f of q.finishers || []) { const z = mainZone((f.spawns || []).filter((sp) => sp.x >= 0)); if (z) return z; } return null; };
   // a next part you could still take (not done, not gray): handing this one in leads somewhere
@@ -141,6 +143,9 @@ function makeCarry(ctx) {
   function pruneLog(S) {
     const L = S.level, act = { ...(S.active || {}) }, done = new Set(S.completed || []), out = [];
     const reach = planZones ? planZones(S) : new Set([S.zone]);
+    // where its work and its hand-in are (an exploration's spot, the mobs' zones)
+    const zonesOf = (q) => { const zs = new Set([handInZone(q)]); for (const o of q.objectives || []) { for (const sp of o.spawns || []) zs.add(sp.zone); for (const id of [o.npc, ...(o.npcs || [])]) for (const sp of ((id && db.npcs[id]) || {}).spawns || []) zs.add(sp.zone); } zs.delete(null); return zs; };
+    const inReach = (q) => [...zonesOf(q)].some((z) => reach.has(z));
     const keep = (id, q) => !!(act[id] && act[id].complete) && (opensChain(q, L, done) || reach.has(handInZone(q)));
     const letGo = (id, q) => { delete act[id]; LET_GO.add(+id); out.push(q.name + (LOG0.has(String(id)) ? ' (in your log: abandon it)' : '')); };
     for (const id of Object.keys(act)) { const q = db.quests[id]; if (q && q.level < L - 6 && !keep(id, q)) letGo(id, q); }
@@ -149,7 +154,9 @@ function makeCarry(ctx) {
       const perMin = (id) => {
         const q = db.quests[id], a = act[id] || {};
         const left = a.complete ? 0 : (a.objectives || []).length ? a.objectives.filter((o) => !o.done).length : (q.objectives || []).length;
-        const z = handInZone(q), trip = z == null ? NO_WAY : hop ? Math.min(NO_WAY, hop(S, z)) : 0;
+        // a zone the plan goes to anyway costs no trip of its own (stood in Stormwind at 34, the STV hunting quests read
+        // as a long trip plus their kills and were let go, for a plan that went to Stranglethorn three legs later)
+        const z = handInZone(q), trip = z == null ? NO_WAY : inReach(q) ? 0 : hop ? Math.min(NO_WAY, hop(S, z)) : 0;
         return W.questXp(q.xp || 0, q.level, L) * (opensChain(q, L, done) ? 1.5 : 1) / (1 + left * (cfg.carryObjMin ?? 5) + trip);
       };
       const loose = ids.filter((id) => db.quests[id] && !keep(id, db.quests[id])).map((id) => [id, perMin(id)]).sort((a, b) => a[1] - b[1] || a[0] - b[0]);

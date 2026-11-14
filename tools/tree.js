@@ -38,7 +38,7 @@ const NEUTRAL = { class: 'none', trainers: [], trainer: null, trainLevels: [] };
 const starts = {};
 // Skyborne (Forever's race, its start on Zephras Isle) join the trunk too, but their start is not one the trunk state
 // is the meeting point of: planned and joined, left out of the intersection
-const EXTRA_RACES = { alliance: ['skyborne'], horde: [] }; // Horde Skyborne: no built-in plans yet
+const EXTRA_RACES = { alliance: ['skyborne'], horde: ['skybornehorde'] }; // the Horde's are the Windshaper Skyborne
 const ALL_RACES = W.FACTION_RACES[faction].concat(args.includes('--no-extra') ? [] : EXTRA_RACES[faction]);
 for (const race of ALL_RACES) {
   const key = `${race}-${START_CLASS}`, exp = (EXP ? EXP + '-' : '') + 'start' + J;
@@ -54,6 +54,11 @@ for (const race of ALL_RACES) {
   starts[race] = { dir, end: p.endState, ...measure(dir) };
   console.log(`start ${race}: level ${starts[race].endLevel}, ${starts[race].hours} h, grind ${starts[race].grindMin} min, ends in ${p.endState.state.pos && p.endState.state.pos.zone}`);
 }
+
+// a start that stops short of the join (it ran out of quests: grinding is off) would drag every race down to its
+// level - Horde v9: the tauren start ended at 16 in Redridge and the trunk found nothing at 16 in Hillsbrad
+const short = Object.entries(starts).filter(([r, s]) => W.FACTION_RACES[faction].includes(r) && (s.end.state.level || 0) < J);
+if (short.length) { for (const [r, s] of short) console.log(`start ${r} stopped at level ${s.end.state.level}, short of the join (${J}), in zone ${s.end.state.pos && s.end.state.pos.zone}: see ${path.join(s.dir, "path-0.log")}`); process.exit(1); }
 
 // 2. the trunk state
 const ends = W.FACTION_RACES[faction].map((r) => starts[r].end.state);
@@ -94,6 +99,7 @@ let wrote = false;
 planner.stdout.on('data', (d) => { logOut.write(d); if (/wrote \d+ paths/.test(String(d)) && !wrote) { wrote = true; setTimeout(() => { try { planner.kill(); } catch (e) {} }, 15000).unref(); } });
 planner.on('close', (code) => {
   if (!wrote) { console.log('the trunk planner stopped without a plan (exit ' + code + '): see ' + path.join(out, 'trunk.out')); process.exit(1); }
+  if (!fs.existsSync(path.join(trunkDir, 'path-0.json'))) { console.log('the trunk planner wrote no path (0 paths): see ' + path.join(out, 'trunk.out')); process.exit(1); }
   const trunk = measure(trunkDir);
   const summary = { faction, join: J, startClass: START_CLASS, starts: Object.fromEntries(Object.entries(starts).map(([r, s]) => [r, { dir: path.relative(ROOT, s.dir), hours: s.hours, endLevel: s.endLevel, grindMin: s.grindMin, legs: s.legs }])),
     trunkState: { level, zone, completed: completed.length, someOnly: union.size - completed.length, active: activeIds.size },

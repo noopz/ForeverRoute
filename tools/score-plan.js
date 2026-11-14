@@ -28,7 +28,7 @@ for (let i = s0 + 1; !/^\s*\},$/.test(lua[i]) && level < 60; i++) {
     for (let n = 0; n < kills && level < 60; n++) add(W.killXp(qLevel, level));
   } else if (k === 'turnin' && q && db.quests[q]) {
     quests++;
-    add(W.questXp(db.quests[q].xp || 0, db.quests[q].level || qLevel, level));
+    add(W.questGain(db.quests[q].xp || 0, db.quests[q].level || qLevel, level)); // the quest and what comes with it (world.js)
   }
 }
 // what's left to 60: grind mobs at your level

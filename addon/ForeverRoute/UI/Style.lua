@@ -309,7 +309,10 @@ end
 
 -- short zone names for tight spots
 local SHORT = { ["Redridge Mountains"] = "Redridge", ["Stonetalon Mountains"] = "Stonetalon", ["Hillsbrad Foothills"] = "Hillsbrad", ["Stranglethorn Vale"] = "Stranglethorn",
-  ["Thousand Needles"] = "Thousand Needles", ["Arathi Highlands"] = "Arathi", ["Swamp of Sorrows"] = "Swamp of Sorrows", ["Alterac Mountains"] = "Alterac", ["Dustwallow Marsh"] = "Dustwallow" }
+  ["Thousand Needles"] = "Thousand Needles", ["Arathi Highlands"] = "Arathi", ["Swamp of Sorrows"] = "Swamp of Sorrows", ["Alterac Mountains"] = "Alterac", ["Dustwallow Marsh"] = "Dustwallow",
+  -- the map data's name for a capital the planner's steps call Stormwind: one zone, one name ("Stormwind > Hillsbrad >
+  -- Stormwind City" in the route list)
+  ["Stormwind City"] = "Stormwind" }
 function Style.ShortZone(z) return SHORT[z] or z end
 -- a steady colour per zone, so the same zone looks the same everywhere
 local ZONE_COLORS = {

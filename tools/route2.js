@@ -8,21 +8,23 @@ const { raceOk, raceFits, classFits } = require('./world'); // race masks above 
 //  - quests whose turn-in is outside the planned zones are carried and listed for the next leg
 // usage: node route2.js <db.json> <config.json> [out.json]
 const fs = require('fs');
-const { XP_TO_LEVEL, RACE_BIT, CLASS_BIT, CAPITAL_AREAS, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, trainNow, setLearned, grindSeconds, levelAbove, minLevelFor } = require('./world'); // the game's rules, shared by every stage
+const { XP_TO_LEVEL, RACE_BIT, CLASS_BIT, CAPITAL_AREAS, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, trainNow, setLearned, grindSeconds, levelAbove, minLevelFor, ambientShare, setAmbient } = require('./world'); // the game's rules, shared by every stage
 const [dbPath, cfgPath, outPath] = process.argv.slice(2);
 // a long-lived host (tools/route2-host.js) keeps the big files parsed between runs (by path and modification time)
 const readJsonCached = (p) => { const C = global.__FR_JSON; if (!C) return JSON.parse(fs.readFileSync(p, 'utf8')); const k = p + ':' + fs.statSync(p).mtimeMs; return C[k] || (C[k] = JSON.parse(fs.readFileSync(p, 'utf8'))); };
 const { quests: Q, npcs: N, objects: O } = readJsonCached(dbPath);
 const cfg = Object.assign({
-  // the shared level gate (world.js): quests up to LEVEL_ABOVE above you. The plan holds at most QUEST_LOG_MAX - 10
-  // quests (30 of Forever's 40): the rest of the log is yours - a dungeon's quests, stragglers, whatever you picked up
-  maxLog: QUEST_LOG_MAX - 10, // maxAbove / maxMobAbove: a fixed gate (+1) for trials; unset, the gate goes by level (world.levelAbove)
+  // the shared level gate (world.js): quests up to LEVEL_ABOVE above you. The plan holds at most QUEST_LOG_MAX - 2
+  // quests (38 of Forever's 40), what you carry for other zones included - between legs that is cut to 32 (carry.js
+  // cfg.carryLog), so each leg has room for at least 6 of its own. (30 here and 15 between legs had a level 34 player
+  // abandon 8 quests they were carrying, the STV hunting quests among them)
+  maxLog: QUEST_LOG_MAX - 2, // maxAbove / maxMobAbove: a fixed gate (+1) for trials; unset, the gate goes by level (world.levelAbove)
   secPerKill: 22, secPerObject: 12, dropRate: 0.5, mergeYards: 60,
   hubYards: 160, detourYards: 250, maxKills: 45, faction: 'alliance', minHubNpcs: 2, maxTripMin: 30, hearthCooldownMin: 60, minXpPerMin: 0,
   trainLevels: [], trainerTripMin: 7, backgroundMinStops: 3, finishOpen: true,
 }, JSON.parse(fs.readFileSync(cfgPath, 'utf8')));
 // what your play taught us (tools/learn.js): kill XP corrections; minutes per kill comes in as cfg.secPerKill
-setLearned(cfg.learned);
+setLearned(cfg.learned); if (cfg.ambientXp != null) setAmbient(cfg.ambientXp); // (a plan's own setting wins over the default)
 // real character state from saved variables (our snapshot, else Journey Tracker)
 if (cfg.charDir) {
   const st = require('./snapshot').loadCharState(cfg.charDir, cfg.conversion);
@@ -406,7 +408,13 @@ for (const q of Object.values(Q)) {
     // cluster of sellers was Stormwind, and a plan hearthed there and flew back for one flagon)
     const ref = t.accept.at || (t.turnin.spawns || [])[0];
     const vend = buying && ref ? spawns.filter((sp) => sp.x >= 0).sort((a, b) => (a.zone === ref.zone ? 0 : 1) - (b.zone === ref.zone ? 0 : 1) || straightDist(a, ref) - straightDist(b, ref))[0] : null;
-    let at = vend ? { ...vend, density: 1, total: 1, spread: 1 } : cluster(spawns);
+    // where you hunt them: among the mobs in your reach when some are (Snickerfang Jowls: hyenas 45-53 - the densest
+    // pack was the 51-53 one, the quest read as out of reach at 48 and the plan ground the level beside the rest). The
+    // quest's mob level is then theirs (fitMobs, below)
+    const reachLv = (cfg.level || 1) + (cfg.maxMobAbove != null ? cfg.maxMobAbove - 1 : levelAbove(cfg.level || 1));
+    const fitMobs = !vend && mobs.length > 1 ? mobs.filter((m) => (m.maxLevel || 0) && m.maxLevel <= reachLv) : [];
+    const fitAt = fitMobs.length && fitMobs.length < mobs.length ? cluster(fitMobs.flatMap((m) => m.spawns)) : null;
+    let at = vend ? { ...vend, density: 1, total: 1, spread: 1 } : fitAt || cluster(spawns);
     let dungeon = null, away = null;
     // a quest the data files under one of Forever's new dungeons - ones it places no creature in - is done in there,
     // wherever its mobs are said to stand: their bosses come placed in the open zone (Highland Horror, for Horrors in
@@ -435,7 +443,7 @@ for (const q of Object.values(Q)) {
       else { outside = true; continue; }
     }
     if (allElite && !dungeon) elite = true; // dungeon mobs are elite by design: the run is planned as a group
-    const mobLevel = levelAt(mobs, at, dungeon, q);
+    const mobLevel = levelAt(fitAt && at === fitAt ? fitMobs : mobs, at, dungeon, q);
     // fights above you take longer (misses, resists, more damage taken, more rest): +15% a level above the leg's start
     if (kills > 0 && mobLevel > (cfg.level || 0) && !dungeon) work *= 1 + 0.15 * (mobLevel - cfg.level);
     // the same objective listed twice (The Great Outdoors: "use the campfire" twice, same object): one step does both
@@ -489,7 +497,11 @@ for (const q of Object.values(Q)) {
   // a pet class (warlock, hunter) soloes elites well below it - not by the quest's level: Forever's elite Dark Iron and
   // Dragonmaw camps (27-31) came with quests of level 27-29, and a level-29 warlock was sent into them
   const eliteMax = Math.max(0, ...t.objs.map((o) => o.mobLevel || 0));
-  if (elite && !(petClass && eliteMax > 0 && eliteMax <= cfg.level - 2) && !cfg.includeElite && !finishedInLog(q.id)) { skipped.push([q, 'elite objectives: group quest']); continue; }
+  // cfg.soloElites (off: the player's call - elite quests stay group quests; green quests fill a gap instead): an elite at
+  // or below your level taken solo, its fights 2.5x as long (cfg.eliteWork)
+  const soloElite = elite && eliteMax > 0 && eliteMax <= cfg.level + (petClass ? 1 : 0) && cfg.soloElites === true;
+  if (elite && !soloElite && !cfg.includeElite && !finishedInLog(q.id)) { skipped.push([q, 'elite objectives: group quest']); continue; }
+  if (soloElite) for (const o of t.objs) if (o.kills > 0) o.work = Math.round((o.work || 0) * (cfg.eliteWork ?? 2.5));
   if (elite) t.flags.push('elite');
   if ((cfg.skip || []).includes(q.id)) { skipped.push([q, 'skipped in config']); continue; }
   // it needs an item brought in that isn't one of its objectives (Wowhead says so: tools/wowhead.js -> needsItems) -
@@ -682,7 +694,7 @@ function workHere(spot, radius) {
       const id = t.q.id;
       if (accepted.has(id) && ready(t) && t.turnin.spawns.some((s) => dist(s, spot) < radius)) {
         accepted.delete(id); turned.add(id); const g = questXpAt(t.q, level);
-        step({ type: 'turnin', q: t.q, who: t.turnin.who, at: nearest(t.turnin.spawns, spot), xp: g }); gain(g); did++; again = true;
+        step({ type: 'turnin', q: t.q, who: t.turnin.who, at: nearest(t.turnin.spawns, spot), xp: g }); gain(g * (1 + ambientShare())); did++; again = true;
       }
     }
     for (const t of Object.values(tasks)) {
@@ -1216,7 +1228,7 @@ function writeRoute(seq, locs) {
       // for a later leg, still in your log
       if (e.kind === 'obj' && e.kills > 0 && e.mobLevel != null && e.q > 0
         && e.mobLevel > L + (tasks[e.q] && tasks[e.q].objs.some((o) => o.dungeon) ? DUNGEON_ABOVE : levelAbove(L))) { gateDrop.add(e.q); changed = true; continue; }
-      if (e.kind === 'turnin' && q) gain(questXpAt(q, L));
+      if (e.kind === 'turnin' && q) gain(questXpAt(q, L) * (1 + ambientShare()));
       else if (e.kind === 'obj') gain(e.kills > 0 && e.mobLevel != null ? e.kills * killXp(e.mobLevel, L) : e.killXp || 0);
     }
     if (!changed) break;
@@ -1266,7 +1278,7 @@ function writeRoute(seq, locs) {
     for (const e of seq) {
       go(locs[e.loc]); clock += e.work || 0;
       const q = Q[e.q];
-      if (e.kind === 'turnin' && q) { x += questXpAt(q, lv); while (lv < 60 && x >= XP_TO_LEVEL[lv]) { x -= XP_TO_LEVEL[lv]; lv++; } }
+      if (e.kind === 'turnin' && q) { x += questXpAt(q, lv) * (1 + ambientShare()); while (lv < 60 && x >= XP_TO_LEVEL[lv]) { x -= XP_TO_LEVEL[lv]; lv++; } }
       if (e.kind === 'obj' && (e.kills > 0 || e.killXp)) { x += e.kills > 0 ? e.kills * killXp(e.mobLevel, lv) : e.killXp; while (lv < 60 && x >= XP_TO_LEVEL[lv]) { x -= XP_TO_LEVEL[lv]; lv++; } }
       const due = (cfg.trainLevels || []).filter((l) => l > tr && l <= lv);
       if (due.length && trainerLoc) { tr = lv; const back = here; go(trainerLoc); go(back); }
@@ -1340,7 +1352,7 @@ function writeRoute(seq, locs) {
     else if (e.kind === 'obj') steps.push({ rate: oInfo && oInfo.dropPct, k: 'obj', text: e.label, match: matchOf(e.label), target: targetOf(e.label, level), item: itemOf(q), loot: /^(Collect|Loot)/.test(e.label) || undefined, r: Math.max(40, Math.min(220, (e.area || 0) + 15)), note: e.shared ? 'Drops from the mobs you are already killing here.' : undefined, also: e.also, work: Number.isFinite(e.work) ? Math.round(e.work) : undefined, ...base });
     if (e.kind === 'turnin') {
       steps.push({ k: 'turnin', npc: e.who, r: 6, note: tq && tq.rewardText ? 'Reward: ' + tq.rewardText : undefined, reward: (tq && tq.rewardItem) || undefined, ...base });
-      levelUp(questXpAt(q, level));
+      levelUp(questXpAt(q, level) * (1 + ambientShare()));
       let due = (cfg.trainLevels || []).filter((l) => l > trained && l <= level);
       // batched like the simulation (world.js): two ranks waiting, or you are in the trainer's city anyway
       if (!(TRAINERS.length && trainNow(due, here && TRAINERS.some((tr) => tr.zone === here.zone)))) due = [];

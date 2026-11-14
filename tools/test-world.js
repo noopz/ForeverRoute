@@ -34,6 +34,14 @@ check('Skyborne bits do not narrow the Alliance trunk', W.canTake({ races: ALL_A
 const ALL_HORDE = 2 | 16 | 32 | 128;
 check('a quest for every Horde race is in the Horde trunk, not the Alliance one', W.canTake({ races: ALL_HORDE }, 'horde', 'none') && !W.canTake({ races: ALL_HORDE }, 'alliance', 'none'));
 
+// ambient XP: a hand-in moves you on by its quest XP and what comes with questing (0.25 by default, learned from play)
+check('a hand-in counts its quest XP plus 25% ambient by default', Math.round(W.questGain(1000, 30, 30)) === 1250, W.questGain(1000, 30, 30));
+W.setAmbient(0.45);
+check('a learned ambient share replaces the default', Math.round(W.questGain(1000, 30, 30)) === 1450, W.questGain(1000, 30, 30));
+W.setAmbient(9);
+check('an absurd ambient share is ignored', Math.round(W.questGain(1000, 30, 30)) === 1450, W.questGain(1000, 30, 30));
+W.setAmbient(0.25);
+
 // profession quests: planned unless the save says you lack the profession (its rank is checked at the giver)
 const goblin = { skill: [202, 200] }, save = { Defense: [170, 170], Swords: [150, 170], Common: [300, 300] };
 check('a plan without a save keeps a profession quest (the addon checks it)', W.hasProfessionFor(goblin, {}) && W.hasProfessionFor(goblin, undefined));

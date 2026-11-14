@@ -108,7 +108,7 @@ function chainReport({ quests: Q, npcs = {}, steps, race, cls, zoneName = {}, zo
   function cannot(q) {
     if (!q) return 'not in the quest data';
     if (!W.canTake(q, race, cls)) return 'race or class';
-    if (q.special & 3) return 'repeatable or event'; // as campaign.js leaves them out
+    if (q.special & 1) return 'repeatable'; // as campaign.js leaves them out (a scripted event, special & 2, is planned: escorts, fights, explorations)
     if (HOLIDAY_SORTS.has(q.zone)) return 'holiday event';
     if (q.skill) return 'profession';
     if (q.reqSpell || q.minRep) return 'requirement';
