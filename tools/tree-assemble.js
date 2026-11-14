@@ -38,7 +38,10 @@ const handed = new Set(start.filter((s) => s.k === 'turnin').map((s) => s.q));
 const accepted = new Set(start.filter((s) => s.k === 'accept').map((s) => s.q));
 const trunk = K.steps.filter((s) => !classWork(s) && !(s.q && handed.has(s.q)) && !(s.k === 'accept' && accepted.has(s.q)));
 const off = S.sections.length;
-let steps = start.concat(trunk.map((s) => ({ ...s, sec: (s.sec || 1) + off })));
+// the trunk's step clock (tm: minutes, on hearth steps - lint-route keeps the hour cooldown on it) starts after the
+// start's: restarted at the seam, every plan read "hearth only -528 min after the one before"
+const tmOff = Math.max(0, ...start.map((s) => +s.tm || 0));
+let steps = start.concat(trunk.map((s) => ({ ...s, sec: (s.sec || 1) + off, ...(s.tm != null ? { tm: s.tm + tmOff } : {}) })));
 
 // 2. training as a side quest: at a hand-in once two ranks wait, or as soon as one waits while you are in a trainer's town
 const trainers = rc.trainers || (rc.trainer ? [rc.trainer] : []);
@@ -77,7 +80,8 @@ const cfg = { ...trunkCfg, character: 'Starter', race, class: cls, level: 1, sta
   // the tree's zone routes (tools/zone-routes.js): every plan offers them in the path picker, by level
   extraZoneRoutes: (() => { try { return readJson(path.join(treeDir, 'zone-routes', 'index.json')).map((d) => ({ name: d.name, z: d.z, level: d.level, xph: d.xph, pathOut: path.join(treeDir, d.file) })); } catch (e) { return []; } })() };
 fs.writeFileSync(path.join(dir, 'campaign.json'), JSON.stringify(cfg, null, 2));
-execFileSync(process.execPath, ['--max-old-space-size=8000', path.join(__dirname, 'paths.js'), path.join(dir, 'campaign.json'), '1', '0', '--work', dir, '--reuse'], { cwd: ROOT, stdio: ['ignore', fs.openSync(path.join(dir, 'paths.log'), 'w'), 'inherit'] });
+// (through run-planner.js: the planner can stay alive after writing its plan, and waiting for it hung for an hour)
+execFileSync(process.execPath, [path.join(__dirname, 'run-planner.js'), path.join(dir, 'paths.log'), path.join(dir, 'campaign.json'), '1', '0', '--work', dir, '--reuse'], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });
 const log = fs.readFileSync(path.join(dir, 'paths.log'), 'utf8');
 const trips = [...log.matchAll(/in the path: (.+?) \((\d+) steps\)/g)].map((m) => m[1]);
 const zr = (cfg.extraZoneRoutes || []).length;

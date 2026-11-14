@@ -431,10 +431,12 @@ for (const q of Object.values(Q)) {
       // an item whose sources the data names but has no record of: Forever's new objects are missing from QuestieDB -
       // Riverglades' Fresh Apple, Pawprint Tracing and Rog'mar Supply Crate come from objects it lists by id and knows
       // nothing else of, so Apple of My Eye, Foal Play and Rog'mar Supplies read as "objectives outside the planned
-      // zones" and the chains behind them were lost. Handled below like work the data lists none of. Not an item with no
-      // source listed at all (from a container, handed over by the giver, crafted) nor one from a mob or object the data
-      // has but places nowhere (summoned, an event's): no sign of Forever's missing objects, those stay 'outside'
-      else if (o.kind === 'item' && !buying && !spawns.some((sp) => sp.instance) && !(o.vendors || []).length && (o.npcDrops.length || o.objectDrops.length) && !o.npcDrops.some((d) => N[d]) && !o.objectDrops.some((d) => O[d])) { noSource.push({ label: label.replace(/ \(.*\)$/, ''), name: o.name }); continue; }
+      // zones" and the chains behind them were lost. Handled below like work the data lists none of - and so is an item
+      // with no source listed at all (from a container, handed over by the giver): Linken's It's a Secret to Everybody wants
+      // three items from a pack in Un'Goro the data doesn't link, and the 12-part chain (55k XP) was lost. Only a quest
+      // that leads on is kept that way (below). Not one from a mob or object the data has but places nowhere (summoned, an
+      // event's): those stay 'outside'
+      else if (o.kind === 'item' && !buying && !spawns.some((sp) => sp.instance) && !(o.vendors || []).length && !o.npcDrops.some((d) => N[d]) && !o.objectDrops.some((d) => O[d])) { noSource.push({ label: label.replace(/ \(.*\)$/, ''), name: o.name }); continue; }
       // work in another open-world zone (In Search of The Temple: given in Tanaris, done in the Swamp of Sorrows; Bring
       // the Light): picked up here and carried, done on a leg in that zone - like a quest whose mobs are still above you
       // (tooHigh). Its spot is the giver's, a placeholder: the work never counts as doable on this leg. A leg in the

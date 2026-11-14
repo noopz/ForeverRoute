@@ -3,7 +3,7 @@
 // carry(steps, legs, ctx) inserts the pick-ups and hand-ins into steps (and moves legs[].from), and returns what it
 // added, one line each. ctx: { db, conv, completed, log, level, race, klass, faction, skills }
 // (its own file so it can be tested without a whole campaign: tools/test-exclusive.js)
-const { raceFits, classFits, hasProfessionFor, CAPITAL_MAPS } = require('./world');
+const { raceFits, classFits, hasProfessionFor, plannerZoneNames, CAPITAL_MAPS } = require('./world');
 const { closers } = require('./exclusive-alternatives');
 
 function carry(steps, legs, ctx) {
@@ -11,6 +11,7 @@ function carry(steps, legs, ctx) {
   const { db, conv, race, klass } = ctx;
   const N = db.npcs, Q = db.quests;
   const zoneName = Object.fromEntries(conv.map((t) => [t.area_id, t.target_name]));
+  const stepZone = plannerZoneNames(conv); // the steps' spelling (Stormwind, not Stormwind City)
   const uiMap = Object.fromEntries(conv.map((t) => [t.area_id, t.ui_map_id]));
   const areaOfMap = Object.fromEntries(conv.map((t) => [t.ui_map_id, t.area_id]));
   const side = ctx.faction === 'horde' ? 'H' : 'A';
@@ -84,8 +85,8 @@ function carry(steps, legs, ctx) {
       const p = plan(qid, stop);
       if (!p) continue;
       const { city, cityArea, giver, gsp, fin, fsp, tm, T, at } = p;
-      steps.splice(at, 0, { k: 'turnin', npc: fin.name, r: 6, q: qid, name: q.name, level: q.level, m: tm, x: +T.x.toFixed(4), y: +T.y.toFixed(4), zone: zoneName[fsp.zone], sec: steps[Math.min(at, steps.length - 1)].sec, note: 'Carried from ' + zoneName[cityArea] + '.' });
-      steps.splice(stop + 1, 0, { k: 'accept', npc: giver.name, r: 6, minLevel: q.reqLevel > 1 ? q.reqLevel : undefined, q: qid, name: q.name, level: q.level, m: city, x: +(gsp.x / 100).toFixed(4), y: +(gsp.y / 100).toFixed(4), zone: zoneName[cityArea], sec: steps[stop].sec, note: 'Delivery - handed in later in ' + zoneName[fsp.zone] + ' (' + q.xp + ' xp).' });
+      steps.splice(at, 0, { k: 'turnin', npc: fin.name, r: 6, q: qid, name: q.name, level: q.level, m: tm, x: +T.x.toFixed(4), y: +T.y.toFixed(4), zone: stepZone[fsp.zone], sec: steps[Math.min(at, steps.length - 1)].sec, note: 'Carried from ' + zoneName[cityArea] + '.' });
+      steps.splice(stop + 1, 0, { k: 'accept', npc: giver.name, r: 6, minLevel: q.reqLevel > 1 ? q.reqLevel : undefined, q: qid, name: q.name, level: q.level, m: city, x: +(gsp.x / 100).toFixed(4), y: +(gsp.y / 100).toFixed(4), zone: stepZone[cityArea], sec: steps[stop].sec, note: 'Delivery - handed in later in ' + zoneName[fsp.zone] + ' (' + q.xp + ' xp).' });
       for (const L of legs) if (L.from > stop) L.from += 1;
       for (const L of legs) if (L.from > at) L.from += 1;
       onRoute.add(qid); added.push(q.name + ' (' + zoneName[cityArea] + ' -> ' + zoneName[fsp.zone] + ')');

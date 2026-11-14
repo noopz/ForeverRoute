@@ -121,8 +121,11 @@ function specialRoutes() {
   const ahead = {};
   await Promise.all([1, 2].map(async (d) => {
     const L = curLevel + d, out = path.join(work, 'rank-' + L + '.json');
-    if (!REUSE || !fs.existsSync(out)) await run({ ...base, forceLevel: L, workDir: path.join(work, 'work-rank-' + d), rankOnly: true, rankOut: out, routeOut: path.join(work, 'rank-' + L + '.lua') }, 'rank-' + L);
-    try { ahead[L] = JSON.parse(fs.readFileSync(out, 'utf8')); } catch (e) {}
+    // (the run is tagged rank-L-run: tagged rank-L, its own config, written as <tag>.json, was this same file, and when the
+    // ranking came from the planner's cache nothing overwrote it - the plan writer then read a config as the ranking)
+    const ranking = () => { try { const j = JSON.parse(fs.readFileSync(out, 'utf8')); return Array.isArray(j) ? j : null; } catch (e) { return null; } };
+    if (!REUSE || !ranking()) await run({ ...base, forceLevel: L, workDir: path.join(work, 'work-rank-' + d), rankOnly: true, rankOut: out, routeOut: path.join(work, 'rank-' + L + '.lua') }, 'rank-' + L + '-run');
+    const r = ranking(); if (r) ahead[L] = r;
   }));
   const starts = ranked.slice(0, N);
   // a new character starts where its race starts (base.homeZone: Teldrassil for a night elf), not in the zone that ranks
@@ -277,6 +280,8 @@ function specialRoutes() {
     L.push('    id = ' + lua(id) + ',');
     L.push('    title = ' + lua(title) + ',');
     for (const [k, v] of Object.entries(extra)) L.push(`    ${k} = ${lua(v)},`);
+    // quests the plan picks up but never hands in (left out by the safety net): the chain report counts them as picked up
+    if ((fixed.droppedIds || []).length) L.push(`    leftOut = ${lua(fixed.droppedIds.map(Number).filter((x) => x > 0).sort((a, b) => a - b).join(","))},`);
     // hours to a common level (the plan target), so paths that end at different levels compare fairly
     const lv = (r.endLevel + (XP[r.endLevel] ? r.endXp / XP[r.endLevel] : 0)) - r.startLevel, toT = (base.targetLevel || 30) - r.startLevel;
     const hT = lv > 0 ? (r.minutes / 60) * Math.max(0, toT) / lv : r.minutes / 60;

@@ -9,7 +9,7 @@ const C = document.getElementById('c'), g = C.getContext('2d');
 const FONT = '"Segoe UI", system-ui, sans-serif';
 const GOLD = '#ffd15c', INK = '#eef0f6', SUB = '#9ea8bd', DIM = '#5d6578', GOOD = '#5cdb7a';
 const CLASS_COLOR = { warrior: '#c79c6e', paladin: '#f58cba', hunter: '#abd473', rogue: '#fff569', priest: '#ffffff', shaman: '#0070de', mage: '#69ccf0', warlock: '#9482c9', druid: '#ff7d0a' };
-const RACE = { human: 'Human', dwarf: 'Dwarf', nightelf: 'Night Elf', gnome: 'Gnome', skyborne: 'Skyborne', orc: 'Orc', undead: 'Undead', tauren: 'Tauren', troll: 'Troll' };
+const RACE = { human: 'Human', dwarf: 'Dwarf', nightelf: 'Night Elf', gnome: 'Gnome', skyborne: 'Skyborne', skybornehorde: 'Skyborne', orc: 'Orc', undead: 'Undead', tauren: 'Tauren', troll: 'Troll' };
 const FACTION = { Alliance: '#5b9bff', Horde: '#e0524a' };
 let D, order, F;
 const X0 = 140, Y0 = 118, TW = 91, TH = 66, BUILD = 16, SLOTS = 5;
@@ -44,7 +44,7 @@ window.draw = (f) => {
     row0 += fa.races.length;
   }
   g.textAlign = 'left';
-  let done = 0, hrs = 0, plays = 0, broke = 0, audit = 0;
+  let done = 0, hrs = 0, plays = 0, broke = 0, audit = 0, grind = 0;
   D.races.forEach((r, i) => D.classes.forEach((c, j) => {
     const k = r + '-' + c, p = D.plans[k], x = X0 + j * TW, y = Y0 + i * TH, w = TW - 8, h = TH - 8;
     if (!p) { g.strokeStyle = 'rgba(255,255,255,0.05)'; g.lineWidth = 1; rr(x + 0.5, y + 0.5, w, h, 8); g.stroke(); return; }
@@ -61,19 +61,19 @@ window.draw = (f) => {
       g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(x + 12, y + 48, w - 24, 4); g.fillStyle = GOLD; g.fillRect(x + 12, y + 48, (w - 24) * lv / 60, 4);
       return;
     }
-    done++; hrs += p.hours; plays += p.personas; broke += p.broke; audit += p.audit;
+    done++; hrs += p.hours; grind += p.grind || 0; plays += p.personas; broke += p.broke; audit += p.audit;
     const glow = Math.max(0, 1 - (t - (BUILD - 4)) / 6);
     if (glow > 0) { g.strokeStyle = `rgba(92,219,122,${glow})`; g.lineWidth = 2; rr(x + 1, y + 1, w - 2, h - 2, 8); g.stroke(); }
     g.fillStyle = INK; g.font = '700 19px ' + FONT; g.fillText(p.hours.toFixed(0) + ' h', x + 12, y + 25);
-    g.fillStyle = SUB; g.font = '11px ' + FONT; g.fillText('to level ' + p.level, x + 12, y + 38);
+    g.fillStyle = SUB; g.font = '11px ' + FONT; g.fillText(p.grind ? p.grind.toFixed(0) + ' h grinding' : 'no grinding', x + 12, y + 38);
     const ok = p.audit === 0 && p.broke === 0;
     g.fillStyle = ok ? GOOD : '#ff8c5a'; g.font = '600 11px ' + FONT; g.fillText(ok ? '✓ clean' : '! ' + (p.audit + p.broke) + ' to fix', x + 12, y + 52);
   }));
   // the running totals
   const y = D.H - 44;
   g.fillStyle = 'rgba(255,255,255,0.05)'; rr(40, y - 24, D.W - 80, 50, 10); g.fill();
-  const items = [[done + ' / ' + order.length, 'plans to 60'], [done ? (hrs / done).toFixed(0) + ' h' : '–', 'average'], [String(audit), 'audit issues'], [plays + '', 'simulated playthroughs'], [String(broke), 'broken checks']];
-  items.forEach(([v, l], k) => { const x = [64, 244, 400, 560, 800][k]; g.fillStyle = k === 4 || k === 2 ? (done ? GOOD : INK) : k === 0 ? GOLD : INK; g.font = '700 20px ' + FONT; g.fillText(v, x, y + 4); const vw = g.measureText(v).width; g.fillStyle = SUB; g.font = '13px ' + FONT; g.fillText(l, x + vw + 8, y + 3); });
+  const items = [[done + ' / ' + order.length, 'plans to 60'], [done ? (hrs / done).toFixed(0) + ' h' : '–', 'average'], [grind.toFixed(0) + ' h', 'grinding'], [String(audit), 'audit issues'], [plays + '', 'played through'], [String(broke), 'broken checks']];
+  items.forEach(([v, l], k) => { const x = [64, 236, 362, 490, 640, 810][k]; g.fillStyle = k >= 2 && k !== 4 ? (done ? GOOD : INK) : k === 0 ? GOLD : INK; g.font = '700 20px ' + FONT; g.fillText(v, x, y + 4); const vw = g.measureText(v).width; g.fillStyle = SUB; g.font = '13px ' + FONT; g.fillText(l, x + vw + 8, y + 3); });
   return f === F ? 400 : 0;
 };
 function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }

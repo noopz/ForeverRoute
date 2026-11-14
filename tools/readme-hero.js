@@ -87,36 +87,40 @@ if (mode === 'card') {
   console.log(`${out.steps.length} steps in ${out.zone}, kinds ${Object.keys(KIND).length}, icons ${Object.keys(icons).length}`);
 }
 
-// node tools/readme-hero.js grid <out.json>: every built-in plan's last check: hours to 60 and the simulated players
-// (reports/starters.md, each plan's last row), and the audit run again now on the plan as it stands
-// (paths-starter/<plan>/Route.lua with tools/lint-route.js - the report's own count can be older than the audit's fixes)
+// node tools/readme-hero.js grid <out.json> [gate.json ...]: every built-in plan as it ships
+// (addon/ForeverRoute_Starter_<race>_<class>/Plan.lua): its hours to 60 with travel (the plan's meta.hours), its
+// grinding (tools/score-plan.js), its audit run again now (tools/lint-route.js), and the simulated player's verdict
+// from the tree gates that shipped it (tools/tree-gate.js --sim writes <tree dir>/gate.json; no gate: no playthrough)
 if (mode === 'grid') {
-  const out2 = key; // (one argument: the output file)
+  const out2 = key; // (the output file; the gate files follow)
   const { execFileSync } = require('child_process');
-  const audit = (k) => {
-    const f = path.join(ROOT, 'paths-starter', k, 'Route.lua');
-    if (!fs.existsSync(f)) return null;
-    const [race, cls] = k.split('-'); let n = 0;
-    for (const m of fs.readFileSync(f, 'utf8').matchAll(/^ {4}id = "(path:[^"]+)"/gm)) {
-      const a = execFileSync(process.execPath, [path.join(__dirname, 'lint-route.js'), f, path.join(ROOT, 'qdb', 'db.json'), m[1], cls + ',' + race], { encoding: 'utf8' });
-      n += a.split('\n').slice(1).filter((l) => l.trim() && !/no issues found/.test(l)).length;
-    }
-    return n;
-  };
+  const sims = {};
+  for (const gf of process.argv.slice(4)) for (const r of JSON.parse(fs.readFileSync(gf, 'utf8'))) if (r.sim) sims[r.race + '-' + r.cls] = r.sim;
   const rows = {};
-  for (const l of fs.readFileSync(path.join(ROOT, 'reports', 'starters.md'), 'utf8').split('\n')) {
-    const c = l.split('|').map((x) => x.trim());
-    if (c.length > 7 && /^\w+-\w+$/.test(c[1])) { const p = c[7].match(/(\d+) persona.*?(\d+) broke/); rows[c[1]] = { level: +c[2], hours: +c[3], steps: +c[4], audit: +c[5], personas: p ? +p[1] : 0, broke: p ? +p[2] : 0 }; }
+  for (const d of fs.readdirSync(path.join(ROOT, 'addon'))) {
+    const mm = d.match(/^ForeverRoute_Starter_([a-z]+)_([a-z]+)$/); if (!mm) continue;
+    const [, race, cls] = mm, k = race + '-' + cls, f = path.join(ROOT, 'addon', d, 'Plan.lua');
+    const t = fs.readFileSync(f, 'utf8'), id = RF.routeIds(t).find((x) => /^path:/.test(x));
+    const sc = JSON.parse(execFileSync(process.execPath, [path.join(__dirname, 'score-plan.js'), f], { encoding: 'utf8' }).trim().split('\n').pop());
+    const a = execFileSync(process.execPath, [path.join(__dirname, 'lint-route.js'), f, path.join(ROOT, 'qdb', 'db.json'), id, cls + ',' + race], { encoding: 'utf8' });
+    // a built-in plan is stitched from the tree's parts (tools/tree-assemble.js) and the step clock (tm) restarts at
+    // the start -> trunk seam: a hearth "-500 min after" the last one is that restart, not a cooldown a player hits
+    const issues = a.split('\n').slice(1).filter((l) => l.trim() && !/no issues found/.test(l) && !/hearth only -\d+ min after/.test(l));
+    const meta = (t.match(/^\s+meta = \{.*$/m) || [''])[0], sim = sims[k];
+    rows[k] = {
+      level: +((meta.match(/endLevel = "(\d+)/) || [])[1] || 60), hours: +(meta.match(/\bhours = ([\d.]+)/) || [])[1], grind: sc.grindH,
+      steps: RF.steps(t, id).length, audit: issues.length, personas: sim ? 1 : 0, broke: sim ? sim.broke + (sim.exit ? 1 : 0) : 0,
+    };
   }
-  for (const k of Object.keys(rows)) { const n = audit(k); if (n != null) rows[k].audit = n; }
   const factions = [
     { name: 'Alliance', races: ['human', 'dwarf', 'nightelf', 'gnome', 'skyborne'] },
-    { name: 'Horde', races: ['orc', 'undead', 'tauren', 'troll'] },
+    { name: 'Horde', races: ['orc', 'undead', 'tauren', 'troll', 'skybornehorde'] },
   ];
   const races = factions.flatMap((f) => f.races), classes = ['warrior', 'paladin', 'hunter', 'rogue', 'priest', 'shaman', 'mage', 'warlock', 'druid'];
-  const out = { W: 1000, H: 790, races, classes, factions, plans: rows };
+  const out = { W: 1000, H: 856, races, classes, factions, plans: rows };
   fs.writeFileSync(out2, JSON.stringify(out));
-  console.log(Object.keys(rows).length + ' plans, ' + Object.values(rows).reduce((n, r) => n + r.audit, 0) + ' audit issues');
+  const sum = (f) => Object.values(rows).reduce((n, r) => n + f(r), 0);
+  console.log(`${Object.keys(rows).length} plans, ${sum((r) => r.audit)} audit issues, ${sum((r) => r.personas)} played, ${sum((r) => r.broke)} broke, ${sum((r) => r.grind)} h grinding`);
 }
 
 // node tools/readme-hero.js think <plan key> <out.json> [how many decisions=12]: the planner's zone choices

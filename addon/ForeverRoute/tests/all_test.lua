@@ -3004,6 +3004,96 @@ test("zone picker: on a zone you picked, 'Change zone' is on the card and 'Plann
   if not ok then error(err, 0) end
 end)
 
+test("quest XP and chains without a plan: ns.QuestXp matches the planner (world.js questXp), ns.ChainOf names the chain and the part", function()
+  -- { quest, level, xp } from tools/world.js questXp
+  local cases = { {2,1,2450}, {107,14,54}, {208,27,5350}, {313,40,63}, {420,53,34}, {520,6,4450}, {624,19,3600}, {722,32,3150}, {842,45,91}, {948,58,63}, {1055,11,230}, {1164,24,2800}, {1364,37,3300}, {1504,50,66}, {1719,3,2450}, {2041,16,270}, {2742,29,4200}, {2942,42,4700}, {3124,55,1680}, {3627,8,8300}, {4101,21,5650}, {4443,34,560}, {4822,47,660}, {5146,60,4200}, {5404,13,560}, {5726,26,91}, {6124,39,74}, {6571,52,275}, {7201,5,5450}, {7726,18,560}, {8042,31,6600}, {8251,44,5100}, {8394,57,1820}, {8577,10,6600}, {8752,23,6600}, {8948,36,6600}, {9419,49,6600}, {90902,2,85}, {92473,15,36}, {92914,28,3600} }
+  for _, c in ipairs(cases) do assertEquals(c[3], ns.QuestXp(c[1], c[2]), "quest " .. c[1] .. " at " .. c[2]) end
+  assertNil(ns.QuestXp(99999999, 30))
+  local ch = ns.ChainOf(1265)
+  assertTrue(ch ~= nil, "The Missing Diplomat is a chain")
+  assertEquals("The Missing Diplomat", ch.name)
+  assertEquals(17, #ch.q)
+  assertEquals(1265, ch.q[ch.at])
+  assertNil(ns.ChainOf(99999999))
+end)
+
+test("Where to?: a zone's XP left is walked to the wall - a follow-up counts once its prerequisite is handed in on the way, a quest opens when the walk levels you, a quest you'd outlevel first doesn't", function()
+  local sv = { lvl = UnitLevel, xp = UnitXP, done = ns.State.IsCompleted, on = ns.State.OnQuest, pre = ns.QUEST_PRE, qx = ns.QuestXp, t = ns.XP_TO_LEVEL }
+  local function st(id, k, q, level, minLevel) return { id = id, k = k, q = q, name = "q" .. q, npc = "n", level = level, minLevel = minLevel, m = 1431, x = 0.5, y = 0.5, zone = "Duskwood", sec = 1 } end
+  local r = { id = "zone:Wall:20", zoneRoute = true, sections = { { title = "x" } }, steps = {
+    st(1, "accept", 99801, 20), st(2, "turnin", 99801, 20),          -- 1000 XP: level 20 -> 21
+    st(3, "accept", 99802, 21), st(4, "turnin", 99802, 21),          -- needs 99801 (handed in above): 1000 XP -> 22
+    st(5, "accept", 99803, 25, 22), st(6, "turnin", 99803, 25),      -- min level 22, reached on the walk: 500
+    st(7, "accept", 99804, 14), st(8, "turnin", 99804, 14),          -- gray by level 22 (GrayAt): not counted
+    st(9, "accept", 99805, 30, 28), st(10, "turnin", 99805, 30) } }  -- min level 28: the wall
+  local ok, err = pcall(function()
+    UnitLevel = function() return 20 end
+    UnitXP = function() return 0 end
+    ns.State.IsCompleted = function() return false end
+    ns.State.OnQuest = function() return false end
+    ns.QUEST_PRE = setmetatable({ [99802] = { g = { 99801 } } }, { __index = sv.pre })
+    local pay = { [99801] = 1000, [99802] = 1000, [99803] = 500, [99804] = 300, [99805] = 4000 }
+    ns.QuestXp = function(q) return pay[q] end
+    ns.XP_TO_LEVEL = setmetatable({ [20] = 1000, [21] = 1000 }, { __index = function() return 100000 end })
+    ns.ZoneCountsChanged()
+    ns.Fire("FR_STATE")
+    assertEquals(2500, ns.ZoneXpLeft(r, 20))
+  end)
+  UnitLevel, UnitXP, ns.State.IsCompleted, ns.State.OnQuest, ns.QUEST_PRE, ns.QuestXp, ns.XP_TO_LEVEL = sv.lvl, sv.xp, sv.done, sv.on, sv.pre, sv.qx, sv.t
+  ns.Fire("FR_STATE")
+  if not ok then error(err, 0) end
+end)
+
+test("Where to?: your level's zones, your planned route's next zone first (BEST NEXT), where you are marked, hand-ins waiting counted and breaking ties", function()
+  local sv = { routes = ForeverRouteRoutes, data = ForeverRouteData, title = ns.char.routeTitle, lvl = UnitLevel, done = ns.State.IsCompleted, on = ns.State.OnQuest, ready = ns.State.QuestReady, enders = ForeverRouteEnders, plan = ForeverRoutePlan, le = ns.Engine.LogEnders, pre = ns.QUEST_PRE }
+  local function zr(zone, level, xph, q, m) return { id = "zone:" .. zone .. ":" .. level, title = "Zone: " .. zone, zoneRoute = true, zoneName = zone, level = level, xph = xph, meta = { legs = zone }, sections = { { title = "x" } },
+    steps = { { id = 1, k = "accept", q = q, name = "q" .. q, npc = "n", level = level, m = m, x = 0.5, y = 0.5, zone = zone, sec = 1 } } } end
+  local main = { id = "path:W", title = "W", meta = { legs = "Wetlands" }, sections = { { title = "x" } }, steps = {
+    { id = 1, k = "accept", q = 99711, name = "Wet One", level = 25, npc = "Someone", m = 1437, x = 0.1, y = 0.6, zone = "Wetlands", sec = 1 } } }
+  local dusk, red = zr("Duskwood", 24, 9000, 99721, 1431), zr("Redridge Mountains", 24, 12000, 99731, 1433)
+  local ok, err = pcall(function()
+    ForeverRouteRoutes = { main, dusk, red }
+    ForeverRoutePlan = nil
+    UnitLevel = function() return 24 end
+    ns.State.IsCompleted = function() return false end
+    ns.State.OnQuest = function(q) return q == 99740 end
+    ns.State.QuestReady = function(q) return q == 99740 end
+    ForeverRouteEnders = { [99740] = { npc = "Commander Althea Ebonlocke", m = 1431, x = 0.73, y = 0.46, name = "Hand Me In" } }
+    ns.Engine.LogEnders = function() return ForeverRouteEnders end -- (the simulator's own quest log has no 99740)
+    -- Redridge's quest needs Wet One (on your plan, in Wetlands) handed in first
+    ns.QUEST_PRE = setmetatable({ [99731] = { g = { 99711 } } }, { __index = sv.pre })
+    ns.SelectRoute("path:W", true)
+    ns.Engine.Refresh()
+    local zc = ns.ZoneChoices()
+    local rows = zc.rows
+    assertEquals("Wetlands", rows[1].zone, "your planned route's next zone first")
+    assertTrue(rows[1].best, "best next")
+    assertEquals("Duskwood", rows[2].zone, "a hand-in waiting breaks the tie, though Redridge pays more per hour")
+    assertEquals(1, rows[2].handIns)
+    assertEquals(1, rows[2].questsLeft)
+    assertEquals("number", type(rows[2].xpLeft), "each zone row says how much XP is left there")
+    assertEquals("Redridge Mountains", rows[3].zone)
+    assertEquals(0, rows[3].questsLeft, "a quest held up by its prerequisite isn't counted")
+    assertTrue(rows[3].needs and rows[3].needs.name == "Wet One" and rows[3].needs.zone == "Wetlands", "the row says what it needs first, and where")
+    -- the window draws both tabs (and the other plans) without an error
+    ns.Paths.Show("zones"); ns.Paths.Show("paths"); ns.Paths.showOthers = true; ns.Paths.Draw(); ns.Paths.showOthers = false
+    ns.Paths.Show("zones")
+    -- picking Duskwood takes its route; the planned route's row then goes back
+    ns.Paths.Pick(rows[2])
+    assertEquals(dusk, ForeverRouteData)
+    local again = ns.ZoneChoices().rows
+    assertTrue(again[1].planned and again[1].zone == "Wetlands", "on a zone you picked, the planned route is still first")
+    local dz; for _, r in ipairs(again) do if r.zone == "Duskwood" then dz = r end end
+    assertTrue(dz and dz.here, "the zone you picked is where you are")
+    ns.Paths.Pick(again[1])
+    assertEquals(main, ForeverRouteData, "its row takes you back")
+    if ForeverRoutePaths then ForeverRoutePaths:Hide() end
+  end)
+  ForeverRouteRoutes, ForeverRoutePlan, UnitLevel, ns.State.IsCompleted, ns.State.OnQuest, ns.State.QuestReady, ForeverRouteEnders, ns.Engine.LogEnders, ns.QUEST_PRE = sv.routes, sv.plan, sv.lvl, sv.done, sv.on, sv.ready, sv.enders, sv.le, sv.pre
+  ns.SelectRoute(sv.title, true)
+  if not ok then error(err, 0) end
+end)
+
 test("zone picker on a built-in plan: one zone route per zone and level band, the one for your level is offered and taken", function()
   local sv = { routes = ForeverRouteRoutes, data = ForeverRouteData, req = ns.char.requestZone, handled = ns.char.requestHandled, title = ns.char.routeTitle }
   local function zr(zone, level, xph) return { id = "zone:" .. zone .. ":" .. level, title = "Zone: " .. zone, zoneRoute = true, zoneName = zone, level = level, xph = xph, meta = { legs = zone }, sections = { { title = "x" } }, steps = { { id = 1, k = "goto", text = "y", sec = 1 } } } end

@@ -15,8 +15,9 @@ const work = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-dryrun-'));
 const cfg = { ...base, routesOut: path.join(work, 'Route.lua'), ...(full ? { beam: 4 } : { reuseDungeons: path.join(ROOT, 'paths-auto-full', 'dungeons.json'), optimizeEffort: 0.5, evalRetrySec: 0 }) };
 fs.writeFileSync(path.join(work, 'campaign.json'), JSON.stringify(cfg));
 const t0 = Date.now();
+// FR_DRYRUN_MIN: minutes the planner may take (a comparison run on a busy PC; the gate itself keeps 20 / 90)
 // (the planner can stay alive after writing its plan - a worker thread; tools/starter.js stops it 15 s after 'wrote')
-const r = spawnSync(process.execPath, ['--max-old-space-size=8000', path.join(__dirname, 'paths.js'), path.join(work, 'campaign.json'), '3', full ? '2' : '0', '--work', work], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 26, timeout: (full ? 90 : 20) * 60000 });
+const r = spawnSync(process.execPath, ['--max-old-space-size=8000', path.join(__dirname, 'paths.js'), path.join(work, 'campaign.json'), '3', full ? '2' : '0', '--work', work], { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 26, timeout: (+process.env.FR_DRYRUN_MIN || (full ? 90 : 20)) * 60000 });
 const out = (r.stdout || '') + (r.stderr || '');
 fs.writeFileSync(path.join(work, 'paths.log'), out);
 console.log(`planned in ${Math.round((Date.now() - t0) / 1000)} s -> ${work}`);

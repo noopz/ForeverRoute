@@ -237,8 +237,12 @@ local function build()
   -- on a dungeon route: always-visible way back to the leveling path
   -- a dungeon or side trip: back to your leveling path; a zone you picked: the zone picker (another zone, or your
   -- planned route where it picks up)
-  f.home = Style.Button(f, "Back to my path", 116, 18, function()
-    if ForeverRouteData and ForeverRouteData.zoneRoute then if ns.Paths and ns.Paths.Show then ns.Paths.Show() end else ns.LeaveDungeonRoute() end
+  -- (a zone you picked that is done: "Carry on: <zone>", your planned route's next zone - Card.Fill)
+  f.home = Style.Button(f, "Back to my path", 116, 18, function(self)
+    local d = ForeverRouteData
+    if d and d.dungeon then ns.LeaveDungeonRoute()
+    elseif self.carryOn and ns.Paths and ns.Paths.Pick then ns.Paths.Pick(self.carryOn)
+    elseif ns.Paths and ns.Paths.Show then ns.Paths.Show() end
   end, "Your leveling path, or another zone (its progress is kept)")
   f.home.label:SetTextColor(C.gold[1], C.gold[2], C.gold[3])
   f.home:SetScript("OnLeave", function(self) self.label:SetTextColor(C.gold[1], C.gold[2], C.gold[3]); GameTooltip:Hide() end)
@@ -564,14 +568,17 @@ function Card.Fill()
     look(C.good, "icon-check")
     if data.dungeon then cur.titleText:SetText((data.dungeonName or "Dungeon") .. " route done"); cur.detail:SetText("Everything for it is handed in. \"Back to my path\" carries on leveling.")
     elseif data.zoneRoute then
-      -- a zone you picked, done: where next is yours to pick (the zone picker opens once)
-      cur.titleText:SetText((data.zoneName or "Zone") .. " done"); cur.detail:SetText("Pick where next: the zones at your level, or your planned route where it picks up.")
-      Card.zoneDone = Card.zoneDone or {}
-      if not Card.zoneDone[data.id] and ns.Paths and ns.Paths.Show then Card.zoneDone[data.id] = true; ns.Paths.Show() end
+      -- a zone you picked, done: "Carry on" goes where your planned route picks up; the route list has the other zones.
+      -- Only once it has stayed done a few seconds: stops are added just after a login or a route change (a hand-in
+      -- you finished, a side quest), and "done" can be true for a moment before they are
+      Card.zoneDoneSince = Card.zoneDoneSince or (GetTime and GetTime()) or 0
+      cur.titleText:SetText((data.zoneName or "Zone") .. " done"); cur.detail:SetText("Carry on where your planned route picks up, or pick another zone in the route list.")
+      if C_Timer and not Card.zoneDoneTick then Card.zoneDoneTick = true; C_Timer.After(3.5, function() Card.zoneDoneTick = nil; if ns.Card.Layout then ns.Card.Layout() end end) end
     else cur.titleText:SetText("Route complete"); cur.detail:SetText("Run the planner again for your next leg.") end
     setNote("")
     Card.SetButtons(nil); return
   end
+  Card.zoneDoneSince = nil -- (a step to show: the zone you picked is not done)
   local s = steps()[i]
   local kind = Style.Kind(s)
   local title, detail = Card.Describe(s)
@@ -1078,11 +1085,22 @@ function Card.Layout()
   f.dropY = -top - 2
   Card.PlaceDrop(f.ctl:GetAlpha() > 0) -- (hovering: at the left, the controls have the right)
   f.eta:Show(); f.eta:ClearAllPoints(); f.eta:SetPoint("TOPLEFT", PAD, -top - 4); f.eta:SetPoint("RIGHT", f, "RIGHT", -PAD - (f.dropWanted and f.drop:GetWidth() + 4 or 0), 0)
-  local onDungeon = ForeverRouteData and (ForeverRouteData.dungeon or ForeverRouteData.zoneRoute)
+  local d = ForeverRouteData
+  local onDungeon = d and (d.dungeon or d.zoneRoute)
   f.home:SetShown(onDungeon and true or false)
+  f.home.carryOn = nil
   if onDungeon then
-    f.home.label:SetText(ForeverRouteData.zoneRoute and "Change zone" or "Back to my path")
+    local label = d.zoneRoute and "Change zone" or "Back to my path"
+    -- a zone you picked, done for a few seconds (Card.Fill): carry on where your planned route picks up
+    local doneFor = Card.zoneDoneSince and ((GetTime and GetTime() or 0) - Card.zoneDoneSince) or 0
+    if d.zoneRoute and Card.zoneDoneSince and doneFor >= 3 and ns.ZoneChoices then
+      local best = ns.ZoneChoices().best
+      if best then f.home.carryOn = best; label = "Carry on: " .. Style.ShortZone(best.zone) end
+    end
+    f.home.label:SetText(label)
+    f.home:SetWidth(math.max(116, f.home.label:GetStringWidth() + 18))
     f.home:ClearAllPoints(); f.home:SetPoint("TOPLEFT", PAD - 2, -top + 1)
+    f.eta:ClearAllPoints(); f.eta:SetPoint("TOPLEFT", f.home, "TOPRIGHT", 6, -5); f.eta:SetPoint("RIGHT", f, "RIGHT", -PAD - (f.dropWanted and f.drop:GetWidth() + 4 or 0), 0)
   end
   f.ctl:ClearAllPoints(); f.ctl:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD + 4, -top + 1)
   local x = 0

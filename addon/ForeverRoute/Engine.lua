@@ -487,6 +487,8 @@ end
 function Engine.BehindYou(s)
   State = State or ns.State
   if Engine.noPlace or not (s and ns.planKey and ns.planKey.starter) then return false end
+  -- (a zone you picked has nothing behind you: you chose to go there - its steps all read "done" when you came back to it)
+  if ForeverRouteData and ForeverRouteData.zoneRoute then return false end
   if ns.Next and ns.Next.taken == s then return false end -- (picked up again by the live solve: right here and worth it)
   if s.side then return false end -- (a stop added for a quest giver next to you is where you are, wherever it lands in the plan)
   local c, list = planIndex()
@@ -589,6 +591,11 @@ local function statusRaw(i)
   if k == "accept" then
     if State.OnQuest(s.q) or State.IsCompleted(s.q) then return "done" end
     if s.minLevel and UnitLevel("player") < s.minLevel then return "wait" end
+    -- on a zone you picked, its prerequisites not handed in (ns.QUEST_PRE): it waits, like a level - the giver would
+    -- have nothing for you (a zone route is planned from the main route's progress, which a player who hops zones may not
+    -- have). Your own plan has its prerequisites earlier in it. A quest the game showed on offer anyway (Availability: a
+    -- giver listed it, or the map's "!") is taken as offered
+    if ForeverRouteData and ForeverRouteData.zoneRoute and ns.PrereqsMet and not ns.PrereqsMet(s.q) and not (ns.char and ns.char.avail and ns.char.avail.seen and ns.char.avail.seen[s.q]) then return "wait" end
     if State.LogFull and State.LogFull() then return "full" end
     return "todo"
   elseif k == "turnin" then

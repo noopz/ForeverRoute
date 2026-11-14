@@ -50,13 +50,14 @@ const IN_ZONE = new Set(['accept', 'turnin', 'obj', 'grind']);
 // it differs (world.js PLANNER_ZONE_NAMES: 'Stormwind', not 'Stormwind City'); mapArea: uiMap id -> area id, for steps
 // that carry their map; dungeonAreas: area id -> anything, for dungeon and raid areas; completed: quests handed in
 // before the plan; active: the quest log the plan started from (id -> anything); nope: quests you said you won't do
-function chainReport({ quests: Q, npcs = {}, steps, race, cls, zoneName = {}, zoneAliases = {}, mapArea = {}, dungeonAreas = {}, completed = [], active = {}, nope = [] }) {
+function chainReport({ quests: Q, npcs = {}, steps, race, cls, zoneName = {}, zoneAliases = {}, mapArea = {}, dungeonAreas = {}, completed = [], active = {}, nope = [], leftOut = [], cfgSkipIds = [] }) {
   const faction = ALLIANCE.has(race) ? 'A' : 'H';
   // done before the plan: closed for good, and the parts after them are open
   const before = new Set(completed.map(Number));
   const inLog = new Set(Object.keys(active || {}).map(Number));
   const notDoing = new Set(nope.map(Number));
-  const planHandIns = new Set(), accepted = new Set(inLog);
+  const planHandIns = new Set(), accepted = new Set([...inLog, ...leftOut.map(Number)]); // (leftOut: picked up, never handed in)
+  const cfgSkip = new Set(cfgSkipIds.map(Number));
   for (const s of steps) {
     if (s.q === undefined || s.q === '') continue;
     if (s.k === 'turnin') planHandIns.add(+s.q);
@@ -114,6 +115,8 @@ function chainReport({ quests: Q, npcs = {}, steps, race, cls, zoneName = {}, zo
     if (q.reqSpell || q.minRep) return 'requirement';
     if (q.notInForever) return 'not in Forever';
     if (notDoing.has(q.id)) return 'you said you are not doing it';
+    if (cfgSkip.has(q.id)) return 'skipped in the plan settings';
+    if (isElite(q)) return 'a group quest (elite)';
     // the planner only gives a quest from a giver it can walk to: one that starts from an item (a drop, a looted
     // letter) it takes only when it is already in the log (route2.js: "item-started quests: v1 leaves them out")
     if ((q.starters || []).length && q.starters.every((s) => s.type === 'item') && !inLog.has(q.id)) return 'starts from an item, not in the log';
@@ -256,6 +259,17 @@ function formatReport(rep, title) {
   return out.join('\n') + '\n';
 }
 
+// the quests a route picks up but never hands in (its leftOut, written by paths.js): counted as picked up
+function loadLeftOut(file, pathId) {
+  const text = fs.readFileSync(file, "utf8");
+  if (/\.json$/i.test(file)) return [];
+  const RF = require("./routefile");
+  const id = pathId || RF.routeIds(text, /^path:/)[0];
+  const at = text.indexOf("id = " + JSON.stringify(id));
+  if (at < 0) return [];
+  const m = /\n {4}leftOut = "([\d,]*)",/.exec(text.slice(at, at + 4000));
+  return m ? m[1].split(",").filter(Boolean).map(Number) : [];
+}
 // a plan's steps: a planner path-N.json, or one path of a Route.lua (the first path when no id is given)
 function loadSteps(file, pathId) {
   const text = fs.readFileSync(file, 'utf8');
@@ -281,10 +295,11 @@ function reportFor(file, opts = {}) {
   let { race, cls, db, completed, active, nope } = opts;
   // the plan's own campaign.json says who it is for and which quest data it was planned on (a trial plan on older
   // QuestieDB data names its db.json there): read against other data, quests that changed would look lost
-  try { const c = JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'campaign.json'), 'utf8')); race = race || c.race; cls = cls || c.class; if (!db && c.db) db = path.resolve(path.join(__dirname, '..'), c.db); completed = completed || c.completed; active = active || c.active; nope = nope || c.nope; } catch (e) { /* given on the command line, or not at all */ }
+  let skip = opts.skip;
+  try { const c = JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'campaign.json'), 'utf8')); race = race || c.race; cls = cls || c.class; skip = skip || c.skip; if (!db && c.db) db = path.resolve(path.join(__dirname, '..'), c.db); completed = completed || c.completed; active = active || c.active; nope = nope || c.nope; } catch (e) { /* given on the command line, or not at all */ }
   if (!race || !cls) throw new Error('race and class unknown: pass --race and --class (no campaign.json beside ' + file + ')');
   const norm = (s) => String(s).toLowerCase().replace(/[^a-z]/g, '');
-  return chainReport({ ...(opts.world || loadWorld(db)), steps: loadSteps(file, opts.pathId), race: norm(race), cls: norm(cls), completed: completed || [], active: active || {}, nope: nope || [] });
+  return chainReport({ ...(opts.world || loadWorld(db)), steps: loadSteps(file, opts.pathId), leftOut: loadLeftOut(file, opts.pathId), cfgSkipIds: skip || [], race: norm(race), cls: norm(cls), completed: completed || [], active: active || {}, nope: nope || [] });
 }
 
 module.exports = { chainReport, summaryLine, formatReport, loadSteps, loadWorld, reportFor, CLASSES };

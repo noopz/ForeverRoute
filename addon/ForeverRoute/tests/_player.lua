@@ -259,6 +259,8 @@ local function play(route, opts)
     -- (ck.dir/<leg>.lua) and then put back from what was written - in this run too, so a run resumed from the file and
     -- this one go on from the same state. ck.resume: a file to start from instead of level 1.
     local ck = opts.ckpt
+    if persona == "hopper" then ck = nil end -- (a checkpoint holds one route; the hopper switches between them)
+    local hops = 0
     local C = ck and ForeverRouteCkpt
     local ckLeg, maxSeen, tRun0, wall0 = 0, 0, GetTime and GetTime() or 0, 0
     if ck and (not C or #origList ~= ck.nsteps) then
@@ -462,7 +464,77 @@ local function play(route, opts)
     while true do
       if ck then tick() end
       guard = guard + 1
-      if guard > #steps * 4 + 50 then find("stuck", lastShown or 0, "gave up after " .. guard .. " actions"); break end
+      if guard > (persona == "hopper" and 30000 or #steps * 4 + 50) then find("stuck", lastShown or 0, "gave up after " .. guard .. " actions"); break end
+      -- the hopper (an exploratory player): at a random moment in a zone it picks another zone of its level from
+      -- "Where to?" (ns.ZoneChoices, as a player would);
+      -- when a zone it picked is done it carries on with the planned zone (the card's "Carry on")
+      if persona == "hopper" and not w.onTaxi then
+        local d = ForeverRouteData
+        local ended = not ns.Engine.Shown()
+        local bored = hops < 40 and rand(60) == 1
+        if (ended and d and d.zoneRoute) or bored then
+          if ns.ZoneCountsChanged then ns.ZoneCountsChanged() end -- (no quest events in the simulated world)
+          local zc = ns.ZoneChoices()
+          local pick
+          if ended then pick = zc.best
+          else
+            local other = {}
+            -- another zone that fits your level (a zone route is only offered for your level band) with quests left;
+            -- the planned zone too once you are off it (on your plan it is where you already go)
+            local onZone = ForeverRouteData and ForeverRouteData.zoneRoute
+            for _, z in ipairs(zc.rows) do
+              if z.route and not z.here and (z.questsLeft or 0) > 0 and (onZone or not z.best) then other[#other + 1] = z end
+            end
+            if #other > 0 then pick = other[rand(#other)] end
+          end
+          if pick then
+            hops = hops + 1; out.hops = hops
+            log("hop %d at level %d: %s -> %s (~%s XP there, %d quests)", hops, level, tostring(d and (d.zoneName or d.id)), tostring(pick.zone), tostring(pick.xpLeft), pick.questsLeft or 0)
+            ns.Paths.Pick(pick); ns.Engine.Refresh()
+            steps = (ForeverRouteData and ns.Steps(ForeverRouteData)) or steps
+            done, shownCount, lastShown, sameCount = {}, {}, nil, 0
+            -- a zone with nothing left for you: the card says it is done and offers "Carry on" - take it
+            for _ = 1, 3 do
+              if ns.Engine.Shown() or not (ForeverRouteData and ForeverRouteData.zoneRoute) then break end
+              if ns.ZoneCountsChanged then ns.ZoneCountsChanged() end
+              local best = ns.ZoneChoices().best
+              if not best then break end
+              find("empty", 0, "picked " .. tostring(pick.zone) .. " and it had nothing left")
+              -- why: each quest step there and what the engine makes of it
+              local why = {}
+              for j, st in ipairs(steps) do
+                if st.q and (st.k == "accept" or st.k == "obj" or st.k == "turnin") and #why < 12 then
+                  local E, S = ns.Engine, ns.State
+                  local fl = {}
+                  if S.IsCompleted(st.q) then fl[#fl + 1] = "completed" end
+                  if S.OnQuest(st.q) then fl[#fl + 1] = "inlog" end
+                  if E.Outlevelled(st) then fl[#fl + 1] = "outlevelled" end
+                  if E.Excluded and E.Excluded(st) then fl[#fl + 1] = "excluded" end
+                  if E.Breadcrumbed and E.Breadcrumbed(st) then fl[#fl + 1] = "breadcrumbed" end
+                  if ns.Avail and ns.Avail.Unavailable(st.q) then fl[#fl + 1] = "unavailable" end
+                  if ns.char.nope and ns.char.nope[st.q] then fl[#fl + 1] = "nope" end
+                  if st.id and (ns.char.manualDone[st.id] or ns.char.skipped[st.id]) then fl[#fl + 1] = "skipped" end
+                  if E.GrayHandIn and E.GrayHandIn(st) then fl[#fl + 1] = "grayhandin" end
+                  if #fl == 0 or (#fl == 1 and fl[1] == "inlog") then local o = E.ObjectiveFor and E.ObjectiveFor(st); why[#why + 1] = string.format("#%d %s %s %d:%s ready=%s objFinished=%s unknown=%s", j, st.k, tostring(st.name), st.q, tostring(E.Status(j)), tostring(S.QuestReady(st.q)), tostring(o and o.finished), tostring(st.unknown)) end
+                end
+              end
+              local cnt = {}; for _, q in ipairs(pick.leftIds or {}) do cnt[q] = true end
+              for j, st in ipairs(steps) do
+                if st.q and cnt[st.q] then
+                  local E = ns.Engine
+                  why[#why + 1] = string.format("COUNTED #%d %s %s:%s m=%s zone=%s outl=%s gray=%s behind=%s excl=%s bread=%s inserted=%s", j, st.k, tostring(st.name), tostring(E.Status(j)), tostring(st.m), tostring(st.zone),
+                    tostring(E.Outlevelled(st)), tostring(E.GrayHandIn and E.GrayHandIn(st)), tostring(E.BehindYou(st)), tostring(E.Excluded and E.Excluded(st)), tostring(E.Breadcrumbed and E.Breadcrumbed(st)), tostring(st.inserted)) .. " completed=" .. tostring(ns.State.IsCompleted(st.q)) .. " onquest=" .. tostring(ns.State.OnQuest(st.q)) .. " unavail=" .. tostring(ns.Avail.Unavailable(st.q)) .. " nope=" .. tostring(ns.char.nope and ns.char.nope[st.q]) .. " key=" .. tostring(E.Key(j)) .. " manual=" .. tostring(ns.char.manualDone[E.Key(j)]) .. " skipped=" .. tostring(ns.char.skipped[E.Key(j)])
+                end
+              end
+              log("  empty %s (counted %s left: %s): %s", tostring(pick.zone), tostring(pick.questsLeft), table.concat(pick.leftIds or {}, ","), table.concat(why, "; "))
+              log("carry on: %s had nothing left -> %s", tostring(pick.zone), tostring(best.zone))
+              ns.Paths.Pick(best); ns.Engine.Refresh()
+              steps = (ForeverRouteData and ns.Steps(ForeverRouteData)) or steps
+              done, shownCount, lastShown, sameCount = {}, {}, nil, 0
+            end
+          end
+        end
+      end
       local i = ns.Engine.Shown()
       if not i or (opts.to and i > opts.to) then break end
       if ck then seen(i); seen(ns.Engine.current); seen(ns.Engine.planned); seen(ns.Engine.focus) end
@@ -589,7 +661,7 @@ end
 
 -- one line per finding kind, with the first few examples
 local function summary(r, name)
-  local L = { string.format("%s: played %d steps in %d actions", name or "run", r.played, r.actions) }
+  local L = { string.format("%s: played %d steps in %d actions", name or "run", r.played, r.actions) .. (r.hops and string.format(", %d zone hops", r.hops) or "") }
   local t = r.travel
   local P = r.prof
   if P and P.wallMs then

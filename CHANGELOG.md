@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.10 - 2026-11-14
+- "Where to?" has two tabs on a rail at its left. Zones lists the zones you could go to now, one row each: about how much XP is left there for you (and what share of your level that is), the quests you can still do there, and one reason - hand-ins waiting, a quest you carry there, or a quest it needs you to do first (and where). The XP counts what you could do there before you run out and have to move on: follow-ups once their first part is done, quests that open as you level, not ones you would outlevel first. Your plan's next zone is marked PLANNED NEXT.
+- Plan shows the zones ahead on your plan with their quests. The companion's other full plans fold under it.
+- On a zone you picked, a quest whose earlier part you haven't done waits instead of sending you to a giver with nothing for you, and "Planned route" picks up where you left your plan.
+- When a zone you picked is done, the card offers "Carry on" to where your plan picks up.
+- The window keeps its size and scrolls; hovering a row or tab says what it does.
+- Plans name each part after the zone its quests are in (a stretch planned from Shen'dralas but all in Desolace now reads Desolace), and long chains whose items the quest data doesn't place are kept (Linken's chain in Un'Goro).
+
 ## 1.4.9 - 2026-11-14
 - New built-in plans for every race and class. Each race starts on its own, then all of a faction's races share one main route from about level 21: no grinding anywhere from 1 to 60 (the old plans had 50 to 150 hours of it). Every plan was played from 1 to 60 by the simulated player first.
 - Horde Skyborne (Windshaper) have built-in plans now: druid, hunter, rogue, shaman and warrior.

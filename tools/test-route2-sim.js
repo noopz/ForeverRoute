@@ -147,12 +147,11 @@ const fixture = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, 'test-fix
   check('a finished gray quest is handed in where the leg passes its hand-in', steps.some((s) => s.type === 'turnin' && s.q === 122), steps.filter((s) => s.type === 'turnin').map((s) => s.q));
 }
 // an item with no source in the data at all (Something's in the Water's Filled Freshwater Phial, filled from another
-// item) is not one of Forever's objects QuestieDB has no record of: its quest stays 'objectives outside', not an
-// unknown step at the giver
+// item) is planned like work the data lists none of when its quest leads on: an unknown step with the quest's other
+// work (else at its giver), so the chain goes on (96085) instead of being lost - as Linken's container items now are
 {
-  const { steps, state } = sim({ zones: [16591], level: 40, completed: [96083] });
-  check('an item with no source listed is not planned as an unknown step', !steps.some((s) => s.q === 96084), steps.filter((s) => s.q === 96084));
-  check('...and its chain says why', /outside/.test((state.chainSkip || {})[96084] || ''), (state.chainSkip || {})[96084]);
+  const { steps } = sim({ zones: [16591], level: 40, completed: [96083] });
+  check('a chain part whose item has no source is planned (an unknown step), not dropped', steps.some((s) => s.type === 'turnin' && s.q === 96084), steps.filter((s) => s.q === 96084).map((s) => s.type));
 }
 // a chain's next part handed to you in a side zone where the leg hands in its last part stays on the leg, to carry to
 // another zone: Highway Robbery (Desolace) gives On the Lam, for Tokal in Stranglethorn (a leg planned with the

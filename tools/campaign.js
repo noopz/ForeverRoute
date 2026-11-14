@@ -16,6 +16,9 @@ const work = cfg.workDir ? path.resolve(cfg.workDir) : path.join(ROOT, 'campaign
 const db = JSON.parse(fs.readFileSync(cfg.db, 'utf8'));
 const conv = JSON.parse(fs.readFileSync(cfg.conversion, 'utf8')).geometry.transforms;
 const zoneName = Object.fromEntries(conv.map((t) => [t.area_id, t.target_name]));
+// zone names as the steps spell them (world.js plannerZoneNames: Stormwind, not Stormwind City - a plan with both showed
+// both in the route list, "Stormwind > Hillsbrad > Stormwind City")
+const stepZone = require('./world').plannerZoneNames(conv);
 const uiMap = Object.fromEntries(conv.map((t) => [t.area_id, t.ui_map_id]));
 const continent = Object.fromEntries(conv.map((t) => [t.area_id, t.map_id]));
 const CITIES = new Set([1519, 1537, 1657, 1497, 1637, 1638]);
@@ -274,7 +277,7 @@ function xpRunLeg(S, legs = []) {
   const D = (() => { try { return require('./dungeons').loadDungeons(cfg.dungeonFile).list[dg.id]; } catch (e) { return null; } })();
   const ent = (D && D.entrance) || { zone: dg.entrance, x: 50, y: 50 };
   const after = W.addXp(L, S.xp || 0, best.gain);
-  const step = { k: 'goto', text: 'Run ' + dg.name + ' with a group', dungeon: dg.name, xpRun: true, m: uiMap[dg.entrance], x: +(ent.x / 100).toFixed(4), y: +(ent.y / 100).toFixed(4), zone: zoneName[dg.entrance], r: 25, sec: 1, lvl: L,
+  const step = { k: 'goto', text: 'Run ' + dg.name + ' with a group', dungeon: dg.name, xpRun: true, m: uiMap[dg.entrance], x: +(ent.x / 100).toFixed(4), y: +(ent.y / 100).toFixed(4), zone: stepZone[dg.entrance], r: 25, sec: 1, lvl: L,
     note: 'For the XP: few quests at your level just now, and dungeon kills pay +50% since Nov 8. Skip it if you would rather not - the route goes on, you will just be a little lower.' };
   const leg = { title: dg.name + ' (XP run)', sections: [{ title: dg.name }], steps: [step] };
   return { z: dg.entrance, id: dg.id, name: dg.name, score: best.score, leg: { zone: dg.entrance, leg, state: { level: after.level, xp: after.xp, minutes: best.minutes, pos: { zone: dg.entrance, x: ent.x, y: ent.y }, completed: S.completed, active: S.active }, options: [], levelBefore: L, here: true, xpRun: dg.id } };
@@ -300,6 +303,17 @@ function regionOf(z, level, completed) {
     for (const [w] of Object.entries(giv).sort((a, b) => b[1] - a[1]).slice(0, 3)) if (!region.includes(+w)) region.push(+w);
   }
   return (regionCache[key] = region);
+}
+// the zone a planned leg's quest work is really in: the most quest steps (pick-ups, objectives, hand-ins), cities left
+// out. A zone is evaluated with its neighbours (regionOf), and Shen'dralas at 34 had nothing at your level while its
+// neighbour Desolace had a full leg - the leg was all Desolace but named Shen'dralas (step 1: fly Desolace)
+const AREA_OF_UI = Object.fromEntries(conv.map((t) => [t.ui_map_id, t.area_id]));
+function mainZoneOf(leg, fallback) {
+  const n = {};
+  for (const x of leg.steps || []) { if (!(x.q > 0) || !/^(accept|turnin|obj)$/.test(x.k || x.type || '')) continue; const a = AREA_OF_UI[x.m]; if (a && !CITIES.has(a)) n[a] = (n[a] || 0) + 1; }
+  let best = fallback, bn = n[fallback] || 0;
+  for (const [a, c] of Object.entries(n)) if (c > bn) { best = +a; bn = c; }
+  return best;
 }
 const regionName = (z, region) => zoneName[z] + (region.length ? ' (+' + region.map((w) => zoneName[w]).join(', ') + ')' : '');
 
@@ -507,6 +521,8 @@ function legConfig(zone, level, extra, S = state) {
     dungeonsRun: S.dungeonsRun && S.dungeonsRun.length ? S.dungeonsRun : undefined,
     gearVerdicts: st.gearVerdicts && Object.keys(st.gearVerdicts).length ? st.gearVerdicts : undefined,
     carrySameZone: cfg.carrySameZone, awayObjectives: cfg.awayObjectives, headChains: cfg.headChains, headChainShare: cfg.headChainShare, // route2 settings (route2.js)
+    // the quest log a leg may hold (route2 maxLog, 38 by default) - only when set: an undefined one would lift the limit
+    ...(cfg.maxLog > 0 ? { maxLog: cfg.maxLog } : {}),
     dungeonFile: cfg.dungeonFile, dungeons: cfg.dungeonsInPath === true ? cfg.dungeons : 'none', dungeonRunMin: cfg.dungeonRunMin, groupWaitMin: cfg.groupWaitMin, ...extra,
   };
 }
@@ -800,9 +816,10 @@ async function beamSearch() {
     fs.writeFileSync(path.join(work, tag + '.txt'), r.out);
     if (!leg.steps.length) { console.log(`  -> ${zoneName[best.z]} came up empty when planned for real: ruled out until something changes`); emptyAt.add(best.z); continue; }
     emptyAt = new Set();
-    legs.push({ zone: best.z, leg, state: s, options, beforeFile, levelBefore: state.level, errand: errand && errand.quests.length ? errand : null });
-    console.log(`  -> ${regionName(best.z, regionOf(best.z, state.level, state.completed))}: ${leg.steps.length} steps, level ${state.level} -> ${s.level} (${s.level >= 60 ? 100 : Math.round(100 * s.xp / XP_TO_LEVEL[s.level])}%), ~${s.minutes} min`);
-    visits[best.z] = (visits[best.z] || 0) + 1;
+    const lz = mainZoneOf(leg, best.z);
+    legs.push({ zone: lz, leg, state: s, options, beforeFile, levelBefore: state.level, errand: errand && errand.quests.length ? errand : null });
+    console.log(`  -> ${regionName(lz, regionOf(best.z, state.level, state.completed).filter((w) => w !== lz).concat(lz !== best.z ? [best.z] : []))}: ${leg.steps.length} steps, level ${state.level} -> ${s.level} (${s.level >= 60 ? 100 : Math.round(100 * s.xp / XP_TO_LEVEL[s.level])}%), ~${s.minutes} min`);
+    visits[lz] = (visits[lz] || 0) + 1;
     knownFP.add(best.z);
     // exact XP: rounding here lost up to 5% of a level on every leg (evaluations still round, for the cache)
     state = { trainedAt: s.trainedAt, hearthCd: s.hearthCdLeft || 0, hearth: s.hearth || state.hearth || null, level: s.level, xp: s.xp || 0, completed: [...s.completed].sort((a, b) => a - b), active: s.active, pos: s.pos, zone: best.z, dungeonsRun: s.dungeonsRun };
@@ -823,10 +840,10 @@ async function beamSearch() {
     const E = legs[k].errand;
     if (E) {
       const em = uiMap[E.zone], before = [...steps].reverse().find((s) => s.m);
-      sections.push({ title: 'On the way: ' + zoneName[E.zone], zone: zoneName[E.zone] });
+      sections.push({ title: 'On the way: ' + zoneName[E.zone], zone: stepZone[E.zone] });
       if (!before || before.m !== em) steps.push({ k: 'fly', dest: zoneName[E.zone], to: em, text: zoneName[E.zone], sec: sections.length, note: (E.boat ? 'Across the sea: the card lists the boats and rides.' : 'Fly, or ride if there is no flight path yet.') + '  A pick-up on the way to ' + zoneName[zone] + '.' });
       else if (choice) choice.at = steps.length + E.quests.length + 1;
-      for (const e of E.quests) steps.push({ k: 'accept', npc: E.who, r: 6, minLevel: e.reqLevel > 1 ? e.reqLevel : undefined, q: e.id, name: e.name, level: e.level, m: em, x: +(E.spot.x / 100).toFixed(4), y: +(E.spot.y / 100).toFixed(4), zone: zoneName[E.zone], sec: sections.length, lvl: legs[k].levelBefore,
+      for (const e of E.quests) steps.push({ k: 'accept', npc: E.who, r: 6, minLevel: e.reqLevel > 1 ? e.reqLevel : undefined, q: e.id, name: e.name, level: e.level, m: em, x: +(E.spot.x / 100).toFixed(4), y: +(E.spot.y / 100).toFixed(4), zone: stepZone[E.zone], sec: sections.length, lvl: legs[k].levelBefore,
         note: 'Delivery - handed in in ' + zoneName[zone] + ' (' + e.xp + ' xp' + (e.chain > 0 ? ', and it opens more there' : '') + ').' });
     }
     // the trip goes where the leg really starts: a region leg can open in a neighbour or a city ("fly to the Badlands"

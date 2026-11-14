@@ -38,6 +38,7 @@ Nav.lua
 Drops.lua
 FunCandidates.lua
 QuestData.lua
+Chains.lua
 Learn.lua
 Availability.lua
 ItemQuests.lua

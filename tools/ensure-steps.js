@@ -227,6 +227,7 @@ function makeEnsure(db, conv) {
       else if (p.k === "fly" && q.k === "fly" && !p.boat && !q.boat) { moveChoice(p, q); out.splice(i - 1, 1); } }
     out.forEach((s, i) => { s.id = i + 1; });
     out.added = added; out.dropped = orphan.size + prereqDropped;
+    out.droppedIds = [...orphan]; // (quests picked up but never handed in on this route: the chain report counts them as picked up)
     // where a leg's choice point ended up (step id), 0 if no step carries it
     out.choiceAt = (leg) => out.findIndex((s) => s._choice === leg) + 1;
     return out;
