@@ -51,9 +51,42 @@ function Avail.NotOffered(q, npc, name, step)
   if ns.Why then ns.Why("avail", (name or ("quest " .. q)) .. ": " .. tostring(npc) .. " doesn't offer it to you - " .. what) end
   ns.Print((name or ("Quest " .. q)) .. ": " .. tostring(npc) .. " doesn't offer it to you, so it's off your route" .. (stay and "." or " for now."))
 end
+-- what this quest needs that you don't have: "needs Engineering 200", or nil (ns.QUEST_NEEDS in QuestData.lua). Plans
+-- made before the planner checked this carried Goblin Engineering to a level 34 warlock with no Engineering, and the
+-- card walked them to Lilliam Sparkspindle, who had nothing. Your skills are read at most every 10 s.
+local skillsAt, skills = -100, {}
+local told = {}
+function Avail.Needs(q)
+  local need = q and ns.QUEST_NEEDS and ns.QUEST_NEEDS[q]
+  if not need then return nil end
+  local why
+  if need.s then
+    local now = (GetTime and GetTime()) or 0
+    if now - skillsAt >= 10 then skillsAt, skills = now, (ns.State and ns.State.Skills and ns.State.Skills()) or {} end
+    local have = skills[need.s]
+    if not have or (tonumber(have[1]) or 0) < (need.r or 1) then why = "needs " .. need.s .. " " .. (need.r or 1) end
+  end
+  if not why and need.sp then
+    local known = (IsPlayerSpell and call(IsPlayerSpell, need.sp)) or (IsSpellKnown and call(IsSpellKnown, need.sp))
+    if known == false then why = "needs a spell you haven't learned" end
+  end
+  -- a reputation: { faction, at least this much } (the game's bar value; a client that won't say keeps the step)
+  if not why and need.rp and GetFactionInfoByID then
+    local ok, name, _, _, _, _, value = pcall(GetFactionInfoByID, need.rp[1]) -- 6 values: not call() (keeps 5)
+    if ok and name and plain(value) and type(value) == "number" and value < need.rp[2] then why = "needs more reputation with " .. name end
+  end
+  if why and not told[q] and ns.Why then
+    told[q] = true
+    ns.Why("avail", "quest " .. q .. " " .. why .. ": left off your route")
+  end
+  return why
+end
+
 -- left off the route: the game didn't offer it (and hasn't since), and nothing that could change that has happened -
--- a level, where a level could be the reason, or a quest before it handed in. A quest you have or did is never this.
+-- a level, where a level could be the reason, or a quest before it handed in, or it needs a profession you don't have.
+-- A quest you have or did is never this.
 function Avail.Unavailable(q)
+  if Avail.Needs(q) then return true end
   local n = q and ForeverRouteChar and ForeverRouteChar.avail and ForeverRouteChar.avail.no and ForeverRouteChar.avail.no[q]
   if not n then return false end
   if n.stay then return true end

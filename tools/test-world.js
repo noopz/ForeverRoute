@@ -34,5 +34,13 @@ check('Skyborne bits do not narrow the Alliance trunk', W.canTake({ races: ALL_A
 const ALL_HORDE = 2 | 16 | 32 | 128;
 check('a quest for every Horde race is in the Horde trunk, not the Alliance one', W.canTake({ races: ALL_HORDE }, 'horde', 'none') && !W.canTake({ races: ALL_HORDE }, 'alliance', 'none'));
 
+// profession quests: planned unless the save says you lack the profession (its rank is checked at the giver)
+const goblin = { skill: [202, 200] }, save = { Defense: [170, 170], Swords: [150, 170], Common: [300, 300] };
+check('a plan without a save keeps a profession quest (the addon checks it)', W.hasProfessionFor(goblin, {}) && W.hasProfessionFor(goblin, undefined));
+check('a save without Engineering drops Goblin Engineering', !W.hasProfessionFor(goblin, save));
+check('a save with Engineering 150 keeps it (it can be 200 by then)', W.hasProfessionFor(goblin, { ...save, Engineering: [150, 225] }));
+check('a quest that needs no profession is always kept', W.hasProfessionFor({}, save));
+check('the professions a replan watches: names only, no weapon skills', JSON.stringify(W.professionsOf({ ...save, Tailoring: [50, 75], 'First Aid': [10, 75] })) === '["First Aid","Tailoring"]');
+
 console.log(fails ? `${fails} failed` : 'all passed');
 process.exit(fails ? 1 : 0);

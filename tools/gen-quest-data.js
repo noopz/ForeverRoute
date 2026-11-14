@@ -1,4 +1,4 @@
-// Writes addon/ForeverRoute/QuestData.lua from the quest data: two things the addon needs on any plan.
+// Writes addon/ForeverRoute/QuestData.lua from the quest data: what the addon needs on any plan.
 //
 // ns.QUEST_ITEMS  quest item -> its name and every quest that uses it (an objective, handed to you by the giver,
 //                 needed along the way, or the item that starts it). The quest log check lists the ones in your bags
@@ -12,12 +12,16 @@
 //                 you stand next to its giver and its objectives lie near your route (Engine.SideOffer).
 //                 Kept simple on purpose: outdoor objectives only (things to loot from the ground, drops and kills of
 //                 normal mobs, a decent drop rate), no elites, no dungeon, no profession / reputation / event quests.
+// ns.ITEM_QUESTS  quests an item starts (a drop no plan can count on): offered when the item is in your bags.
+// ns.QUEST_NEEDS  quests that need a profession at a rank, a spell you learned or a reputation (Goblin Engineering:
+//                 Engineering 200): a plan's step for one you can't take is left off your route before you walk to the
+//                 giver (Availability.lua). Plans keep them; the planner only drops one when your save lacks the profession.
 // ns.QUEST_PRE    every quest's prerequisites; ns.QUEST_EX every quest's alternatives (Engine.Excluded).
 // usage: node tools/gen-quest-data.js [out.lua]     (run after rebuilding qdb; tools/update-questiedb.js does)
 const fs = require('fs');
 const path = require('path');
 const ROOT = path.join(__dirname, '..');
-const { CAPITAL_AREAS, CLASS_BIT, unknownWork, leadsOn } = require('./world');
+const { CAPITAL_AREAS, CLASS_BIT, unknownWork, leadsOn, SKILL_NAME } = require('./world');
 const ALT = require('./exclusive-alternatives'); // a quest's alternatives (closers), and the check that db.json has them
 const QDB = process.env.FR_QDB || path.join(ROOT, 'qdb'); // (FR_QDB: the quest data of another checkout)
 const db = JSON.parse(fs.readFileSync(path.join(QDB, 'db.json'), 'utf8'));
@@ -155,6 +159,40 @@ for (const q of Object.values(Q).sort((a, b) => a.id - b.id)) {
   sideLines.push(`  [${q.id}] = { ${f.join(', ')} },`);
 }
 
+// ---------------------------------------------------------------- quests an item starts
+// A drop that starts a quest (Message in a Bottle, the OOX distress beacons) comes when it comes: no plan can count
+// on it, so the addon offers the quest when the item is in your bags (ItemQuests.lua) and, once you take it, fits its
+// objectives and hand-in into your route the way it does a side quest's. Same fields as a side quest's, without the
+// giver: it = the items that start it { [item] = name }; e (the hand-in) only when it has a place outdoors; o only the
+// objectives with a place (the quest log says the rest), u when some have none.
+const itemQLines = [];
+for (const q of Object.values(Q).sort((a, b) => a.id - b.id)) {
+  const starts = (q.starters || []).filter((s) => s.type === 'item' && s.id > 0);
+  if (!starts.length || !q.name || q.special & 3 || q.skill || q.reqSpell || q.minRep || q.notInForever) continue;
+  // (no XP: a crafting writ, a welcome letter - nothing for a leveling route to fit in)
+  if (HOLIDAY_SORTS.has(q.zone) || !(q.xp > 0) || !(q.level > 0) || q.level > 60) continue;
+  const mask = BigInt(Math.round(q.races || 0)), side = sideOf(q);
+  const whole = side === 'A' ? ALLIANCE : side === 'H' ? HORDE : ALLIANCE | HORDE;
+  const races = mask !== 0n && (mask & whole) !== whole ? Object.keys(RACE_TOKEN).filter((b) => mask & BigInt(b)).map((b) => RACE_TOKEN[b]) : [];
+  if (mask !== 0n && (mask & whole) !== whole && !races.length) continue;
+  const f = [`n = ${lua(q.name)}`, `l = ${q.level}`, `r = ${q.reqLevel || 1}`, `xp = ${q.xp}`];
+  if (side) f.push(`f = ${lua(side)}`);
+  if (races.length) f.push(`rc = ${lua(races.join(','))}`);
+  const cl = classesOf(q); if (cl.length) f.push(`cl = ${lua(cl.join(','))}`);
+  f.push(`it = { ${starts.map((s) => `[${s.id}] = ${lua(s.name || (rawI[s.id] && at(rawI[s.id], 1)) || 'item ' + s.id)}`).join(', ')} }`);
+  const ender = (q.finishers || []).find((s) => outdoor(s.spawns).length >= 1);
+  if (ender) f.push(`e = { ${lua(ender.name)}, ${spot(outdoor(ender.spawns)[0]).join(', ')} }`);
+  if ((q.preGroup || []).length) f.push(`pre = { ${q.preGroup.join(', ')} }`);
+  if ((q.preSingle || []).length) f.push(`any = { ${q.preSingle.join(', ')} }`);
+  const ex = [...new Set([...ALT.closers(Q, q), ...(q.nextInChain ? [q.nextInChain] : [])])];
+  if (ex.length) f.push(`ex = { ${ex.join(', ')} }`);
+  const objs = (q.objectives || []).map((o) => objective(q, o));
+  if (objs.some((o) => !o) || unknownWork(q)) f.push('u = true');
+  const placed = objs.filter(Boolean);
+  if (placed.length) f.push(`o = { ${placed.map((o) => `{ ${lua(o.verb)}, ${lua(o.name)}, ${o.pts.map((p) => `{ ${p.join(', ')} }`).join(', ')} }`).join(', ')} }`);
+  itemQLines.push(`  [${q.id}] = { ${f.join(', ')} },`);
+}
+
 const preLines = [];
 for (const q of Object.values(db.quests)) {
   const g = (q.preGroup || []).filter((x) => x > 0), one = (q.preSingle || []).filter((x) => x > 0);
@@ -181,6 +219,19 @@ for (const q of Object.values(db.quests)) {
   const ex = [...new Set(ALT.closers(db.quests, q).filter((x) => db.quests[x]))].sort((a, b) => a - b);
   if (ex.length) exLines.push(`  [${q.id}] = { ${ex.join(', ')} },`);
 }
+// ---------------------------------------------------------------- what a quest needs beyond level, race and class
+const needLines = [];
+for (const q of Object.values(db.quests)) {
+  const parts = [];
+  if (Array.isArray(q.skill) && q.skill[0]) {
+    const nm = SKILL_NAME[q.skill[0]];
+    if (nm) parts.push(`s = "${nm}", r = ${+q.skill[1] || 1}`);
+    else console.error(`quest ${q.id} ${q.name}: skill line ${q.skill[0]} has no name here (left out)`);
+  }
+  if (q.reqSpell > 0) parts.push(`sp = ${q.reqSpell}`);
+  if (Array.isArray(q.minRep) && q.minRep[0] > 0 && q.minRep[1] > 0) parts.push(`rp = { ${q.minRep[0]}, ${q.minRep[1]} }`);
+  if (parts.length) needLines.push(`  [${q.id}] = { ${parts.join(', ')} },`);
+}
 const L = ['-- Generated by tools/gen-quest-data.js from the quest data - edit that, not this.', 'local _, ns = ...',
   '-- quest item -> its name, then every quest that uses it (objective, handed to you, needed along the way, starts it)',
   'ns.QUEST_ITEMS = {', ...itemLines, '}',
@@ -191,11 +242,17 @@ const L = ['-- Generated by tools/gen-quest-data.js from the quest data - edit t
   '-- pre all of these done first, any one of these done first, ex not with these, o objectives { verb, name, { map, x, y }... },',
   '-- u: the quest data lists none of its work (where it is is not known)',
   'ns.SIDE_QUESTS = {', ...sideLines, '}',
+  '-- quests an item starts (a drop no plan can count on), for ItemQuests.lua: the side quest fields without a giver,',
+  '-- it = the items that start it { [item] = name }; e and o only where they have a place outdoors, u: some work has none',
+  'ns.ITEM_QUESTS = {', ...itemQLines, '}',
   '-- prerequisites of every quest (QuestieDB): g = all of these handed in first, s = any one of these. The addon checks a',
   '-- pick-up against them whatever the plan says (a plan that left out Gleaning Our Future sent you to For Further Study)',
   'ns.QUEST_PRE = {', ...preLines, '}',
   '-- alternatives: a quest is no longer offered once any of these is done or in your log (one quest from givers in',
   '-- several towns - In Search of Menara Voidrender from Briarthorn or Demisette Cloyce: you take it from one)',
-  'ns.QUEST_EX = {', ...exLines, '}'];
+  'ns.QUEST_EX = {', ...exLines, '}',
+  '-- what a quest needs beyond level, race and class: s a profession at rank r (the name the skill list shows), sp a spell,',
+  '-- rp a reputation { faction, at least this much }',
+  'ns.QUEST_NEEDS = {', ...needLines, '}'];
 fs.writeFileSync(out, L.join('\n') + '\n');
-console.log(`${itemLines.length} quest items, ${sideLines.length} side quests -> ${out}`);
+console.log(`${itemLines.length} quest items, ${sideLines.length} side quests, ${itemQLines.length} item-started quests -> ${out}`);

@@ -285,10 +285,15 @@ local function planIndex()
   local list = steps()
   local c = planCache[list]
   if c and c.n == #list then return c, list end
-  c = { n = #list, idx = {}, eff = {}, accept = {}, turnin = {}, at = {} }
-  local nxt
+  -- (binds: the bind stops in order; trainAfter[i]: the lowest level a training stop after step i is for - statusRaw
+  -- walked the rest of the plan for each, on every refresh)
+  c = { n = #list, idx = {}, eff = {}, accept = {}, turnin = {}, at = {}, binds = {}, trainAfter = {} }
+  local nxt, train
   for i = #list, 1, -1 do
     local s = list[i]
+    c.trainAfter[i] = train
+    if s.k == "train" then local L = Engine.TrainLevel(s); if L and (not train or L < train) then train = L end end
+    if s.k == "bind" then table.insert(c.binds, 1, i) end
     c.idx[s] = i
     if tonumber(s.lvl) then nxt = s.lvl end
     c.eff[i] = nxt
@@ -631,8 +636,8 @@ local function statusRaw(i)
     if Engine.BoundAt(s, b) then return "done" end
     -- bound at a later bind stop of the route: that one replaced this one - never back to rebind here (binding in
     -- Menethil once sent you back across the sea to Auberdine's inn, and from there back to Menethil's)
-    local list = steps()
-    for j = i + 1, #list do local t = list[j]; if t.k == "bind" and Engine.BoundAt(t, b) then return "done" end end
+    local c, list = planIndex()
+    for _, j in ipairs(c.binds) do if j > i and Engine.BoundAt(list[j], b) then return "done" end end
   elseif k == "bonus" then
     -- a book / collectible: done once it's in your bags or the books addon has it as found
     if s.item and ns.GetItemCount and (ns.GetItemCount(s.item, true) or 0) > 0 then return "done" end
@@ -642,11 +647,9 @@ local function statusRaw(i)
     if s.until_ and UnitLevel("player") < s.until_ then return "wait" end
     -- a later training stop on the route is already due at your level: that visit covers this one (a plan made for
     -- someone lower lists every stop from level 2)
-    local lvl, list = UnitLevel("player") or 1, steps()
-    for j = i + 1, #list do
-      local t = list[j]
-      if t.k == "train" then local L = Engine.TrainLevel(t); if L and L <= lvl then return "done" end end
-    end
+    local lvl = UnitLevel("player") or 1
+    local L = planIndex().trainAfter[i]
+    if L and L <= lvl then return "done" end
   end
   -- "Run <dungeon>": done while you're inside that dungeon (the entrance check can't see you once you're in, and a
   -- reload inside would otherwise leave it stuck). Leave early and it comes back.
@@ -959,7 +962,22 @@ function Engine.RefreshInner()
   -- what to do next: the live solver's pick among the next stops you can do and finished quests near you (Next.lua),
   -- or, with it off, the old reordering - a later step you're working on or standing at (Engine.UpdateFocus)
   Engine.planned = Engine.current
-  if ns.Next and ns.Next.Enabled() then
+  -- On a flight nothing on the ground is in reach: the step you took off with holds until you land, instead of the
+  -- card re-picking as you pass over zones - a hand-in in Elwynn came up while flying over Stranglethorn (tester:
+  -- "it can be a bit confusing to see it constantly updating"). Kept by the step itself (a stop inserted meanwhile
+  -- moves its number). Landing plans again from where you are
+  local aloft = ns.Is and UnitOnTaxi and ns.Is(UnitOnTaxi, "player")
+  local holdAt
+  if aloft then
+    if not Engine.taxiHold then Engine.taxiHold = (before and steps()[before]) or (Engine.current and steps()[Engine.current]) end
+    for j, t in ipairs(steps()) do if t == Engine.taxiHold then holdAt = j; break end end
+    if holdAt and Engine.Status(holdAt) ~= "done" then Engine.current = holdAt else holdAt = nil end
+  else
+    Engine.taxiHold = nil
+  end
+  if holdAt then
+    -- (held for the flight: no solve, no reordering)
+  elseif ns.Next and ns.Next.Enabled() then
     -- what you're plainly doing wins over any solve: a step your kills count for (for Engine.PROGRESS_HOLD seconds
     -- after the last one), or one you chose (Do it now)
     local fi, why = Engine.focus, Engine.focusWhy
@@ -1472,6 +1490,22 @@ end
 --   "objectives", j        a hand-in with objectives left; step j is the first of them
 --   "dungeon", nil, name   left for your next run of that dungeon
 --   "full"                 a pick-up while your quest log is full
+local questSteps = setmetatable({}, { __mode = "k" })
+-- kind -> quest -> the plan's step indices of that kind for that quest, in order (kept per plan list and length)
+local function stepsOfQuest(list)
+  local c = questSteps[list]
+  if c and c.n == #list then return c.by end
+  c = { n = #list, by = {} }
+  for j, t in ipairs(list) do
+    if t.k and t.q ~= nil then
+      local byK = c.by[t.k]; if not byK then byK = {}; c.by[t.k] = byK end
+      local l = byK[t.q]; if not l then l = {}; byK[t.q] = l end
+      l[#l + 1] = j
+    end
+  end
+  questSteps[list] = c
+  return c.by
+end
 function Engine.NotYet(i)
   local list = steps()
   local s = list[i]
@@ -1493,11 +1527,21 @@ function Engine.NotYet(i)
     return "objectives"
   end
   -- the step of that kind for that quest still to do: the last one before this step, else the first one after it
+  -- (the steps of each kind and quest, from an index kept per plan list: the map pins ask this for every pin, every
+  -- refresh, and walking the whole plan for it was a good part of their time)
   local function opener(kind, q)
     local found
-    for j, t in ipairs(list) do
-      if t.k == kind and t.q == q and not Engine.IsDone(j) then
+    local idx = q ~= nil and stepsOfQuest(list)
+    for _, j in ipairs(idx and (idx[kind] and idx[kind][q] or {}) or {}) do
+      if not Engine.IsDone(j) then
         if j < i then found = j elseif not found then return j end
+      end
+    end
+    if not idx then
+      for j, t in ipairs(list) do
+        if t.k == kind and t.q == q and not Engine.IsDone(j) then
+          if j < i then found = j elseif not found then return j end
+        end
       end
     end
     return found
@@ -1919,6 +1963,7 @@ local function sideMine(d)
   if d.rc then local _, r = UnitRace("player"); if not (r and ("," .. d.rc .. ","):find("," .. r .. ",", 1, true)) then return false end end
   return true
 end
+Engine.SideMine = sideMine -- (ItemQuests.lua: the same check for a quest an item starts)
 local sideIndex -- [map] = { quest ids whose giver stands there }
 local function sideOn(m)
   if not sideIndex or sideIndex.src ~= ns.SIDE_QUESTS then
@@ -1945,6 +1990,8 @@ function Engine.SideFits(q)
   if d.xp < Engine.SIDE_XP * d.l then return false, "little XP" end
   if State.IsCompleted(q) or State.OnQuest(q) then return false, "yours already" end
   if ns.char.nope and ns.char.nope[q] then return false, "you are not doing it" end
+  local needs = ns.Avail and ns.Avail.Needs and ns.Avail.Needs(q)
+  if needs then return false, needs end
   if ns.Avail and ns.Avail.Unavailable(q) then return false, "the giver has nothing for you" end
   if ns.char.skipped["accept:" .. q .. ":" .. d.n .. "#1"] then return false, "you skipped it" end
   for _, p in ipairs(d.pre or {}) do if not State.IsCompleted(p) then return false, "something comes before it" end end
@@ -2050,20 +2097,28 @@ function Engine.SideOffer(px, py, pinst, force)
   return changed
 end
 -- a side quest in your log (one this rule offered, or any other of that kind you picked up): a stop for each objective
--- still open, where it costs least; and its hand-in when it is finished and the plan has no place for it
+-- still open, where it costs least; and its hand-in when it is finished and the plan has no place for it.
+-- A quest an item starts (ns.ITEM_QUESTS, offered by ItemQuests.lua) is fitted in the same way: no plan can count on
+-- its drop either.
 local sideMiss = {}
+local function sideData(q) return (ns.SIDE_QUESTS and ns.SIDE_QUESTS[q]) or (ns.ITEM_QUESTS and ns.ITEM_QUESTS[q]) end
 local function sideStops()
   local list = steps()
   local d = ForeverRouteData
-  if not (ns.SIDE_QUESTS and d and #list > 0 and Engine.current) or d.dungeon or d.special or d.branch then return false end
+  if not ((ns.SIDE_QUESTS or ns.ITEM_QUESTS) and d and #list > 0 and Engine.current) or d.dungeon or d.special or d.branch then return false end
   State = State or ns.State
   local added = false
   local px, py, pinst = HBD:GetPlayerWorldPosition()
   -- (also the ones in your log from before the addon knew about them: A Noble Brew, picked up by hand)
   ns.char.side = ns.char.side or {}
-  for q in pairs(ns.SIDE_QUESTS) do if not ns.char.side[q] and State.OnQuest(q) then ns.char.side[q] = true end end
+  for _, t in ipairs({ ns.SIDE_QUESTS or {}, ns.ITEM_QUESTS or {} }) do
+    for q in pairs(t) do if not ns.char.side[q] and State.OnQuest(q) then ns.char.side[q] = true end end
+  end
   for q in pairs(ns.char.side) do
-    local sq = ns.SIDE_QUESTS[q]
+    local sq = sideData(q)
+    -- (what its stops say they are for: the item that started it, or a side quest you picked up)
+    local _, itemName = next((sq and sq.it) or {})
+    local forWhat = itemName and ("the quest your " .. itemName .. " started") or "the side quest you picked up"
     if not sq or State.IsCompleted(q) then ns.char.side[q] = nil
     elseif State.OnQuest(q) and not (ns.char.nope and ns.char.nope[q]) then
       -- (a quest the plan has steps of its own for is the plan's)
@@ -2071,7 +2126,7 @@ local function sideStops()
       for _, s in ipairs(list) do if s.q == q then has[s.k .. ":" .. tostring(s.match or "")] = true; planned = planned or (s.k ~= "accept" and not s.side) end end
       if planned then -- nothing to add
       elseif State.QuestReady(q) then
-        if not has["turnin:"] and not (ForeverRouteEnders and ForeverRouteEnders[q]) then
+        if sq.e and not has["turnin:"] and not (ForeverRouteEnders and ForeverRouteEnders[q]) then
           local step = { k = "turnin", q = q, name = sq.n, level = sq.l, npc = sq.e[1], m = sq.e[2], x = sq.e[3], y = sq.e[4], r = 6, inserted = true, side = true, note = "Added: you finished this one on the way." }
           if Engine.InsertStop(step, px, py, pinst) then added = true end
         end
@@ -2086,7 +2141,7 @@ local function sideStops()
           if not has["obj:" .. o[2]] and not (open and open.finished) and not recent then
             local function stop(p)
               return { k = "obj", q = q, name = sq.n, level = sq.l, text = o[1] .. " " .. o[2], match = o[2], loot = o[1] == "Collect" or nil, m = p[1], x = p[2], y = p[3], r = 60, inserted = true, side = true,
-                note = "For the side quest you picked up: here it costs least." }
+                note = "For " .. forWhat .. ": here it costs least." }
             end
             -- (only while the quest is worth it: up to the last step the plan has you at most SIDE_LATE levels above it)
             local last -- (a plan without levels: anywhere)
@@ -2113,7 +2168,7 @@ end
 Engine.SideStops = sideStops
 ns.On("QUEST_ACCEPTED", function(a, b)
   local q = type(b) == "number" and b or a
-  if q and ns.SIDE_QUESTS and ns.SIDE_QUESTS[q] and ns.char then ns.char.side = ns.char.side or {}; ns.char.side[q] = true end
+  if q and sideData(q) and ns.char then ns.char.side = ns.char.side or {}; ns.char.side[q] = true end
 end)
 ns.On("FR_STATE", function() if sideStops() then Engine.Refresh() end end)
 ns.On("FR_LOADED", function() C_Timer.After(3.2, function() if sideStops() then Engine.Refresh() end end) end)

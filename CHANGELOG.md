@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.8 - 2026-11-13
+- Quests started by an item (a page, a head, a strange object) are offered on the card when the item is in your bags: "use it" with the use-item button above the card, or the X if you won't do it.
+- On a flight the card holds the step you took off with until you land; it no longer re-picks as you pass over other zones.
+- A quest that needs a profession rank or reputation you don't have yet (Goblin Engineering needs Engineering 200) is left off your route, instead of walking you to a giver who has nothing for you. It comes back once you have it.
+- Faster: the card refreshes about twice as fast, and working out a trip (walk, fly, boat, hearth) about ten times as fast. Picks and directions are the same.
+
 ## 1.4.7 - 2026-11-13
 - Flying is time you can look away; walking isn't. A trip that flies and walks a little now wins over walking the whole way when it's about as quick: the card says "about as quick as walking, and N min less on foot".
 - The card's footer says where the plan goes next: "Next zone: Duskwood, after 4 quests here" (it said "planned for level 33 · plan goes to level 43").

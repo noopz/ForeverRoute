@@ -39,7 +39,9 @@ local ENGINE_MEMOS = { "lastTripStep", "lastTrip" }
 local clock = (os and os.clock and function() return os.clock() * 1000 end) or debugprofilestop
 local PROFILED = { { "Engine", "Refresh" }, { "Engine", "Compute" }, { "Engine", "TravelFor" }, { "Engine", "UpdateFocus" }, { "Travel", "Plan" },
   { "Card", "Fill" }, { "Card", "Layout" }, { "Arrow", "SetTarget" }, { "Pins", "Update" }, { "Learn", "ZoneTick" },
-  { "Next", "Pick" }, { "Travel", "Shortcut" }, { "Engine", "InsertStop" }, { "Engine", "WatchShortcut" } }
+  { "Next", "Pick" }, { "Travel", "Shortcut" }, { "Engine", "InsertStop" }, { "Engine", "WatchShortcut" },
+  -- (inside Next.Pick: the solve, the later visit here, the price of leaving a stop for later)
+  { "Horizon", "Solve" }, { "Next", "VisitHere" }, { "Next", "DeferCost" } }
 local function profileOn(prof)
   local saved = {}
   for _, p in ipairs(PROFILED) do
@@ -595,7 +597,7 @@ local function summary(r, name)
     local fns = {}; for name, st in pairs(P.fn) do if st.n > 0 then fns[#fns + 1] = { name, st } end end
     table.sort(fns, function(a, b) return a[2].ms > b[2].ms end)
     local parts = {}
-    for k = 1, math.min(8, #fns) do local f = fns[k]; parts[#parts + 1] = string.format("%s %dx %.0f ms (worst %.1f)", f[1], f[2].n, f[2].ms, f[2].max) end
+    for k = 1, math.min(12, #fns) do local f = fns[k]; parts[#parts + 1] = string.format("%s %dx %.0f ms (worst %.1f)", f[1], f[2].n, f[2].ms, f[2].max) end
     L[#L + 1] = "    time in: " .. table.concat(parts, "; ")
     local by = {}; for who, n in pairs(P.planBy or {}) do by[#by + 1] = { who, n } end
     table.sort(by, function(a, b) return a[2] > b[2] end)

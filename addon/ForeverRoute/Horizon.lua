@@ -61,90 +61,111 @@ function Horizon.Solve(P)
     if v == nil then v = P.travel(place(i), place(j)) or huge; tmemo[k] = v end
     return v
   end
-  local need, bit, planned = {}, {}, {}
+  local need, bit, bit2, planned = {}, {}, {}, {}
   for i, s in ipairs(stops) do
-    bit[i] = 2 ^ (i - 1)
+    bit[i] = 2 ^ (i - 1); bit2[i] = bit[i] * 2
     local list = {}
     for _, id in ipairs(s.needs or {}) do if idx[id] then list[#list + 1] = idx[id] end end
     need[i] = list
     if s.plan then planned[#planned + 1] = i end
   end
   table.sort(planned, function(a, b) return stops[a].plan < stops[b].plan end)
-  local function has(mask, i) return (mask % (bit[i] * 2)) >= bit[i] end
+  local np0 = #planned
   -- the rest of the window's planned stops from last, then on to the anchor: in plan order, except that a stop that
   -- can't be done yet (its pick-up not done, the log full) gives way to the first one that can - the way you'd
   -- follow the plan. -> seconds, and the order (when asked for)
   -- (one pass in plan order: a stop that can't be done yet waits aside and goes as soon as it can - after each stop
   -- taken, the waiting ones are tried again, earliest first)
+  -- (it runs for every partial route the search keeps - thousands a solve - so its helpers are made once, here, and
+  -- share the state of the one tail being worked out: tt, tat, tm, tld, torder, tnp)
   local pending = {}
-  local function tail(mask, last, load, order)
-    local t, at, m, ld = 0, last, mask, load
-    local np = 0
-    local function can(j)
-      if ld + (stops[j].load or 0) > cap then return false end
-      for _, q in ipairs(need[j]) do if not has(m, q) then return false end end
-      return true
-    end
-    local function take(j)
-      t = t + trip(at, j) + (stops[j].service or 0)
-      at, m, ld = j, m + bit[j], ld + (stops[j].load or 0)
-      if order then order[#order + 1] = j end
-    end
-    local function drain()
-      local k = 1
-      while k <= np do
-        if can(pending[k]) then take(table.remove(pending, k)); np = np - 1; k = 1 else k = k + 1 end
-      end
-    end
-    for _, j in ipairs(planned) do
-      if not has(m, j) then
-        if can(j) then take(j); if np > 0 then drain() end else np = np + 1; pending[np] = j end
-      end
-    end
-    if np > 0 then drain() end
-    if np > 0 then for k = np, 1, -1 do pending[k] = nil end; return huge end -- (stops that can never be done: infeasible)
-    return t + trip(at, ANCHOR)
+  local tt, tat, tm, tld, torder, tnp = 0, 0, 0, 0, nil, 0
+  local function can(j)
+    if tld + (stops[j].load or 0) > cap then return false end
+    local nj = need[j]
+    for k = 1, #nj do local q = nj[k]; if (tm % bit2[q]) < bit[q] then return false end end
+    return true
   end
-  local function passedOver(mask, i)
-    local p = stops[i].plan
-    if not p then return 0 end
-    local c = 0
-    for _, j in ipairs(planned) do
-      if stops[j].plan >= p then break end
-      if not has(mask, j) then c = c + 1 end
+  local function take(j)
+    tt = tt + trip(tat, j) + (stops[j].service or 0)
+    tat, tm, tld = j, tm + bit[j], tld + (stops[j].load or 0)
+    if torder then torder[#torder + 1] = j end
+  end
+  local function drain()
+    local k = 1
+    while k <= tnp do
+      if can(pending[k]) then take(table.remove(pending, k)); tnp = tnp - 1; k = 1 else k = k + 1 end
     end
-    return c
+  end
+  local function tail(mask, last, load, order)
+    tt, tat, tm, tld, torder, tnp = 0, last, mask, load, order, 0
+    for x = 1, np0 do
+      local j = planned[x]
+      if (tm % bit2[j]) < bit[j] then
+        if can(j) then take(j); if tnp > 0 then drain() end else tnp = tnp + 1; pending[tnp] = j end
+      end
+    end
+    if tnp > 0 then drain() end
+    torder = nil
+    if tnp > 0 then for k = tnp, 1, -1 do pending[k] = nil end; return huge end -- (stops that can never be done: infeasible)
+    return tt + trip(tat, ANCHOR)
+  end
+  -- the planned stops a stop passes over (out of plan order): of those before it in the plan (rank[i] of them, the
+  -- first of planned), the ones not done yet. Counted per node once (pre[k]: of the first k planned, how many are not
+  -- done) rather than per stop tried from it.
+  local rank, pre, preFor = {}, { [0] = 0 }, nil
+  for i, s in ipairs(stops) do
+    if s.plan then
+      local r = 0
+      for x = 1, np0 do if stops[planned[x]].plan < s.plan then r = r + 1 else break end end
+      rank[i] = r
+    end
   end
 
-  -- a node: { mask, last, worth (prizes - time - penalties so far), load, seq }
-  local root = { mask = 0, last = 0, worth = 0, load = load0, seq = {} }
+  -- a node: { mask, last, worth (prizes - time - penalties so far), load, up (the node it grew from), first (its first
+  -- stop) }. Its stops in order are read back through up only for the best one: copying them into every node tried was
+  -- a table per candidate.
+  -- (a node's key - its stops done and the last one - is a number when it fits one exactly: a string per candidate was
+  -- much of a solve's time)
+  local numKey = n <= 47
+  local root = { mask = 0, last = 0, worth = 0, load = load0 }
   local function score(nd) return nd.worth - tail(nd.mask, nd.last, nd.load) end
   local best, bestScore = root, score(root)
   if P.first then best, bestScore = nil, -huge end
   local layer = { root }
+  local stableNear = P.stableNear or Horizon.STABLE_NEAR
   for depth = 1, math.min(K, n) do
     local byKey, keys = {}, {}
     for _, nd in ipairs(layer) do
+      local ndMask = nd.mask
+      preFor = nil
       for i = 1, n do
-        if not has(nd.mask, i) and (depth > 1 or not P.first or stops[i].id == P.first) then
+        if (ndMask % bit2[i]) < bit[i] and (depth > 1 or not P.first or stops[i].id == P.first) then
           local s = stops[i]
           local ok = true
-          for _, j in ipairs(need[i]) do if not has(nd.mask, j) then ok = false; break end end
+          local ni = need[i]
+          for k = 1, #ni do local j = ni[k]; if (ndMask % bit2[j]) < bit[j] then ok = false; break end end
           local ld = nd.load + (s.load or 0)
           if ok and ld <= cap then
             local t = trip(nd.last, i)
             if t < huge then
-              local near = math.min(1, t / (P.stableNear or Horizon.STABLE_NEAR))
-              local worth = nd.worth + (s.prize or 0) - t - (s.service or 0) - stab * near * passedOver(nd.mask, i)
-              local mask = nd.mask + bit[i]
-              local key = mask .. ":" .. i
+              local near = math.min(1, t / stableNear)
+              local po = 0
+              if s.plan then
+                if preFor ~= nd then
+                  preFor = nd
+                  for x = 1, np0 do local j = planned[x]; pre[x] = pre[x - 1] + (((ndMask % bit2[j]) < bit[j]) and 1 or 0) end
+                end
+                po = pre[rank[i]]
+              end
+              local worth = nd.worth + (s.prize or 0) - t - (s.service or 0) - stab * near * po
+              local mask = ndMask + bit[i]
+              local key
+              if numKey then key = mask * (n + 1) + i else key = mask .. ":" .. i end
               local old = byKey[key]
               if not old or worth > old.worth then
                 if not old then keys[#keys + 1] = key end
-                local seq = {}
-                for q = 1, #nd.seq do seq[q] = nd.seq[q] end
-                seq[#seq + 1] = i
-                byKey[key] = { mask = mask, last = i, worth = worth, load = ld, seq = seq }
+                byKey[key] = { mask = mask, last = i, worth = worth, load = ld, up = nd, first = nd.first or i }
               end
             end
           end
@@ -156,7 +177,7 @@ function Horizon.Solve(P)
     if #nxt == 0 then break end
     table.sort(nxt, function(a, b)
       if a.score ~= b.score then return a.score > b.score end
-      return (stops[a.seq[1]].plan or huge) < (stops[b.seq[1]].plan or huge) -- ties: plan order
+      return (stops[a.first].plan or huge) < (stops[b.first].plan or huge) -- ties: plan order
     end)
     while #nxt > B do nxt[#nxt] = nil end
     if nxt[1].score > bestScore then best, bestScore = nxt[1], nxt[1].score end
@@ -165,7 +186,11 @@ function Horizon.Solve(P)
   if not best then return { seq = {}, score = -huge } end
   -- the whole window: the stops the search chose, then the rest as the plan has them (the way tail() costed it)
   local order = {}
-  for q, i in ipairs(best.seq) do order[q] = i end
+  do
+    local chain, nd = {}, best
+    while nd and nd.up do chain[#chain + 1] = nd.last; nd = nd.up end
+    for q = #chain, 1, -1 do order[#order + 1] = chain[q] end
+  end
   local chosen = #order
   tail(best.mask, best.last, best.load, order)
   local seq = {}

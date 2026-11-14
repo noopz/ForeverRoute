@@ -299,6 +299,22 @@ local function build()
   f.ready.go:SetPoint("RIGHT", f.ready, "RIGHT", 0, 0)
   f.ready.text:SetPoint("RIGHT", f.ready.go, "LEFT", -6, 0)
   f.ready:Hide()
+  -- a quest an item in your bags starts (ns.ItemQuests): a line (two when it needs them) and "x". The use button is
+  -- the card's use-item button above it: a secure button can't sit on a row, and rows move in combat
+  f.itemq = CreateFrame("Frame", nil, f); f.itemq:SetHeight(28); f.itemq:EnableMouse(true)
+  f.itemq.text = Style.Text(f.itemq, 10, C.gold); f.itemq.text:SetPoint("LEFT", 0, 0); f.itemq.text:SetWordWrap(true); f.itemq.text:SetJustifyH("LEFT")
+  f.itemq.x = Style.Button(f.itemq, "x", 16, 16, function() ns.ItemQuests.Dismiss() end, "Not doing it: this quest isn't offered again (the item stays in your bags)")
+  f.itemq.x:SetPoint("RIGHT", f.itemq, "RIGHT", 0, 0)
+  f.itemq:SetScript("OnEnter", function(self)
+    local o = ns.ItemQuests and ns.ItemQuests.Current()
+    if not o then return end
+    GameTooltip:SetOwner(self, "ANCHOR_TOP"); GameTooltip:AddLine(o.name, 1, 0.82, 0.3)
+    GameTooltip:AddLine(f.cur.offerItem and "Click the item's icon above the card to start it." or "Use it from your bags to start it (the button above the card is this step's own item).", 1, 1, 1, true)
+    GameTooltip:AddLine("Once you have it, its objectives and hand-in are added to your route where they cost least. " .. o.xp .. " xp.", 0.75, 0.8, 0.88, true)
+    GameTooltip:Show()
+  end)
+  f.itemq:SetScript("OnLeave", GameTooltip_Hide)
+  f.itemq:Hide()
   -- "Also hand in": a finished quest the route doesn't cover, with its NPC nearby
   f.extra = CreateFrame("Frame", nil, f); f.extra:SetHeight(20)
   f.extra.text = Style.Text(f.extra, 10, { 0.45, 0.78, 1.0 }); f.extra.text:SetPoint("LEFT", 0, 0); f.extra.text:SetPoint("RIGHT", 0, 0); f.extra.text:SetWordWrap(false)
@@ -746,6 +762,10 @@ function Card.SetButtons(s)
   local cur = f.cur
   local who = s and (s.target or ((s.k == "accept" or s.k == "turnin" or s.k == "bind" or s.k == "fp" or s.k == "train") and s.npc))
   local item = s and s.k ~= "bonus" and s.item -- books are looted, not used
+  -- no item of the step's own: the button starts the quest an item in your bags offers (ns.ItemQuests)
+  local offer = not item and not ns.Engine.view and ns.ItemQuests and ns.ItemQuests.Current()
+  if offer then item = offer.item end
+  cur.offerItem = offer and true or false
   cur.wantTarget, cur.wantItem = who, item
   setSecure(function()
     if who then cur.target:SetAttribute("macrotext", Card.TargetMacro(who)); cur.target.who = who; cur.target.label:SetText(who)
@@ -1024,6 +1044,17 @@ function Card.Layout()
     f.ready:ClearAllPoints(); f.ready:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -top); f.ready:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
     top = top + 22
   end
+  local iq = not ns.Engine.view and ns.ItemQuests and ns.ItemQuests.Current()
+  f.itemq:SetShown(iq and true or false)
+  if iq then
+    -- (an explicit width, so the wrapped height is measured right: the "x" takes the last 22)
+    f.itemq.text:SetWidth((f:GetWidth() or ns.db.cardWidth) - 2 * PAD - 22)
+    f.itemq.text:SetText(ns.ItemQuests.Text(iq, not f.cur.offerItem))
+    f.itemq:ClearAllPoints(); f.itemq:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -top); f.itemq:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
+    local h = math.max(20, math.ceil((f.itemq.text:GetStringHeight() or 0) + 4))
+    f.itemq:SetHeight(h)
+    top = top + h + 2
+  end
   local nd = ns.LogCheck and ns.LogCheck.dropCount or 0
   -- (a small link at the right of the footer, not a row of its own: it took a lot of room - tester)
   f.dropWanted = nd > 0 and not ns.Engine.view
@@ -1054,7 +1085,7 @@ function Card.Layout()
   end
   -- the decision log: each card row the moment it appears or changes, with its text
   Card.lastRow = Card.lastRow or {}
-  for name, row in pairs({ save = f.save, special = f.special, offer = f.offer, errand = f.errand, extra = f.extra }) do
+  for name, row in pairs({ save = f.save, special = f.special, offer = f.offer, errand = f.errand, extra = f.extra, itemq = f.itemq }) do
     local txt = row:IsShown() and row.text and row.text:GetText() or nil
     -- compare without numbers, so a distance or count ticking down is not a new entry
     local sig = txt and txt:gsub("%d", "")

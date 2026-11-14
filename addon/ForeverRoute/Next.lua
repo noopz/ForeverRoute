@@ -581,6 +581,27 @@ function Next.Prize(list, s, from, behind)
   return math.min(pays, defer)
 end
 
+-- the plan's pick-ups and hand-ins, in order: the scans of a solve over the whole plan for quests behind you and
+-- finished ones near you look at these, not at all ~2,500 steps every refresh. Kept per plan list and length (a stop
+-- the route inserts makes a new one).
+local kindsMemo = setmetatable({}, { __mode = "k" })
+local function stepsOfKind(list)
+  local c = kindsMemo[list]
+  if c and c.n == #list then return c end
+  c = { n = #list, accept = {}, turnin = {} }
+  for j, s in ipairs(list) do
+    if s.k == "accept" then c.accept[#c.accept + 1] = j elseif s.k == "turnin" then c.turnin[#c.turnin + 1] = j end
+  end
+  kindsMemo[list] = c
+  return c
+end
+-- the first position in idx (ascending step indices) past step j
+local function after(idx, j)
+  local lo, hi = 1, #idx + 1
+  while lo < hi do local mid = math.floor((lo + hi) / 2); if idx[mid] <= j then lo = mid + 1 else hi = mid end end
+  return lo
+end
+
 local last -- { sig, at, pick, res }
 -- a stop you said "not now" to, while it holds: you are still about where you said it, and not long after
 local function isDismissed(j, px, py, pinst)
@@ -708,9 +729,11 @@ local function pick(planned)
     -- levels, left a level 50 sent on past WANTED: Andre Firebeard, 45, 121 yd away and still worth it (fuzz). Above you
     -- at most 2 levels, as before)
     local found = {}
-    for j = 1, #list do
+    local accepts = roomInLog and stepsOfKind(list).accept or {}
+    for x = 1, #accepts do
+      local j = accepts[x]
       local s = list[j]
-      if roomInLog and s.k == "accept" and s.q and tonumber(s.level) and Next.BehindLevelOk(s.level, L) and not byStep[j] then
+      if s.q and tonumber(s.level) and Next.BehindLevelOk(s.level, L) and not byStep[j] then
         local w = wpos(s)
         local d2 = w and w[3] == pinst and (w[1] - px) ^ 2 + (w[2] - py) ^ 2
         if d2 and d2 <= Next.BEHIND_YD ^ 2 and not St.OnQuest(s.q) and not St.IsCompleted(s.q) then
@@ -728,9 +751,11 @@ local function pick(planned)
   -- (Next.Prize: the plan's detour to it later; a gray quest's hand-in pays next to nothing - it goes with the plan, or
   -- not at all. That used to be a rule of its own: 30% of the quest's XP.) Next.NEAR_READY only bounds the candidates:
   -- the price decides.
-  for j = scanEnd + 1, #list do
+  local turnins = stepsOfKind(list).turnin
+  for x = after(turnins, scanEnd), #turnins do
+    local j = turnins[x]
     local s = list[j]
-    if s.k == "turnin" and s.q and St.QuestReady(s.q) and not byStep[j] then
+    if s.q and St.QuestReady(s.q) and not byStep[j] then
       local w = wpos(s)
       if w and w[3] == pinst and (w[1] - px) ^ 2 + (w[2] - py) ^ 2 <= Next.NEAR_READY ^ 2 and E.Status(j) == "todo"
         and (isHub(list, s) or chainsOnHere(list, s)) then
@@ -937,8 +962,9 @@ function Next.Batch(i)
   local E, St = ns.Engine, ns.State
   local L = (UnitLevel and UnitLevel("player")) or 1
   local n, xp, seen = 0, 0, {}
-  for j, t in ipairs(list) do
-    if t.k == "turnin" and t.q and not seen[t.q] and St.QuestReady(t.q) then
+  for _, j in ipairs(stepsOfKind(list).turnin) do
+    local t = list[j]
+    if t.q and not seen[t.q] and St.QuestReady(t.q) then
       local tw = wpos(t)
       if tw and tw[3] == w[3] and (tw[1] - w[1]) ^ 2 + (tw[2] - w[2]) ^ 2 <= Next.HUB_YD ^ 2 and E.Status(j) == "todo" then
         seen[t.q] = true

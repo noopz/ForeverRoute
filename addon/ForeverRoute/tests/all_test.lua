@@ -1932,6 +1932,33 @@ test("save nudge: shows on a flight after a few minutes played, not on foot, not
   if not ok then error(err, 0) end
 end)
 
+test("on a flight the step you took off with holds: the card doesn't re-pick as you pass over zones, and does again once you land", function()
+  local sv = { taxi = UnitOnTaxi, pick = ns.Next.Pick, en = ns.Next.Enabled, focus = ns.Engine.focus }
+  local ok, err = pcall(function()
+    ns.SelectRoute(ns.MainRoutes()[1].id, true)
+    ns.Engine.focus = nil
+    UnitOnTaxi = function() return false end
+    ns.Next.Enabled = function() return true end
+    ns.Next.Pick = function(cur) return cur end
+    ns.Engine.taxiHold = nil
+    ns.Engine.Refresh()
+    local took = ns.Engine.current
+    assertNotNil(took)
+    -- in the air, the solver would pick another stop (a hand-in in a zone you fly over): it isn't asked
+    UnitOnTaxi = function() return true end
+    ns.Next.Pick = function(cur) return cur + 3 end
+    ns.Engine.Refresh(); ns.Engine.Refresh()
+    assertEquals(took, ns.Engine.current)
+    -- landed: picks again
+    UnitOnTaxi = function() return false end
+    ns.Engine.Refresh()
+    assertEquals(took + 3, ns.Engine.current)
+  end)
+  UnitOnTaxi, ns.Next.Pick, ns.Next.Enabled, ns.Engine.focus, ns.Engine.taxiHold = sv.taxi, sv.pick, sv.en, sv.focus, nil
+  ns.Engine.Refresh()
+  if not ok then error(err, 0) end
+end)
+
 test("new route ready: the companion's sound-file signal shows a Reload row anywhere, out of combat", function()
   local sv = { play = PlaySoundFile, grace = ns.Card.READY_GRACE, taxi = UnitOnTaxi, plan = ForeverRoutePlan }
   local ok, err = pcall(function()
@@ -3062,6 +3089,42 @@ test("standing at the step: no minimap pin on top of you (the world map keeps it
     for _, p in ipairs(ns.Pins._used) do if p.where == "world" and p.index == 1 then world = true end end
     assertTrue(world, "the world map lost the pin")
   end, { anyTarget = true })
+end)
+
+test("a quest that needs a profession you don't have is left off your route before you walk to the giver (Goblin Engineering, Engineering 200)", function()
+  local sv = { needs = ns.QUEST_NEEDS, skills = ns.State.Skills, gt = GetTime, fi = GetFactionInfoByID }
+  local skills, now = {}, 1000
+  local ok, err = pcall(withState, {}, function()
+    ns.QUEST_NEEDS = { [98250] = { s = "Engineering", r = 200 } }
+    ns.State.Skills = function() return skills end
+    GetTime = function() return now end
+    ForeverRouteData = { id = "needs1", title = "needs1", sections = { { title = "Stormwind City" } }, steps = {
+      { id = 1, k = "accept", q = 98250, name = "Goblin Engineering", npc = "Lilliam Sparkspindle", minLevel = 30, m = 1453, x = 0.62, y = 0.30, sec = 1 },
+      { id = 2, k = "accept", q = 98251, name = "Morgan Stern", npc = "Morgan Stern", m = 1453, x = 0.63, y = 0.31, sec = 1 },
+    } }
+    ns.Engine.Refresh()
+    assertEquals("needs Engineering 200", ns.Avail.Needs(98250))
+    assertEquals("done", ns.Engine.Status(1), "no Engineering: the step is off the route")
+    assertEquals(2, ns.Engine.current, "the card goes on to Morgan Stern")
+    skills = { Engineering = { 150, 225 } }; now = now + 11
+    assertEquals("needs Engineering 200", ns.Avail.Needs(98250), "Engineering 150 isn't enough")
+    skills = { Engineering = { 200, 225 } }; now = now + 11
+    assertTrue(ns.Avail.Needs(98250) == nil, "Engineering 200: it can be taken")
+    ns.Engine.Refresh()
+    assertTrue(ns.Engine.Status(1) ~= "done", "back on the route")
+    assertTrue(ns.Avail.Needs(343) == nil, "a quest that needs nothing")
+    -- a reputation: Avast Ye, Scallywag wants Friendly (3000) with Booty Bay; a client that won't say keeps the step
+    ns.QUEST_NEEDS[98252] = { rp = { 21, 3000 } }
+    local rep = 1200
+    GetFactionInfoByID = function(id) if id == 21 then return "Booty Bay", "", 4, 0, 3000, rep end end
+    assertEquals("needs more reputation with Booty Bay", ns.Avail.Needs(98252))
+    rep = 3400
+    assertTrue(ns.Avail.Needs(98252) == nil, "Friendly: it can be taken")
+    GetFactionInfoByID = nil
+    assertTrue(ns.Avail.Needs(98252) == nil, "no faction API: kept")
+  end)
+  ns.QUEST_NEEDS, ns.State.Skills, GetTime, GetFactionInfoByID = sv.needs, sv.skills, sv.gt, sv.fi
+  if not ok then error(err, 0) end
 end)
 
 test("a quest turned down at two levels stays off after that; once, it's tried again a level on; one waiting on an earlier quest comes back with it", function()

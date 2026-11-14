@@ -40,6 +40,7 @@ FunCandidates.lua
 QuestData.lua
 Learn.lua
 Availability.lua
+ItemQuests.lua
 Next.lua
 UI\Style.lua
 UI\Card.lua

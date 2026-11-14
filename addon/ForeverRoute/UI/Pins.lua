@@ -69,10 +69,19 @@ end
 -- the kind's colour with a dark rim and the kind's icon (the one on the card) - the pin shape was a few yellow pixels
 -- that said nothing on Stormwind's blue and brown.
 local DARK = { 0.05, 0.05, 0.07 }
+-- what a pin's look depends on: the pins are redrawn whenever a step or your nearness changes, and one that already
+-- looks this way is left as it is (a dozen texture and font calls each, for nothing) - the redraw takes such a pin
+-- from the pool first
+local function lookKey(where, n, s, notYet)
+  return tostring(Style.Kind(s)) .. where .. ((n == 1 or where == "mini") and "" or n) .. (notYet and "n" or "")
+end
 local function look(p, where, n, s, notYet)
   local kind = Style.Kind(s)
-  local c = notYet and GREY or kind.color
   local mini, first = where == "mini", n == 1
+  local key = lookKey(where, n, s, notYet)
+  if p.looks == key then return end
+  p.looks = key
+  local c = notYet and GREY or kind.color
   local size = mini and 20 or (first and 22 or (notYet and 14 or 16))
   p:SetSize(size, size)
   local round = mini or not first
@@ -340,7 +349,10 @@ function Pins.Update(force)
       label = label + 1
       local m, x, y = at.m, at.x, at.y
       for _, where in ipairs(at.near and { "world", "mini" } or { "world" }) do
-        local p = table.remove(pool[where]) or makePin()
+        local pl, k = pool[where], lookKey(where, label + 1, s, notYet[n])
+        local p
+        for q = #pl, 1, -1 do if pl[q].looks == k then p = table.remove(pl, q); break end end
+        p = p or table.remove(pl) or makePin()
         p.index, p.where, p.n, p.notYet = i, where, label + 1, notYet[n]
         look(p, where, label + 1, s, notYet[n])
         -- hidden and unanchored until HereBeDragons places it (it shows the frame itself)

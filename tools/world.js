@@ -143,4 +143,21 @@ function leadsOn(q, quests) {
   if (FOLLOW_SRC !== quests) { FOLLOW_SRC = quests; FOLLOW = new Set(); for (const o of Object.values(quests)) for (const p of [...(o.preSingle || []), ...(o.preGroup || [])]) FOLLOW.add(+p); }
   return FOLLOW.has(+q.id) || !!(q.nextInChain && quests[q.nextInChain]);
 }
-module.exports = { levelAbove, minLevelFor, FACTION_RACES, raceFits, classFits, grindSeconds, unknownWork, unknownWorkLabel, leadsOn, RACE_HOME, START_ZONES, droppers, raceOk, XP_TO_LEVEL, killXp, classicKillXp, setLearned, questXp, addXp, RACE_BIT, CLASS_BIT, canTake, CAPITAL_AREAS, CAPITAL_MAPS, PLANNER_ZONE_NAMES, plannerZoneNames, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, TRAIN_BATCH, trainNow };
+// skill line ids (QuestieDB requiredSkill) by the name the game's skill list shows (the save's skills, the addon's check)
+const SKILL_NAME = { 129: 'First Aid', 164: 'Blacksmithing', 165: 'Leatherworking', 171: 'Alchemy', 182: 'Herbalism',
+  185: 'Cooking', 186: 'Mining', 197: 'Tailoring', 202: 'Engineering', 333: 'Enchanting', 356: 'Fishing', 393: 'Skinning',
+  755: 'Jewelcrafting', 773: 'Inscription', 762: 'Riding', 633: 'Lockpicking' };
+const PROFESSIONS = new Set(Object.values(SKILL_NAME).filter((n) => n !== 'Riding' && n !== 'Lockpicking'));
+// false only when the save says you don't have the profession a quest needs. Its rank, a spell or a reputation are
+// checked by the addon when you get to the giver (Availability.lua: Engineering 150 now can be 200 by then), and a
+// plan made without a save (the built-in plans: no skills at all - a real save always lists weapon skills and
+// languages) keeps the quest for the addon to check.
+function hasProfessionFor(q, skills) {
+  if (!q || !Array.isArray(q.skill) || !q.skill[0]) return true;
+  if (!skills || !Object.keys(skills).length) return true;
+  const name = SKILL_NAME[q.skill[0]];
+  return !name || !!skills[name];
+}
+// the professions in a save, sorted (what a replan watches: people rarely change them)
+const professionsOf = (skills) => Object.keys(skills || {}).filter((n) => PROFESSIONS.has(n)).sort();
+module.exports = { SKILL_NAME, PROFESSIONS, hasProfessionFor, professionsOf, levelAbove, minLevelFor, FACTION_RACES, raceFits, classFits, grindSeconds, unknownWork, unknownWorkLabel, leadsOn, RACE_HOME, START_ZONES, droppers, raceOk, XP_TO_LEVEL, killXp, classicKillXp, setLearned, questXp, addXp, RACE_BIT, CLASS_BIT, canTake, CAPITAL_AREAS, CAPITAL_MAPS, PLANNER_ZONE_NAMES, plannerZoneNames, QUEST_LOG_MAX, LEVEL_ABOVE, DUNGEON_ABOVE, TRAIN_BATCH, trainNow };
